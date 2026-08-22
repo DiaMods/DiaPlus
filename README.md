@@ -1,21 +1,52 @@
 # Dia Custom
 
-Dia Custom routes the native chat UI through a localhost provider bridge. The current
-default is `gpt-5.6-luna`, while `DIA_CUSTOM_CODEX_MODEL` can override it without
-rebuilding the browser.
+Dia Custom keeps Dia's native browser and chat interface while routing its AI work through a local bridge. The current provider is Codex, using `gpt-5.6-luna` by default. The original `/Applications/Dia.app` is never modified.
 
-Run `./enable-dia-codex.sh`, then restart Dia. To revert, run
-`./disable-dia-codex.sh` and restart Dia.
+This patch set currently targets Dia **1.45.0 (build 85660)** on Apple silicon. Binary patches deliberately fail when their expected bytes do not match, so a Dia update cannot be patched silently with stale offsets.
 
-`build-dia-custom.sh` creates a separate, ad-hoc-signed `Dia Custom.app` for local
-interoperability work. It uses the bundle ID `local.rttm.dia`, removes URL and
-document-handler registration, and points Dia's private application-data override at
-an isolated test profile. The original `/Applications/Dia.app` is not modified.
+## Start here
 
-The clone is intentionally a test build: it has library validation disabled so a
-local request bridge can be injected while the native Dia UI remains intact.
+```sh
+./dia-custom doctor
+./dia-custom launch
+```
 
-The bridge is provider-neutral. Codex is the first backend, but other local or hosted
-providers can be added later without renaming or rebuilding the browser shell. Codex
-reasoning summaries are mapped into Dia's native thinking stream; raw hidden
-chain-of-thought is never exposed.
+Use `./dia-custom help` for every command. If the separate app does not exist yet, create it with:
+
+```sh
+./dia-custom build
+```
+
+`build --replace` makes a fresh clone and preserves the previous clone beside it. Quit Dia Custom before running `install` or replacing the app.
+
+To select another Codex model for a newly started bridge:
+
+```sh
+DIA_CUSTOM_CODEX_MODEL=gpt-5.6-luna ./dia-custom launch
+```
+
+The bridge uses the existing Codex login on this Mac. It contacts OpenAI for model inference, but it does not use Dia's AI service. Normal websites remain reachable because this is still a browser.
+
+## Project map
+
+| Path | Purpose |
+| --- | --- |
+| `dia-custom` | The single command-line entry point |
+| `bridge/` | Local HTTP/streaming adapter between Dia and Codex |
+| `scripts/` | Reproducible build, install, launch, and diagnostic commands |
+| `src/bootstrap/` | Runtime host blocking and local behavior overrides |
+| `src/patches/` | Guarded, build-specific binary patchers |
+| `src/config/` | Code-signing entitlements for the clone and agent handler |
+| `research/` | Build-specific reverse-engineering tools and notes; not runtime code |
+| `docs/` | Architecture and current implementation status |
+
+Read [docs/STATUS.md](docs/STATUS.md) for what works and what remains, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the request and tool flow.
+
+## Runtime locations
+
+- App: `../Dia Custom RTTM.app`
+- Isolated profile: `~/Library/Application Support/Dia Custom RTTM`
+- Deployed bridge and state: `~/Library/Application Support/Dia Custom RTTM/Bridge`
+- Runtime diagnostics: `~/Library/Application Support/Dia Custom RTTM/Diagnostics`
+
+Dependencies, compiled objects, captures, logs, packet captures, and backup app binaries are intentionally excluded from Git. Historical development material from the initial investigation is preserved in `../dia-custom-dev-archive-2026-08-20`.

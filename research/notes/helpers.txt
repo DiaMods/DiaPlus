@@ -1,0 +1,748 @@
+            ;-- func.102a08000:
+            0x102a08000      fc6fbaa9       stp x28, x27, [sp, -0x60]!
+            0x102a08004      fa6701a9       stp x26, x25, [sp, 0x10]
+            0x102a08008      f85f02a9       stp x24, x23, [sp, 0x20]
+            0x102a0800c      f65703a9       stp x22, x21, [sp, 0x30]
+            0x102a08010      f44f04a9       stp x20, x19, [sp, 0x40]
+            0x102a08014      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a08018      fd430191       add x29, sp, 0x50
+            0x102a0801c      ff8307d1       sub sp, sp, 0x1e0
+            0x102a08020      e81002d0       adrp x8, 0x106c26000
+            0x102a08024      08e940f9       ldr x8, [x8, 0x1d0]
+            0x102a08028      9702088b       add x23, x20, x8
+            0x102a0802c      f30640a9       ldp x19, x1, [x23]
+            0x102a08030      e20e41a9       ldp x2, x3, [x23, 0x10]
+        ┌─< 0x102a08034      d30000b4       cbz x19, 0x102a0804c
+        │   0x102a08038      f40313aa       mov x20, x19
+        │   0x102a0803c      f90301aa       mov x25, x1
+        │   0x102a08040      fa0302aa       mov x26, x2
+        │   0x102a08044      fb0303aa       mov x27, x3
+       ┌──< 0x102a08048      85000014       b 0x102a0825c
+       │└─> 0x102a0804c      8082c73c       ldur q0, [x20, 0x78]
+       │    0x102a08050      8182c83c       ldur q1, [x20, 0x88]
+       │    0x102a08054      8282c93c       ldur q2, [x20, 0x98]
+       │    0x102a08058      a18b3bad       stp q1, q2, [x29, -0x90]
+       │    0x102a0805c      8182ca3c       ldur q1, [x20, 0xa8]
+       │    0x102a08060      a103993c       stur q1, [x29, -0x70]
+       │    0x102a08064      8182c63c       ldur q1, [x20, 0x68]
+       │    0x102a08068      a1833aad       stp q1, q0, [x29, -0xb0]
+       │    0x102a0806c      f81002d0       adrp x24, 0x106c26000
+       │    0x102a08070      18630791       add x24, x24, 0x1d8
+       │    0x102a08074      b96c01b0       adrp x25, 0x10579d000
+       │    0x102a08078      39633491       add x25, x25, 0xd18
+       │    0x102a0807c      a0c302d1       sub x0, x29, 0xb0
+       │    0x102a08080      e20702a9       stp x2, x1, [sp, 0x20]
+       │    0x102a08084      e1030491       add x1, sp, 0x100
+       │    0x102a08088      e20318aa       mov x2, x24
+       │    0x102a0808c      e30f00f9       str x3, [sp, 0x18]
+       │    0x102a08090      e30319aa       mov x3, x25
+       │    0x102a08094      c3f65797       bl sym.func.100005ba0
+       │    0x102a08098      e00318aa       mov x0, x24
+       │    0x102a0809c      e10319aa       mov x1, x25
+       │    0x102a080a0      2ef05797       bl sym.func.100004158
+       │    0x102a080a4      e8c30091       add x8, sp, 0x30
+       │    0x102a080a8      f50314aa       mov x21, x20
+       │    0x102a080ac      b4c302d1       sub x20, x29, 0xb0
+       │    0x102a080b0      88c96197       bl sym.func.10027a6d0
+       │    0x102a080b4      a0c302d1       sub x0, x29, 0xb0
+       │    0x102a080b8      e10318aa       mov x1, x24
+       │    0x102a080bc      e20319aa       mov x2, x25
+       │    0x102a080c0      9ff65797       bl sym.func.100005b3c
+       │    0x102a080c4      e08743ad       ldp q0, q1, [sp, 0x70]
+       │    0x102a080c8      e0070aad       stp q0, q1, [sp, 0x140]
+       │    0x102a080cc      e08744ad       ldp q0, q1, [sp, 0x90]
+       │    0x102a080d0      e0070bad       stp q0, q1, [sp, 0x160]
+       │    0x102a080d4      e08741ad       ldp q0, q1, [sp, 0x30]
+       │    0x102a080d8      e00708ad       stp q0, q1, [sp, 0x100]
+       │    0x102a080dc      e08742ad       ldp q0, q1, [sp, 0x50]
+       │    0x102a080e0      e00709ad       stp q0, q1, [sp, 0x120]
+       │    0x102a080e4      40eb0190       adrp x0, 0x106770000
+       │    0x102a080e8      00401491       add x0, x0, 0x510
+       │    0x102a080ec      01128052       mov w1, 0x90
+       │    0x102a080f0      e2008052       mov w2, 7
+       │    0x102a080f4      d9cdad94       bl sym.imp.swift_allocObject
+       │    0x102a080f8      f80300aa       mov x24, x0
+       │    0x102a080fc      e0074aad       ldp q0, q1, [sp, 0x140]
+       │    0x102a08100      008402ad       stp q0, q1, [x0, 0x50]
+       │    0x102a08104      e0074bad       ldp q0, q1, [sp, 0x160]
+       │    0x102a08108      008403ad       stp q0, q1, [x0, 0x70]
+       │    0x102a0810c      e00748ad       ldp q0, q1, [sp, 0x100]
+       │    0x102a08110      008400ad       stp q0, q1, [x0, 0x10]
+       │    0x102a08114      e00749ad       ldp q0, q1, [sp, 0x120]
+       │    0x102a08118      008401ad       stp q0, q1, [x0, 0x30]
+       │    0x102a0811c      a8e20691       add x8, x21, 0x1b8
+       │    0x102a08120      008541ad       ldp q0, q1, [x8, 0x30]
+       │    0x102a08124      e00707ad       stp q0, q1, [sp, 0xe0]
+       │    0x102a08128      018940ad       ldp q1, q2, [x8, 0x10]
+       │    0x102a0812c      e10b06ad       stp q1, q2, [sp, 0xc0]
+       │    0x102a08130      0001c03d       ldr q0, [x8]
+       │    0x102a08134      e02f803d       str q0, [sp, 0xb0]
+       │    0x102a08138      f91002d0       adrp x25, 0x106c26000
+       │    0x102a0813c      39e30491       add x25, x25, 0x138
+       │    0x102a08140      ba6c01d0       adrp x26, 0x10579e000
+       │    0x102a08144      5a430191       add x26, x26, 0x50
+       │    0x102a08148      e0030491       add x0, sp, 0x100
+       │    0x102a0814c      e1c30091       add x1, sp, 0x30
+       │    0x102a08150      e20319aa       mov x2, x25
+       │    0x102a08154      e3031aaa       mov x3, x26
+       │    0x102a08158      92f65797       bl sym.func.100005ba0
+       │    0x102a0815c      fb1002d0       adrp x27, 0x106c26000
+       │    0x102a08160      7b831391       add x27, x27, 0x4e0
+       │    0x102a08164      bc6c01d0       adrp x28, 0x10579e000
+       │    0x102a08168      9c630191       add x28, x28, 0x58
+       │    0x102a0816c      e0c30291       add x0, sp, 0xb0
+       │    0x102a08170      e1c30091       add x1, sp, 0x30
+       │    0x102a08174      e2031baa       mov x2, x27
+       │    0x102a08178      e3031caa       mov x3, x28
+       │    0x102a0817c      89f65797       bl sym.func.100005ba0
+       │    0x102a08180      e0031baa       mov x0, x27
+       │    0x102a08184      e1031caa       mov x1, x28
+       │    0x102a08188      f4ef5797       bl sym.func.100004158
+       │    0x102a0818c      e8c30091       add x8, sp, 0x30
+       │    0x102a08190      f4c30291       add x20, sp, 0xb0
+       │    0x102a08194      4fc96197       bl sym.func.10027a6d0
+       │    0x102a08198      e0030491       add x0, sp, 0x100
+       │    0x102a0819c      e10319aa       mov x1, x25
+       │    0x102a081a0      e2031aaa       mov x2, x26
+       │    0x102a081a4      66f65797       bl sym.func.100005b3c
+       │    0x102a081a8      e0c30291       add x0, sp, 0xb0
+       │    0x102a081ac      e1031baa       mov x1, x27
+       │    0x102a081b0      e2031caa       mov x2, x28
+       │    0x102a081b4      62f65797       bl sym.func.100005b3c
+       │    0x102a081b8      e00fc03d       ldr q0, [sp, 0x30]
+       │    0x102a081bc      e003803d       str q0, [sp]
+       │    0x102a081c0      40eb0190       adrp x0, 0x106770000
+       │    0x102a081c4      00e01491       add x0, x0, 0x538
+       │    0x102a081c8      01048052       mov w1, 0x20
+       │    0x102a081cc      e2008052       mov w2, 7
+       │    0x102a081d0      a2cdad94       bl sym.imp.swift_allocObject
+       │    0x102a081d4      fc0300aa       mov x28, x0
+       │    0x102a081d8      e003c03d       ldr q0, [sp]
+       │    0x102a081dc      0004803d       str q0, [x0, 0x10]
+       │    0x102a081e0      200000f0       adrp x0, 0x102a0f000
+       │    0x102a081e4      00701391       add x0, x0, 0x4dc
+       │    0x102a081e8      a26c01d0       adrp x2, 0x10579e000
+       │    0x102a081ec      42a00191       add x2, x2, 0x68
+       │    0x102a081f0      e10318aa       mov x1, x24
+       │    0x102a081f4      e3031caa       mov x3, x28
+       │    0x102a081f8      04008052       mov w4, 0
+       │    0x102a081fc      9b7d9597       bl sym.func.100f67868
+       │    0x102a08200      f40300aa       mov x20, x0
+       │    0x102a08204      f90301aa       mov x25, x1
+       │    0x102a08208      fa0302aa       mov x26, x2
+       │    0x102a0820c      fb0303aa       mov x27, x3
+       │    0x102a08210      e00318aa       mov x0, x24
+       │    0x102a08214      e1cead94       bl sym.imp.swift_release
+       │    0x102a08218      e0031caa       mov x0, x28
+       │    0x102a0821c      dfcead94       bl sym.imp.swift_release
+       │    0x102a08220      f87240a9       ldp x24, x28, [x23]
+       │    0x102a08224      f55a41a9       ldp x21, x22, [x23, 0x10]
+       │    0x102a08228      f46600a9       stp x20, x25, [x23]
+       │    0x102a0822c      fa6e01a9       stp x26, x27, [x23, 0x10]
+       │    0x102a08230      e00319aa       mov x0, x25
+       │    0x102a08234      dfcead94       bl sym.imp.swift_retain
+       │    0x102a08238      e0031baa       mov x0, x27
+       │    0x102a0823c      ddcead94       bl sym.imp.swift_retain
+       │    0x102a08240      e00318aa       mov x0, x24
+       │    0x102a08244      e1031caa       mov x1, x28
+       │    0x102a08248      e20315aa       mov x2, x21
+       │    0x102a0824c      e30316aa       mov x3, x22
+       │    0x102a08250      78d26f97       bl sym.func.1005fcc30
+       │    0x102a08254      e38b41a9       ldp x3, x2, [sp, 0x18]
+       │    0x102a08258      e11740f9       ldr x1, [sp, 0x28]
+       └──> 0x102a0825c      e00313aa       mov x0, x19
+            0x102a08260      b5487297       bl sym.func.10069a534
+            0x102a08264      e00314aa       mov x0, x20
+            0x102a08268      e10319aa       mov x1, x25
+            0x102a0826c      e2031aaa       mov x2, x26
+            0x102a08270      e3031baa       mov x3, x27
+            0x102a08274      ff830791       add sp, sp, 0x1e0
+            0x102a08278      fd7b45a9       ldp x29, x30, [sp, 0x50]
+            0x102a0827c      f44f44a9       ldp x20, x19, [sp, 0x40]
+            0x102a08280      f65743a9       ldp x22, x21, [sp, 0x30]
+            0x102a08284      f85f42a9       ldp x24, x23, [sp, 0x20]
+            0x102a08288      fa6741a9       ldp x26, x25, [sp, 0x10]
+            0x102a0828c      fc6fc6a8       ldp x28, x27, [sp], 0x60
+            0x102a08290      c0035fd6       ret
+            ;-- func.102a08294:
+            0x102a08294      fc0f1af8       str x28, [sp, -0x60]!
+            0x102a08298      fb6b01a9       stp x27, x26, [sp, 0x10]
+            0x102a0829c      f96302a9       stp x25, x24, [sp, 0x20]
+            0x102a082a0      f75b03a9       stp x23, x22, [sp, 0x30]
+            0x102a082a4      f44f04a9       stp x20, x19, [sp, 0x40]
+            0x102a082a8      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a082ac      fd430191       add x29, sp, 0x50
+            0x102a082b0      ffc300d1       sub sp, sp, 0x30
+            0x102a082b4      f80315aa       mov x24, x21
+            0x102a082b8      f40301aa       mov x20, x1
+            0x102a082bc      f90300aa       mov x25, x0
+            0x102a082c0      f60308aa       mov x22, x8
+            0x102a082c4      000080d2       mov x0, 0
+            0x102a082c8      54b0ad94       bl sym.imp.CryptoKit.SHA256...VMa
+            0x102a082cc      f30300aa       mov x19, x0
+            0x102a082d0      5ade01f0       adrp x26, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a082d4      5a1341f9       ldr x26, [x26, 0x220]
+            0x102a082d8      1c805ff8       ldur x28, [x0, -8]
+            0x102a082dc      882340f9       ldr x8, [x28, 0x40]
+            0x102a082e0      e90308aa       mov x9, x8
+            0x102a082e4      50de0190       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a082e8      104244f9       ldr x16, [x16, 0x880]
+            0x102a082ec      00023fd6       blr x16
+            0x102a082f0      e9030091       mov x9, sp
+            0x102a082f4      083d0091       add x8, x8, 0xf
+            0x102a082f8      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a082fc      370108cb       sub x23, x9, x8
+            0x102a08300      ff020091       mov sp, x23
+            0x102a08304      61de01f0       adrp x1, reloc.Element_...pzrlE3minABSgyF_ ; 0x1065d7000
+            0x102a08308      212040f9       ldr x1, [x1, 0x40]
+            0x102a0830c      28de01d0       adrp x8, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a08310      086547f9       ldr x8, [x8, 0xec8]
+            0x102a08314      a1233aa9       stp x1, x8, [x29, -0x60]
+            0x102a08318      b9d338a9       stp x25, x20, [x29, -0x78]
+            0x102a0831c      a0e301d1       sub x0, x29, 0x78
+            0x102a08320      adf65797       bl sym.func.100005dd4
+            0x102a08324      080440a9       ldp x8, x1, [x0]
+            0x102a08328      e00308aa       mov x0, x8
+            0x102a0832c      22975897       bl sym.func.10002dfb4
+            0x102a08330      f90300aa       mov x25, x0
+            0x102a08334      fb0301aa       mov x27, x1
+            0x102a08338      a0e301d1       sub x0, x29, 0x78
+            0x102a0833c      d2ef5797       bl sym.func.100004284
+            0x102a08340      e01002d0       adrp x0, 0x106c26000
+            0x102a08344      00001291       add x0, x0, 0x480
+            0x102a08348      42de01f0       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a0834c      420841f9       ldr x2, [x2, 0x210]
+            0x102a08350      e1031aaa       mov x1, x26
+            0x102a08354      46915897       bl sym.func.10002c86c
+            0x102a08358      fa0300aa       mov x26, x0
+            0x102a0835c      e80317aa       mov x8, x23
+            0x102a08360      f40313aa       mov x20, x19
+            0x102a08364      e00313aa       mov x0, x19
+            0x102a08368      e1031aaa       mov x1, x26
+            0x102a0836c      bcafad94       bl sym.imp.CryptoKit.HashFunction_...ycfCTj_ ; CryptoKit.HashFunction(...ycfCTj)
+            0x102a08370      e00319aa       mov x0, x25
+            0x102a08374      e1031baa       mov x1, x27
+            0x102a08378      f49c5897       bl sym.func.10002f748
+            0x102a0837c      e00319aa       mov x0, x25
+            0x102a08380      e1031baa       mov x1, x27
+            0x102a08384      e20317aa       mov x2, x23
+            0x102a08388      f50318aa       mov x21, x24
+            0x102a0838c      9a160094       bl sym.func.102a0ddf4
+            0x102a08390      f80315aa       mov x24, x21
+            0x102a08394      e00319aa       mov x0, x25
+            0x102a08398      e1031baa       mov x1, x27
+            0x102a0839c      1c955897       bl sym.func.10002d80c
+            0x102a083a0      e80316aa       mov x8, x22
+            0x102a083a4      f40317aa       mov x20, x23
+            0x102a083a8      e00313aa       mov x0, x19
+            0x102a083ac      e1031aaa       mov x1, x26
+            0x102a083b0      a5afad94       bl sym.imp.CryptoKit.HashFunction.finalize.Digest_...zyFTj_ ; CryptoKit.HashFunction.finalize.Digest(...zyFTj)
+            0x102a083b4      e00319aa       mov x0, x25
+            0x102a083b8      e1031baa       mov x1, x27
+            0x102a083bc      14955897       bl sym.func.10002d80c
+            0x102a083c0      880740f9       ldr x8, [x28, 8]
+            0x102a083c4      e00317aa       mov x0, x23
+            0x102a083c8      e10313aa       mov x1, x19
+            0x102a083cc      00013fd6       blr x8
+            0x102a083d0      f50318aa       mov x21, x24
+            0x102a083d4      bf4301d1       sub sp, x29, 0x50
+            0x102a083d8      fd7b45a9       ldp x29, x30, [sp, 0x50]
+            0x102a083dc      f44f44a9       ldp x20, x19, [sp, 0x40]
+            0x102a083e0      f75b43a9       ldp x23, x22, [sp, 0x30]
+            0x102a083e4      f96342a9       ldp x25, x24, [sp, 0x20]
+            0x102a083e8      fb6b41a9       ldp x27, x26, [sp, 0x10]
+            0x102a083ec      fc0746f8       ldr x28, [sp], 0x60
+            0x102a083f0      c0035fd6       ret
+            ;-- func.102a083f4:
+            0x102a083f4      fa0f1bf8       str x26, [sp, -0x50]!
+            0x102a083f8      f96301a9       stp x25, x24, [sp, 0x10]
+            0x102a083fc      f75b02a9       stp x23, x22, [sp, 0x20]
+            0x102a08400      f44f03a9       stp x20, x19, [sp, 0x30]
+            0x102a08404      fd7b04a9       stp x29, x30, [sp, 0x40]
+            0x102a08408      fd030191       add x29, sp, 0x40
+            0x102a0840c      ff0302d1       sub sp, sp, 0x80
+            0x102a08410      f30315aa       mov x19, x21
+            0x102a08414      e01002d0       adrp x0, 0x106c26000
+            0x102a08418      00c00691       add x0, x0, 0x1b0
+            0x102a0841c      a16c01b0       adrp x1, 0x10579d000
+            0x102a08420      21c02b91       add x1, x1, 0xaf0
+            0x102a08424      4def5797       bl sym.func.100004158
+            0x102a08428      08805ff8       ldur x8, [x0, -8]
+            0x102a0842c      092140f9       ldr x9, [x8, 0x40]
+            0x102a08430      283d0091       add x8, x9, 0xf
+            0x102a08434      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a08438      50de0190       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a0843c      104244f9       ldr x16, [x16, 0x880]
+            0x102a08440      00023fd6       blr x16
+            0x102a08444      e9030091       mov x9, sp
+            0x102a08448      360108cb       sub x22, x9, x8
+            0x102a0844c      df020091       mov sp, x22
+            0x102a08450      000080d2       mov x0, 0
+            0x102a08454      b60e0094       bl sym.func.102a0bf2c
+            0x102a08458      e30300aa       mov x3, x0
+            0x102a0845c      08805ff8       ldur x8, [x0, -8]
+            0x102a08460      081d40f9       ldr x8, [x8, 0x38]
+            0x102a08464      e00316aa       mov x0, x22
+            0x102a08468      21008052       mov w1, 1
+            0x102a0846c      22008052       mov w2, 1
+            0x102a08470      00013fd6       blr x8
+            0x102a08474      e81002d0       adrp x8, 0x106c26000
+            0x102a08478      17dd40f9       ldr x23, [x8, 0x1b8]
+            0x102a0847c      8002178b       add x0, x20, x23
+            0x102a08480      a10303d1       sub x1, x29, 0xc0
+            0x102a08484      22048052       mov w2, 0x21               ; '!'
+            0x102a08488      030080d2       mov x3, 0
+            0x102a0848c      14cdad94       bl sym.imp.swift_beginAccess
+            0x102a08490      8102178b       add x1, x20, x23
+            0x102a08494      e00316aa       mov x0, x22
+            0x102a08498      aa0e0094       bl sym.func.102a0bf40
+            0x102a0849c      a00303d1       sub x0, x29, 0xc0
+            0x102a084a0      6fcdad94       bl sym.imp.swift_endAccess
+            0x102a084a4      95da5aa9       ldp x21, x22, [x20, 0x1a8]
+            0x102a084a8      e00316aa       mov x0, x22
+            0x102a084ac      41cead94       bl sym.imp.swift_retain
+            0x102a084b0      a1e101b0       adrp x1, 0x10663d000
+            0x102a084b4      21e02d91       add x1, x1, 0xb78
+            0x102a084b8      a80303d1       sub x8, x29, 0xc0
+            0x102a084bc      e00314aa       mov x0, x20
+            0x102a084c0      f40316aa       mov x20, x22
+            0x102a084c4      a0023fd6       blr x21
+            0x102a084c8      e00316aa       mov x0, x22
+            0x102a084cc      33cead94       bl sym.imp.swift_release
+            0x102a084d0      a80354f8       ldur x8, [x29, -0xc0]
+            0x102a084d4      c80500b4       cbz x8, 0x102a0858c
+            0x102a084d8      b6a774a9       ldp x22, x9, [x29, -0xb8]
+            0x102a084dc      b7ab75a9       ldp x23, x10, [x29, -0xa8]
+            0x102a084e0      b8af76a9       ldp x24, x11, [x29, -0x98]
+            0x102a084e4      b98357f8       ldur x25, [x29, -0x88]
+            0x102a084e8      a85b38a9       stp x8, x22, [x29, -0x80]
+            0x102a084ec      a95f39a9       stp x9, x23, [x29, -0x70]
+            0x102a084f0      aa633aa9       stp x10, x24, [x29, -0x60]
+            0x102a084f4      c8880190       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a084f8      08010f91       add x8, x8, 0x3c0
+            0x102a084fc      148100d1       sub x20, x8, 0x20
+            0x102a08500      ab673ba9       stp x11, x25, [x29, -0x50]
+            0x102a08504      e01002d0       adrp x0, 0x106c26000
+            0x102a08508      00600591       add x0, x0, 0x158
+            0x102a0850c      a16c01b0       adrp x1, 0x10579d000
+            0x102a08510      21c02291       add x1, x1, 0x8b0
+            0x102a08514      11ef5797       bl sym.func.100004158
+            0x102a08518      fa0300aa       mov x26, x0
+            0x102a0851c      9d0e0094       bl sym.func.102a0bf90
+            0x102a08520      e60300aa       mov x6, x0
+            0x102a08524      25de01d0       adrp x5, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a08528      a52442f9       ldr x5, [x5, 0x448]
+            0x102a0852c      a2cc8dd2       mov x2, 0x6e65             ; 'en'
+            0x102a08530      624caef2       movk x2, 0x7263, lsl 16    ; 'cr'
+            0x102a08534      220fcef2       movk x2, 0x7079, lsl 32    ; 'yp'
+            0x102a08538      822eedf2       movk x2, 0x6974, lsl 48    ; 'ti'
+            0x102a0853c      e3cd8dd2       mov x3, 0x6e6f             ; 'on'
+            0x102a08540      63a9acf2       movk x3, 0x654b, lsl 16    ; 'Ke'
+            0x102a08544      230fc0f2       movk x3, 0x79, lsl 32      ; 'y'
+            0x102a08548      03a0fdf2       movk x3, 0xed00, lsl 48
+            0x102a0854c      810241b2       orr x1, x20, 0x8000000000000000
+            0x102a08550      b40302d1       sub x20, x29, 0x80
+            0x102a08554      600280d2       mov x0, 0x13
+            0x102a08558      0000faf2       movk x0, 0xd000, lsl 48
+            0x102a0855c      e4031aaa       mov x4, x26
+            0x102a08560      f50313aa       mov x21, x19
+            0x102a08564      f9039597       bl sym.func.100f49548
+            0x102a08568      f30315aa       mov x19, x21
+            0x102a0856c      e00319aa       mov x0, x25
+            0x102a08570      0acead94       bl sym.imp.swift_release
+            0x102a08574      e00318aa       mov x0, x24
+            0x102a08578      08cead94       bl sym.imp.swift_release
+            0x102a0857c      e00317aa       mov x0, x23
+            0x102a08580      06cead94       bl sym.imp.swift_release
+            0x102a08584      e00316aa       mov x0, x22
+            0x102a08588      04cead94       bl sym.imp.swift_release
+            0x102a0858c      f50313aa       mov x21, x19
+            0x102a08590      bf0301d1       sub sp, x29, 0x40
+            0x102a08594      fd7b44a9       ldp x29, x30, [sp, 0x40]
+            0x102a08598      f44f43a9       ldp x20, x19, [sp, 0x30]
+            0x102a0859c      f75b42a9       ldp x23, x22, [sp, 0x20]
+            0x102a085a0      f96341a9       ldp x25, x24, [sp, 0x10]
+            0x102a085a4      fa0745f8       ldr x26, [sp], 0x50
+            0x102a085a8      c0035fd6       ret
+            ;-- func.102a085ac:
+            0x102a085ac      f657bda9       stp x22, x21, [sp, -0x30]!
+            0x102a085b0      f44f01a9       stp x20, x19, [sp, 0x10]
+            0x102a085b4      fd7b02a9       stp x29, x30, [sp, 0x20]
+            0x102a085b8      fd830091       add x29, sp, 0x20
+            0x102a085bc      f40300aa       mov x20, x0
+            0x102a085c0      f30308aa       mov x19, x8
+            0x102a085c4      60de01f0       adrp x0, reloc.Element_...pzrlE3minABSgyF_ ; 0x1065d7000
+            0x102a085c8      003c41f9       ldr x0, [x0, 0x278]
+            0x102a085cc      c1e301f0       adrp x1, 0x106683000
+            0x102a085d0      21e01f91       add x1, x1, 0x7f8
+            0x102a085d4      74a09297       bl sym.func.100eb07a4
+            0x102a085d8      f50301aa       mov x21, x1
+            0x102a085dc      48400012       and w8, w2, 0x1ffff
+            0x102a085e0      02611812       and w2, w8, 0xffffff01
+            0x102a085e4      08eaff97       bl sym.func.102a02e04
+            0x102a085e8      e00315aa       mov x0, x21
+            0x102a085ec      bfccad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a085f0      e81002d0       adrp x8, 0x106c26000
+            0x102a085f4      082540f9       ldr x8, [x8, 0x48]
+            0x102a085f8      1f0500b1       cmn x8, 1
+            0x102a085fc      81020054       b.ne 0x102a0864c
+            0x102a08600      000080d2       mov x0, 0
+            0x102a08604      dc9aad94       bl sym.imp.Foundation.URL...VMa
+            0x102a08608      e11002d0       adrp x1, 0x106c26000
+            0x102a0860c      21400191       add x1, x1, 0x50
+            0x102a08610      496b5997       bl sym.func.100063334
+            0x102a08614      f40300aa       mov x20, x0
+            0x102a08618      60ad8cd2       mov x0, 0x656b             ; 'ke'
+            0x102a0861c      20afa5f2       movk x0, 0x2d79, lsl 16    ; 'y-'
+            0x102a08620      a00ccff2       movk x0, 0x7865, lsl 32    ; 'ex'
+            0x102a08624      600cedf2       movk x0, 0x6863, lsl 48    ; 'ch'
+            0x102a08628      21cc8dd2       mov x1, 0x6e61             ; 'an'
+            0x102a0862c      e1acacf2       movk x1, 0x6567, lsl 16    ; 'ge'
+            0x102a08630      0180fdf2       movk x1, 0xec00, lsl 48
+            0x102a08634      e80313aa       mov x8, x19
+            0x102a08638      7b9aad94       bl sym.imp.Foundation.URL.appendingPathComponent_...CSSF_ ; Foundation.URL.appendingPathComponent(...CSSF)
+            0x102a0863c      fd7b42a9       ldp x29, x30, [sp, 0x20]
+            0x102a08640      f44f41a9       ldp x20, x19, [sp, 0x10]
+            0x102a08644      f657c3a8       ldp x22, x21, [sp], 0x30
+            0x102a08648      c0035fd6       ret
+            0x102a0864c      e01002d0       adrp x0, 0x106c26000
+            0x102a08650      00200191       add x0, x0, 0x48
+            0x102a08654      c1fffff0       adrp x1, 0x102a03000
+            0x102a08658      21301091       add x1, x1, 0x40c
+            0x102a0865c      b7cdad94       bl sym.imp.swift_once
+            0x102a08660      e8ffff17       b 0x102a08600
+            ;-- func.102a08664:
+            0x102a08664      f44fbea9       stp x20, x19, [sp, -0x20]!
+            0x102a08668      fd7b01a9       stp x29, x30, [sp, 0x10]
+            0x102a0866c      fd430091       add x29, sp, 0x10
+            0x102a08670      f30300aa       mov x19, x0
+            0x102a08674      813240b9       ldr w1, [x20, 0x30]
+            0x102a08678      826a4079       ldrh w2, [x20, 0x34]
+            0x102a0867c      e00314aa       mov x0, x20
+            0x102a08680      76ccad94       bl sym.imp.swift_allocObject
+            0x102a08684      f40300aa       mov x20, x0
+            0x102a08688      e00313aa       mov x0, x19
+            0x102a0868c      05000094       bl sym.func.102a086a0
+            ;-- func.102a0ddf4:
+            0x102a0ddf4      ff4301d1       sub sp, sp, 0x50
+            0x102a0ddf8      f75b02a9       stp x23, x22, [sp, 0x20]
+            0x102a0ddfc      f44f03a9       stp x20, x19, [sp, 0x30]
+            0x102a0de00      fd7b04a9       stp x29, x30, [sp, 0x40]
+            0x102a0de04      fd030191       add x29, sp, 0x40
+            0x102a0de08      f40302aa       mov x20, x2
+            0x102a0de0c      09de01f0       adrp x9, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a0de10      297144f9       ldr x9, [x9, 0x8e0]
+            0x102a0de14      290140f9       ldr x9, [x9]
+            0x102a0de18      e90f00f9       str x9, [sp, 0x18]
+            0x102a0de1c      29fc7ed3       lsr x9, x1, 0x3e
+            0x102a0de20      3f050071       cmp w9, 1
+        ┌─< 0x102a0de24      2c060054       b.gt 0x102a0dee8
+       ┌──< 0x102a0de28      89060035       cbnz w9, 0x102a0def8
+       ││   0x102a0de2c      08fc48d3       lsr x8, x0, 8
+       ││   0x102a0de30      e0230039       strb w0, [sp, 8]
+       ││   0x102a0de34      09fc50d3       lsr x9, x0, 0x10
+       ││   0x102a0de38      0afc58d3       lsr x10, x0, 0x18
+       ││   0x102a0de3c      e8270039       strb w8, [sp, 9]
+       ││   0x102a0de40      e92b0039       strb w9, [sp, 0xa]
+       ││   0x102a0de44      08fc60d3       lsr x8, x0, 0x20
+       ││   0x102a0de48      09fc68d3       lsr x9, x0, 0x28
+       ││   0x102a0de4c      ea2f0039       strb w10, [sp, 0xb]
+       ││   0x102a0de50      e8330039       strb w8, [sp, 0xc]
+       ││   0x102a0de54      08fc70d3       lsr x8, x0, 0x30
+       ││   0x102a0de58      0afc78d3       lsr x10, x0, 0x38
+       ││   0x102a0de5c      e9370039       strb w9, [sp, 0xd]
+       ││   0x102a0de60      e83b0039       strb w8, [sp, 0xe]
+       ││   0x102a0de64      28fc48d3       lsr x8, x1, 8
+       ││   0x102a0de68      29fc50d3       lsr x9, x1, 0x10
+       ││   0x102a0de6c      ea3f0039       strb w10, [sp, 0xf]
+       ││   0x102a0de70      e1430039       strb w1, [sp, 0x10]
+       ││   0x102a0de74      2afc58d3       lsr x10, x1, 0x18
+       ││   0x102a0de78      2bfc60d3       lsr x11, x1, 0x20
+       ││   0x102a0de7c      e8470039       strb w8, [sp, 0x11]
+       ││   0x102a0de80      e94b0039       strb w9, [sp, 0x12]
+       ││   0x102a0de84      28fc68d3       lsr x8, x1, 0x28
+       ││   0x102a0de88      29fc70d3       lsr x9, x1, 0x30
+       ││   0x102a0de8c      ea4f0039       strb w10, [sp, 0x13]
+       ││   0x102a0de90      eb530039       strb w11, [sp, 0x14]
+       ││   0x102a0de94      ea230091       add x10, sp, 8
+       ││   0x102a0de98      e8570039       strb w8, [sp, 0x15]
+       ││   0x102a0de9c      5301298b       add x19, x10, w9, uxtb
+       ││   0x102a0dea0      000080d2       mov x0, 0
+       ││   0x102a0dea4      f70315aa       mov x23, x21
+       ││   0x102a0dea8      5c99ad94       bl sym.imp.CryptoKit.SHA256...VMa
+       ││   0x102a0deac      f60300aa       mov x22, x0
+       ││   0x102a0deb0      21de01d0       adrp x1, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+       ││   0x102a0deb4      211041f9       ldr x1, [x1, 0x220]
+       ││   0x102a0deb8      c01002b0       adrp x0, 0x106c26000
+       ││   0x102a0debc      00001291       add x0, x0, 0x480
+       ││   0x102a0dec0      22de01d0       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+       ││   0x102a0dec4      420841f9       ldr x2, [x2, 0x210]
+       ││   0x102a0dec8      697a5897       bl sym.func.10002c86c
+       ││   0x102a0decc      e30300aa       mov x3, x0
+       ││   0x102a0ded0      e0230091       add x0, sp, 8
+       ││   0x102a0ded4      e10313aa       mov x1, x19
+       ││   0x102a0ded8      e20316aa       mov x2, x22
+       ││   0x102a0dedc      d798ad94       bl sym.imp.CryptoKit.HashFunction.update.bufferPointer_...FTj_ ; CryptoKit.HashFunction.update.bufferPointer(...FTj)
+       ││   0x102a0dee0      f50317aa       mov x21, x23
+      ┌───< 0x102a0dee4      22000014       b 0x102a0df6c
+      ││└─> 0x102a0dee8      3f090071       cmp w9, 2
+      ││┌─< 0x102a0deec      a1010054       b.ne 0x102a0df20
+      │││   0x102a0def0      092841a9       ldp x9, x10, [x0, 0x10]
+      │││   0x102a0def4      05000014       b 0x102a0df08
+      │└──> 0x102a0def8      097c4093       sxtw x9, w0
+      │ │   0x102a0defc      0afc6093       asr x10, x0, 0x20
+      │ │   0x102a0df00      5f0109eb       cmp x10, x9
+      │ │   0x102a0df04      ab040054       b.lt 0x102a0df98
+      │ │   0x102a0df08      22f44092       and x2, x1, 0x3fffffffffffffff
+      │ │   0x102a0df0c      e00309aa       mov x0, x9
+      │ │   0x102a0df10      e1030aaa       mov x1, x10
+      │ │   0x102a0df14      e30314aa       mov x3, x20
+      │ │   0x102a0df18      22000094       bl sym.func.102a0dfa0
+      │ │   0x102a0df1c      14000014       b 0x102a0df6c
+      │ └─> 0x102a0df20      000080d2       mov x0, 0
+      │     0x102a0df24      f60315aa       mov x22, x21
+      │     0x102a0df28      3c99ad94       bl sym.imp.CryptoKit.SHA256...VMa
+      │     0x102a0df2c      f30300aa       mov x19, x0
+      │     0x102a0df30      21de01d0       adrp x1, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+      │     0x102a0df34      211041f9       ldr x1, [x1, 0x220]
+      │     0x102a0df38      c01002b0       adrp x0, 0x106c26000
+      │     0x102a0df3c      00001291       add x0, x0, 0x480
+      │     0x102a0df40      22de01d0       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+      │     0x102a0df44      420841f9       ldr x2, [x2, 0x210]
+      │     0x102a0df48      497a5897       bl sym.func.10002c86c
+      │     0x102a0df4c      e30300aa       mov x3, x0
+      │     0x102a0df50      ff0700f9       str xzr, [sp, 8]
+      │     0x102a0df54      ffe300f8       stur xzr, [sp, 0xe]
+      │     0x102a0df58      e0230091       add x0, sp, 8
+      │     0x102a0df5c      e1230091       add x1, sp, 8
+      │     0x102a0df60      e20313aa       mov x2, x19
+      │     0x102a0df64      b598ad94       bl sym.imp.CryptoKit.HashFunction.update.bufferPointer_...FTj_ ; CryptoKit.HashFunction.update.bufferPointer(...FTj)
+      │     0x102a0df68      f50316aa       mov x21, x22
+      └───> 0x102a0df6c      e80f40f9       ldr x8, [sp, 0x18]
+            0x102a0df70      09de01f0       adrp x9, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a0df74      297144f9       ldr x9, [x9, 0x8e0]
+            0x102a0df78      290140f9       ldr x9, [x9]
+            0x102a0df7c      3f0108eb       cmp x9, x8
+            0x102a0df80      e1000054       b.ne 0x102a0df9c
+            0x102a0df84      fd7b44a9       ldp x29, x30, [sp, 0x40]
+            0x102a0df88      f44f43a9       ldp x20, x19, [sp, 0x30]
+            0x102a0df8c      f75b42a9       ldp x23, x22, [sp, 0x20]
+            0x102a0df90      ff430191       add sp, sp, 0x50
+            0x102a0df94      c0035fd6       ret
+            0x102a0df98      200020d4       brk 1
+            0x102a0df9c      2eb1ad94       bl sym.imp.__stack_chk_fail
+            ;-- func.102a0dfa0:
+            0x102a0dfa0      f963bca9       stp x25, x24, [sp, -0x40]!
+            0x102a0dfa4      f75b01a9       stp x23, x22, [sp, 0x10]
+            0x102a0dfa8      f44f02a9       stp x20, x19, [sp, 0x20]
+            0x102a0dfac      fd7b03a9       stp x29, x30, [sp, 0x30]
+            0x102a0dfb0      fdc30091       add x29, sp, 0x30
+            0x102a0dfb4      f30315aa       mov x19, x21
+            0x102a0dfb8      f60303aa       mov x22, x3
+            0x102a0dfbc      f40302aa       mov x20, x2
+            0x102a0dfc0      f80301aa       mov x24, x1
+            0x102a0dfc4      f90300aa       mov x25, x0
+            0x102a0dfc8      b582ad94       bl sym.imp.Foundation.__DataStorage._bytes.allocator__UnsafeMutableRawPointer______.Sgvg ; Foundation.__DataStorage._bytes.allocator__UnsafeMutableRawPointer -> ().Sgvg
+            0x102a0dfcc      f70300aa       mov x23, x0
+            0x102a0dfd0      a00000b4       cbz x0, 0x102a0dfe4
+            0x102a0dfd4      bb82ad94       bl sym.imp.getter_Foundation.__DataStorage._offset.allocator__Swift.Int______:_allocator_offsetallocatorS_...vg_ ; getter Foundation.__DataStorage._offset.allocator__Swift.Int -> (): allocator_offsetallocatorS(...vg)
+            0x102a0dfd8      280300eb       subs x8, x25, x0
+            0x102a0dfdc      26040054       b.vs 0x102a0e060
+            0x102a0dfe0      1701178b       add x23, x8, x23
+            0x102a0dfe4      180319eb       subs x24, x24, x25
+            0x102a0dfe8      a6030054       b.vs 0x102a0e05c
+            0x102a0dfec      b282ad94       bl sym.imp.getter_Foundation.__DataStorage._length.allocator__Swift.Int______:_allocator_lengthallocatorS_...vg_ ; getter Foundation.__DataStorage._length.allocator__Swift.Int -> (): allocator_lengthallocatorS(...vg)
+            0x102a0dff0      1f0018eb       cmp x0, x24
+            0x102a0dff4      08b0989a       csel x8, x0, x24, lt
+            0x102a0dff8      0801178b       add x8, x8, x23
+            0x102a0dffc      ff0200f1       cmp x23, 0
+            0x102a0e000      f403889a       csel x20, xzr, x8, eq
+            0x102a0e004      000080d2       mov x0, 0
+            0x102a0e008      0499ad94       bl sym.imp.CryptoKit.SHA256...VMa
+            0x102a0e00c      f80300aa       mov x24, x0
+            0x102a0e010      21de01b0       adrp x1, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a0e014      211041f9       ldr x1, [x1, 0x220]
+            0x102a0e018      c0100290       adrp x0, 0x106c26000
+            0x102a0e01c      00001291       add x0, x0, 0x480
+            0x102a0e020      22de01b0       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+       ╎╎   ;-- func.102a0f45c:
+       ╎╎   0x102a0f45c      a81002f0       adrp x8, 0x106c26000
+       ╎╎   0x102a0f460      004542f9       ldr x0, [x8, 0x488]
+      ┌───< 0x102a0f464      400000b4       cbz x0, 0x102a0f46c
+      │╎╎   0x102a0f468      c0035fd6       ret
+      └───> 0x102a0f46c      fd7bbfa9       stp x29, x30, [sp, -0x10]!
+       ╎╎   0x102a0f470      fd030091       mov x29, sp
+       ╎╎   0x102a0f474      e0dd01f0       adrp x0, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+       ╎╎   0x102a0f478      001842f9       ldr x0, [x0, 0x430]
+       ╎╎   0x102a0f47c      e1dd01f0       adrp x1, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+       ╎╎   0x102a0f480      212442f9       ldr x1, [x1, 0x448]
+       ╎╎   0x102a0f484      eeb1ad94       bl sym.imp.swift_getWitnessTable
+       ╎╎   0x102a0f488      a81002f0       adrp x8, 0x106c26000
+       ╎╎   0x102a0f48c      08211291       add x8, x8, 0x488
+       ╎╎   0x102a0f490      00fd9fc8       stlr x0, [x8]
+       ╎╎   0x102a0f494      fd7bc1a8       ldp x29, x30, [sp], 0x10
+       ╎╎   0x102a0f498      c0035fd6       ret
+       ╎╎   ;-- func.102a0f49c:
+       ╎╎   0x102a0f49c      a81002f0       adrp x8, 0x106c26000
+       ╎╎   0x102a0f4a0      006d42f9       ldr x0, [x8, 0x4d8]
+      ┌───< 0x102a0f4a4      400000b4       cbz x0, 0x102a0f4ac
+      │╎╎   0x102a0f4a8      c0035fd6       ret
+      └───> 0x102a0f4ac      fd7bbfa9       stp x29, x30, [sp, -0x10]!
+       ╎╎   0x102a0f4b0      fd030091       mov x29, sp
+       ╎╎   0x102a0f4b4      606c01f0       adrp x0, 0x10579e000
+       ╎╎   0x102a0f4b8      00500691       add x0, x0, 0x194
+       ╎╎   0x102a0f4bc      01eb01b0       adrp x1, 0x106770000
+       ╎╎   0x102a0f4c0      21e01691       add x1, x1, 0x5b8
+       ╎╎   0x102a0f4c4      deb1ad94       bl sym.imp.swift_getWitnessTable
+       ╎╎   0x102a0f4c8      a81002f0       adrp x8, 0x106c26000
+       ╎╎   0x102a0f4cc      08611391       add x8, x8, 0x4d8
+       ╎╎   0x102a0f4d0      00fd9fc8       stlr x0, [x8]
+       ╎╎   0x102a0f4d4      fd7bc1a8       ldp x29, x30, [sp], 0x10
+       ╎╎   0x102a0f4d8      c0035fd6       ret
+       ╎╎   ;-- func.102a0f4dc:
+       ╎╎   0x102a0f4dc      80420091       add x0, x20, 0x10
+       └──< 0x102a0f4e0      33e4ff17       b sym.func.102a085ac
+        ╎   ;-- func.102a0f4e4:
+        ╎   0x102a0f4e4      fd7bbfa9       stp x29, x30, [sp, -0x10]!
+        ╎   0x102a0f4e8      fd030091       mov x29, sp
+        ╎   0x102a0f4ec      800e40f9       ldr x0, [x20, 0x18]
+        ╎   0x102a0f4f0      2ab2ad94       bl sym.imp.swift_release
+        ╎   0x102a0f4f4      e00314aa       mov x0, x20
+        ╎   0x102a0f4f8      01048052       mov w1, 0x20
+        ╎   0x102a0f4fc      e2008052       mov w2, 7
+        ╎   0x102a0f500      fd7bc1a8       ldp x29, x30, [sp], 0x10
+       ┌──< 0x102a0f504      26b1ad14       b sym.imp.swift_deallocObject
+       │╎   ;-- func.102a0f508:
+       │╎   0x102a0f508      bd0344b2       orr x29, x29, 0x1000000000000000
+       │╎   0x102a0f50c      f30f1ef8       str x19, [sp, -0x20]!
+       │╎   0x102a0f510      fd7b01a9       stp x29, x30, [sp, 0x10]
+       │╎   0x102a0f514      f60700f9       str x22, [sp, 8]
+       │╎   0x102a0f518      fd430091       add x29, sp, 0x10
+       │╎   0x102a0f51c      935241a9       ldp x19, x20, [x20, 0x10]
+       │╎   0x102a0f520      686c01f0       adrp x8, 0x10579e000
+       │╎   0x102a0f524      006540b9       ldr w0, [x8, 0x64]
+       │╎   0x102a0f528      52b2ad94       bl sym.imp.swift_task_alloc
+       │╎   0x102a0f52c      c00a00f9       str x0, [x22, 0x10]
+       │╎   0x102a0f530      c8eafef0       adrp x8, 0x10076a000
+       │╎   0x102a0f534      08c13491       add x8, x8, 0xd30
+       │╎   0x102a0f538      162000a9       stp x22, x8, [x0]
+       │╎   0x102a0f53c      f60300aa       mov x22, x0
+       │╎   0x102a0f540      e00313aa       mov x0, x19
+       │╎   0x102a0f544      e10314aa       mov x1, x20
+       │╎   0x102a0f548      fd7b41a9       ldp x29, x30, [sp, 0x10]
+       │╎   0x102a0f54c      f30742f8       ldr x19, [sp], 0x20
+       │╎   0x102a0f550      bdfb4392       and x29, x29, 0xefffffffffffffff
+       │└─< 0x102a0f554      f5f17917       b sym.func.10088bd28
+       │    ;-- func.102a0f558:
+       │    0x102a0f558      200440ad       ldp q0, q1, [x1]
+       │    0x102a0f55c      2208c03d       ldr q2, [x1, 0x20]
+       │    0x102a0f560      018800ad       stp q1, q2, [x0, 0x10]
+       │    0x102a0f564      0000803d       str q0, [x0]
+       │    0x102a0f568      c0035fd6       ret
+       │    ;-- func.102a0f56c:
+       │    0x102a0f56c      00eb01b0       adrp x0, 0x106770000
+       │    0x102a0f570      00e01691       add x0, x0, 0x5b8
+       │    0x102a0f574      010080d2       mov x1, 0
+       │    0x102a0f578      c0035fd6       ret
+       │    ;-- func.102a0f57c:
+       │    0x102a0f57c      00eb01b0       adrp x0, 0x106770000
+       │    0x102a0f580      00601991       add x0, x0, 0x658
+       │    0x102a0f584      010080d2       mov x1, 0
+       │    0x102a0f588      c0035fd6       ret
+       │    ;-- func.102a0f58c:
+       │    0x102a0f58c      01000014       b sym.func.102a0f590
+       │    ;-- func.102a0f590:
+       │    0x102a0f590      a81002f0       adrp x8, 0x106c26000
+       │    0x102a0f594      008542f9       ldr x0, [x8, 0x508]
+       │    0x102a0f598      400000b4       cbz x0, 0x102a0f5a0
+       ╎╎   ;-- func.102a0f49c:
+       ╎╎   0x102a0f49c      a81002f0       adrp x8, 0x106c26000
+       ╎╎   0x102a0f4a0      006d42f9       ldr x0, [x8, 0x4d8]
+      ┌───< 0x102a0f4a4      400000b4       cbz x0, 0x102a0f4ac
+      │╎╎   0x102a0f4a8      c0035fd6       ret
+      └───> 0x102a0f4ac      fd7bbfa9       stp x29, x30, [sp, -0x10]!
+       ╎╎   0x102a0f4b0      fd030091       mov x29, sp
+       ╎╎   0x102a0f4b4      606c01f0       adrp x0, 0x10579e000
+       ╎╎   0x102a0f4b8      00500691       add x0, x0, 0x194
+       ╎╎   0x102a0f4bc      01eb01b0       adrp x1, 0x106770000
+       ╎╎   0x102a0f4c0      21e01691       add x1, x1, 0x5b8
+       ╎╎   0x102a0f4c4      deb1ad94       bl sym.imp.swift_getWitnessTable
+       ╎╎   0x102a0f4c8      a81002f0       adrp x8, 0x106c26000
+       ╎╎   0x102a0f4cc      08611391       add x8, x8, 0x4d8
+       ╎╎   0x102a0f4d0      00fd9fc8       stlr x0, [x8]
+       ╎╎   0x102a0f4d4      fd7bc1a8       ldp x29, x30, [sp], 0x10
+       ╎╎   0x102a0f4d8      c0035fd6       ret
+       ╎╎   ;-- func.102a0f4dc:
+       ╎╎   0x102a0f4dc      80420091       add x0, x20, 0x10
+       └──< 0x102a0f4e0      33e4ff17       b sym.func.102a085ac
+        ╎   ;-- func.102a0f4e4:
+        ╎   0x102a0f4e4      fd7bbfa9       stp x29, x30, [sp, -0x10]!
+        ╎   0x102a0f4e8      fd030091       mov x29, sp
+        ╎   0x102a0f4ec      800e40f9       ldr x0, [x20, 0x18]
+        ╎   0x102a0f4f0      2ab2ad94       bl sym.imp.swift_release
+        ╎   0x102a0f4f4      e00314aa       mov x0, x20
+        ╎   0x102a0f4f8      01048052       mov w1, 0x20
+        ╎   0x102a0f4fc      e2008052       mov w2, 7
+        ╎   0x102a0f500      fd7bc1a8       ldp x29, x30, [sp], 0x10
+       ┌──< 0x102a0f504      26b1ad14       b sym.imp.swift_deallocObject
+       │╎   ;-- func.102a0f508:
+       │╎   0x102a0f508      bd0344b2       orr x29, x29, 0x1000000000000000
+       │╎   0x102a0f50c      f30f1ef8       str x19, [sp, -0x20]!
+       │╎   0x102a0f510      fd7b01a9       stp x29, x30, [sp, 0x10]
+       │╎   0x102a0f514      f60700f9       str x22, [sp, 8]
+       │╎   0x102a0f518      fd430091       add x29, sp, 0x10
+       │╎   0x102a0f51c      935241a9       ldp x19, x20, [x20, 0x10]
+       │╎   0x102a0f520      686c01f0       adrp x8, 0x10579e000
+       │╎   0x102a0f524      006540b9       ldr w0, [x8, 0x64]
+       │╎   0x102a0f528      52b2ad94       bl sym.imp.swift_task_alloc
+       │╎   0x102a0f52c      c00a00f9       str x0, [x22, 0x10]
+       │╎   0x102a0f530      c8eafef0       adrp x8, 0x10076a000
+       │╎   0x102a0f534      08c13491       add x8, x8, 0xd30
+       │╎   0x102a0f538      162000a9       stp x22, x8, [x0]
+       │╎   0x102a0f53c      f60300aa       mov x22, x0
+       │╎   0x102a0f540      e00313aa       mov x0, x19
+       │╎   0x102a0f544      e10314aa       mov x1, x20
+       │╎   0x102a0f548      fd7b41a9       ldp x29, x30, [sp, 0x10]
+       │╎   0x102a0f54c      f30742f8       ldr x19, [sp], 0x20
+       │╎   0x102a0f550      bdfb4392       and x29, x29, 0xefffffffffffffff
+       │└─< 0x102a0f554      f5f17917       b sym.func.10088bd28
+       │    ;-- func.102a0f558:
+       │    0x102a0f558      200440ad       ldp q0, q1, [x1]
+       │    0x102a0f55c      2208c03d       ldr q2, [x1, 0x20]
+       │    0x102a0f560      018800ad       stp q1, q2, [x0, 0x10]
+       │    0x102a0f564      0000803d       str q0, [x0]
+       │    0x102a0f568      c0035fd6       ret
+       │    ;-- func.102a0f56c:
+       │    0x102a0f56c      00eb01b0       adrp x0, 0x106770000
+       │    0x102a0f570      00e01691       add x0, x0, 0x5b8
+       │    0x102a0f574      010080d2       mov x1, 0
+       │    0x102a0f578      c0035fd6       ret
+       │    ;-- func.102a0f57c:
+       │    0x102a0f57c      00eb01b0       adrp x0, 0x106770000
+       │    0x102a0f580      00601991       add x0, x0, 0x658
+       │    0x102a0f584      010080d2       mov x1, 0
+       │    0x102a0f588      c0035fd6       ret
+       │    ;-- func.102a0f58c:
+       │┌─< 0x102a0f58c      01000014       b sym.func.102a0f590
+       ││   ;-- func.102a0f590:
+       │└─> 0x102a0f590      a81002f0       adrp x8, 0x106c26000
+       │    0x102a0f594      008542f9       ldr x0, [x8, 0x508]
+       │┌─< 0x102a0f598      400000b4       cbz x0, 0x102a0f5a0
+       ││   0x102a0f59c      c0035fd6       ret
+       │└─> 0x102a0f5a0      fd7bbfa9       stp x29, x30, [sp, -0x10]!
+       │    0x102a0f5a4      fd030091       mov x29, sp
+       │    0x102a0f5a8      606c01f0       adrp x0, 0x10579e000
+       │    0x102a0f5ac      00100591       add x0, x0, 0x144
+       │    0x102a0f5b0      01eb01b0       adrp x1, 0x106770000
+       │    0x102a0f5b4      21601991       add x1, x1, 0x658
+       │    0x102a0f5b8      a1b1ad94       bl sym.imp.swift_getWitnessTable
+       │    0x102a0f5bc      a81002f0       adrp x8, 0x106c26000
+       │    0x102a0f5c0      08211491       add x8, x8, 0x508
+       │    0x102a0f5c4      00fd9fc8       stlr x0, [x8]
+       │    0x102a0f5c8      fd7bc1a8       ldp x29, x30, [sp], 0x10
+       │    0x102a0f5cc      c0035fd6       ret
+       │    ;-- func.102a0f5d0:
+       │    0x102a0f5d0      01000014       b sym.func.102a0f5d4
+       │    ;-- func.102a0f5d4:
+       │    0x102a0f5d4      a81002f0       adrp x8, 0x106c26000
+       │    0x102a0f5d8      008942f9       ldr x0, [x8, 0x510]

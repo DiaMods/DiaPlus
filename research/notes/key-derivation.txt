@@ -1,0 +1,453 @@
+            ;-- func.102a0744c:
+            0x102a0744c      fc0f1af8       str x28, [sp, -0x60]!
+            0x102a07450      fb6b01a9       stp x27, x26, [sp, 0x10]
+            0x102a07454      f96302a9       stp x25, x24, [sp, 0x20]
+            0x102a07458      f75b03a9       stp x23, x22, [sp, 0x30]
+            0x102a0745c      f44f04a9       stp x20, x19, [sp, 0x40]
+            0x102a07460      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a07464      fd430191       add x29, sp, 0x50
+            0x102a07468      ff8301d1       sub sp, sp, 0x60
+            0x102a0746c      f60315aa       mov x22, x21
+            0x102a07470      f40302aa       mov x20, x2
+            0x102a07474      f90301aa       mov x25, x1
+            0x102a07478      a08319f8       stur x0, [x29, -0x68]
+            0x102a0747c      a88317f8       stur x8, [x29, -0x88]
+            0x102a07480      000080d2       mov x0, 0
+            0x102a07484      7cb3ad94       bl sym.imp.CryptoKit.SHA256Digest...VMa
+            0x102a07488      08805ff8       ldur x8, [x0, -8]
+            0x102a0748c      a88338a9       stp x8, x0, [x29, -0x78]
+            0x102a07490      082140f9       ldr x8, [x8, 0x40]
+            0x102a07494      e90308aa       mov x9, x8
+            0x102a07498      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a0749c      104244f9       ldr x16, [x16, 0x880]
+            0x102a074a0      00023fd6       blr x16
+            0x102a074a4      e9030091       mov x9, sp
+            0x102a074a8      0a3d0091       add x10, x8, 0xf
+            0x102a074ac      4ced7c92       and x12, x10, 0xfffffffffffffff0
+            0x102a074b0      29010ccb       sub x9, x9, x12
+            0x102a074b4      a90318f8       stur x9, [x29, -0x80]
+            0x102a074b8      3f010091       mov sp, x9
+            0x102a074bc      e90308aa       mov x9, x8
+            0x102a074c0      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a074c4      104244f9       ldr x16, [x16, 0x880]
+            0x102a074c8      00023fd6       blr x16
+            0x102a074cc      e8030091       mov x8, sp
+            0x102a074d0      17010ccb       sub x23, x8, x12
+            0x102a074d4      ff020091       mov sp, x23
+            0x102a074d8      000080d2       mov x0, 0
+            0x102a074dc      6cb3ad94       bl sym.imp.CryptoKit.SharedSecret...VMa
+            0x102a074e0      fb0300aa       mov x27, x0
+            0x102a074e4      18805ff8       ldur x24, [x0, -8]
+            0x102a074e8      082340f9       ldr x8, [x24, 0x40]
+            0x102a074ec      e90308aa       mov x9, x8
+            0x102a074f0      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a074f4      104244f9       ldr x16, [x16, 0x880]
+            0x102a074f8      00023fd6       blr x16
+            0x102a074fc      e9030091       mov x9, sp
+            0x102a07500      083d0091       add x8, x8, 0xf
+            0x102a07504      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a07508      280108cb       sub x8, x9, x8
+            0x102a0750c      a8831bf8       stur x8, [x29, -0x48]
+            0x102a07510      1f010091       mov sp, x8
+            0x102a07514      000080d2       mov x0, 0
+            0x102a07518      9cb3ad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Public...D0VMa
+            0x102a0751c      fc0300aa       mov x28, x0
+            0x102a07520      13805ff8       ldur x19, [x0, -8]
+            0x102a07524      682240f9       ldr x8, [x19, 0x40]
+            0x102a07528      e90308aa       mov x9, x8
+            0x102a0752c      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a07530      104244f9       ldr x16, [x16, 0x880]
+            0x102a07534      00023fd6       blr x16
+            0x102a07538      e9030091       mov x9, sp
+            0x102a0753c      083d0091       add x8, x8, 0xf
+            0x102a07540      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a07544      3a0108cb       sub x26, x9, x8
+            0x102a07548      5f030091       mov sp, x26
+            0x102a0754c      b9533aa9       stp x25, x20, [x29, -0x60]
+            0x102a07550      e00319aa       mov x0, x25
+            0x102a07554      e10314aa       mov x1, x20
+            0x102a07558      7ca05897       bl sym.func.10002f748
+            0x102a0755c      21de01f0       adrp x1, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a07560      212442f9       ldr x1, [x1, 0x448]
+            0x102a07564      22de01f0       adrp x2, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a07568      421c42f9       ldr x2, [x2, 0x438]
+            0x102a0756c      a08301d1       sub x0, x29, 0x60
+            0x102a07570      e8031aaa       mov x8, x26
+            0x102a07574      f50316aa       mov x21, x22
+            0x102a07578      81b3ad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Public_...Kc10Foundation15ContiguousBytesRzlufC_ ; CryptoKit.P256.KeyAgreement.Public(...Kc10Foundation15ContiguousBytesRzlufC)
+            0x102a0757c      f60315aa       mov x22, x21
+        ┌─< 0x102a07580      550600b5       cbnz x21, 0x102a07648
+        │   0x102a07584      b3f336a9       stp x19, x28, [x29, -0x98]
+        │   0x102a07588      b8ef35a9       stp x24, x27, [x29, -0xa8]
+        │   0x102a0758c      bb4f78a9       ldp x27, x19, [x29, -0x80]
+        │   0x102a07590      b85379a9       ldp x24, x20, [x29, -0x70]
+        │   0x102a07594      bc835bf8       ldur x28, [x29, -0x48]
+        │   0x102a07598      e8031caa       mov x8, x28
+        │   0x102a0759c      e0031aaa       mov x0, x26
+        │   0x102a075a0      f50316aa       mov x21, x22
+        │   0x102a075a4      7cb3ad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Private_...KF_ ; CryptoKit.P256.KeyAgreement.Private(...KF)
+        │   0x102a075a8      f60315aa       mov x22, x21
+       ┌──< 0x102a075ac      750400b5       cbnz x21, 0x102a07638
+       ││   0x102a075b0      000000b0       adrp x0, sym.func.102a08000 ; 0x102a08000
+       ││   0x102a075b4      00500a91       add x0, x0, 0x294
+       ││   0x102a075b8      e80317aa       mov x8, x23
+       ││   0x102a075bc      010080d2       mov x1, 0
+       ││   0x102a075c0      e20318aa       mov x2, x24
+       ││   0x102a075c4      f4031caa       mov x20, x28
+       ││   0x102a075c8      f50316aa       mov x21, x22
+       ││   0x102a075cc      2db3ad94       bl sym.imp.CryptoKit.SharedSecret.withUnsafeBytes_...xSWKXEKlF_ ; CryptoKit.SharedSecret.withUnsafeBytes(...xSWKXEKlF)
+       ││   0x102a075d0      f60315aa       mov x22, x21
+       ││   0x102a075d4      680a40f9       ldr x8, [x19, 0x10]
+       ││   0x102a075d8      e0031baa       mov x0, x27
+       ││   0x102a075dc      e10317aa       mov x1, x23
+       ││   0x102a075e0      e20318aa       mov x2, x24
+       ││   0x102a075e4      00013fd6       blr x8
+       ││   0x102a075e8      e01002f0       adrp x0, 0x106c26000
+       ││   0x102a075ec      00801291       add x0, x0, 0x4a0
+       ││   0x102a075f0      61de0190       adrp x1, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+       ││   0x102a075f4      215c40f9       ldr x1, [x1, 0xb8]
+       ││   0x102a075f8      62de0190       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+       ││   0x102a075fc      425040f9       ldr x2, [x2, 0xa0]
+       ││   0x102a07600      9b945897       bl sym.func.10002c86c
+       ││   0x102a07604      e20300aa       mov x2, x0
+       ││   0x102a07608      a88357f8       ldur x8, [x29, -0x88]
+       ││   0x102a0760c      e0031baa       mov x0, x27
+       ││   0x102a07610      e10318aa       mov x1, x24
+       ││   0x102a07614      24b3ad94       bl sym.imp.CryptoKit.SymmetricKey.data.Foundation.ContiguousBytes_...lufC_ ; CryptoKit.SymmetricKey.data.Foundation.ContiguousBytes(...lufC)
+       ││   0x102a07618      680640f9       ldr x8, [x19, 8]
+       ││   0x102a0761c      e00317aa       mov x0, x23
+       ││   0x102a07620      e10318aa       mov x1, x24
+       ││   0x102a07624      00013fd6       blr x8
+       ││   0x102a07628      a88775a9       ldp x8, x1, [x29, -0xa8]
+       ││   0x102a0762c      080540f9       ldr x8, [x8, 8]
+       ││   0x102a07630      e0031caa       mov x0, x28
+       ││   0x102a07634      00013fd6       blr x8
+       └──> 0x102a07638      a88776a9       ldp x8, x1, [x29, -0x98]
+        │   0x102a0763c      080540f9       ldr x8, [x8, 8]
+        │   0x102a07640      e0031aaa       mov x0, x26
+        │   0x102a07644      00013fd6       blr x8
+        └─> 0x102a07648      f50316aa       mov x21, x22
+            0x102a0764c      bf4301d1       sub sp, x29, 0x50
+            0x102a07650      fd7b45a9       ldp x29, x30, [sp, 0x50]
+            0x102a07654      f44f44a9       ldp x20, x19, [sp, 0x40]
+            0x102a07658      f75b43a9       ldp x23, x22, [sp, 0x30]
+            0x102a0765c      f96342a9       ldp x25, x24, [sp, 0x20]
+            0x102a07660      fb6b41a9       ldp x27, x26, [sp, 0x10]
+            0x102a07664      fc0746f8       ldr x28, [sp], 0x60
+            0x102a07668      c0035fd6       ret
+            ;-- func.102a0766c:
+            0x102a0766c      fc0f1af8       str x28, [sp, -0x60]!
+            0x102a07670      fb6b01a9       stp x27, x26, [sp, 0x10]
+            0x102a07674      f96302a9       stp x25, x24, [sp, 0x20]
+            0x102a07678      f75b03a9       stp x23, x22, [sp, 0x30]
+            0x102a0767c      f44f04a9       stp x20, x19, [sp, 0x40]
+            0x102a07680      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a07684      fd430191       add x29, sp, 0x50
+            0x102a07688      ffc304d1       sub sp, sp, 0x130
+            0x102a0768c      f90315aa       mov x25, x21
+            0x102a07690      fb0314aa       mov x27, x20
+            0x102a07694      a2831bf8       stur x2, [x29, -0x48]
+            0x102a07698      f30301aa       mov x19, x1
+            0x102a0769c      f60300aa       mov x22, x0
+            0x102a076a0      e01002f0       adrp x0, 0x106c26000
+            0x102a076a4      00c00691       add x0, x0, 0x1b0
+            0x102a076a8      a16c01d0       adrp x1, 0x10579d000
+            0x102a076ac      21c02b91       add x1, x1, 0xaf0
+            0x102a076b0      aaf25797       bl sym.func.100004158
+            0x102a076b4      08805ff8       ldur x8, [x0, -8]
+            0x102a076b8      092140f9       ldr x9, [x8, 0x40]
+            0x102a076bc      283d0091       add x8, x9, 0xf
+            0x102a076c0      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a076c4      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a076c8      104244f9       ldr x16, [x16, 0x880]
+            0x102a076cc      00023fd6       blr x16
+            0x102a076d0      e9030091       mov x9, sp
+            0x102a076d4      3c0108cb       sub x28, x9, x8
+            0x102a076d8      9f030091       mov sp, x28
+            0x102a076dc      000080d2       mov x0, 0
+            0x102a076e0      13120094       bl sym.func.102a0bf2c
+            0x102a076e4      f80300aa       mov x24, x0
+            0x102a076e8      1a805ff8       ldur x26, [x0, -8]
+            0x102a076ec      482340f9       ldr x8, [x26, 0x40]
+            0x102a076f0      e90308aa       mov x9, x8
+            0x102a076f4      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a076f8      104244f9       ldr x16, [x16, 0x880]
+            0x102a076fc      00023fd6       blr x16
+            0x102a07700      e9030091       mov x9, sp
+            0x102a07704      083d0091       add x8, x8, 0xf
+            0x102a07708      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a0770c      370108cb       sub x23, x9, x8
+            0x102a07710      ff020091       mov sp, x23
+            0x102a07714      95d25aa9       ldp x21, x20, [x20, 0x1a8]
+            0x102a07718      e00314aa       mov x0, x20
+            0x102a0771c      a5d1ad94       bl sym.imp.swift_retain
+            0x102a07720      a1e101d0       adrp x1, 0x10663d000
+            0x102a07724      21e02d91       add x1, x1, 0xb78
+            0x102a07728      a80305d1       sub x8, x29, 0x140
+            0x102a0772c      e0031baa       mov x0, x27
+            0x102a07730      a0023fd6       blr x21
+            0x102a07734      e00314aa       mov x0, x20
+            0x102a07738      98d1ad94       bl sym.imp.swift_release
+            0x102a0773c      a80301d1       sub x8, x29, 0x40
+            0x102a07740      080150f8       ldur x8, [x8, -0x100]
+        ┌─< 0x102a07744      a81c00b4       cbz x8, 0x102a07ad8
+        │   0x102a07748      a9e301d1       sub x9, x29, 0x78
+        │   0x102a0774c      3a0110f8       stur x26, [x9, -0x100]
+        │   0x102a07750      a9c301d1       sub x9, x29, 0x70
+        │   0x102a07754      3c0110f8       stur x28, [x9, -0x100]
+        │   0x102a07758      a9e300d1       sub x9, x29, 0x38
+        │   0x102a0775c      2c0150f8       ldur x12, [x9, -0x100]
+        │   0x102a07760      a9c300d1       sub x9, x29, 0x30
+        │   0x102a07764      290150f8       ldur x9, [x9, -0x100]
+        │   0x102a07768      aaa300d1       sub x10, x29, 0x28
+        │   0x102a0776c      4d0150f8       ldur x13, [x10, -0x100]
+        │   0x102a07770      aa8300d1       sub x10, x29, 0x20
+        │   0x102a07774      4a0150f8       ldur x10, [x10, -0x100]
+        │   0x102a07778      ab6300d1       sub x11, x29, 0x18
+        │   0x102a0777c      6e0150f8       ldur x14, [x11, -0x100]
+        │   0x102a07780      ab4300d1       sub x11, x29, 0x10
+        │   0x102a07784      6b0150f8       ldur x11, [x11, -0x100]
+        │   0x102a07788      af2300d1       sub x15, x29, 8
+        │   0x102a0778c      ef0150f8       ldur x15, [x15, -0x100]
+        │   0x102a07790      a83331a9       stp x8, x12, [x29, -0xf0]
+        │   0x102a07794      a82301d1       sub x8, x29, 0x48
+        │   0x102a07798      0c0110f8       stur x12, [x8, -0x100]
+        │   0x102a0779c      a93732a9       stp x9, x13, [x29, -0xe0]
+        │   0x102a077a0      a84301d1       sub x8, x29, 0x50
+        │   0x102a077a4      0d0110f8       stur x13, [x8, -0x100]
+        │   0x102a077a8      aa3b33a9       stp x10, x14, [x29, -0xd0]
+        │   0x102a077ac      a86301d1       sub x8, x29, 0x58
+        │   0x102a077b0      0e0110f8       stur x14, [x8, -0x100]
+        │   0x102a077b4      ab3f34a9       stp x11, x15, [x29, -0xc0]
+        │   0x102a077b8      a88301d1       sub x8, x29, 0x60
+        │   0x102a077bc      0f0110f8       stur x15, [x8, -0x100]
+        │   0x102a077c0      e029ffd0       adrp x0, 0x100f45000
+        │   0x102a077c4      00003c91       add x0, x0, 0xf00
+        │   0x102a077c8      22de01f0       adrp x2, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+        │   0x102a077cc      422442f9       ldr x2, [x2, 0x448]
+        │   0x102a077d0      a80305d1       sub x8, x29, 0x140
+        │   0x102a077d4      010080d2       mov x1, 0
+        │   0x102a077d8      f40316aa       mov x20, x22
+        │   0x102a077dc      f50319aa       mov x21, x25
+        │   0x102a077e0      aeb2ad94       bl sym.imp.CryptoKit.SymmetricKey.withUnsafeBytes_...xSWKXEKlF_ ; CryptoKit.SymmetricKey.withUnsafeBytes(...xSWKXEKlF)
+        │   0x102a077e4      a8a301d1       sub x8, x29, 0x68
+        │   0x102a077e8      150110f8       stur x21, [x8, -0x100]
+        │   0x102a077ec      a80301d1       sub x8, x29, 0x40
+        │   0x102a077f0      1a0150f8       ldur x26, [x8, -0x100]
+        │   0x102a077f4      a8e300d1       sub x8, x29, 0x38
+        │   0x102a077f8      1c0150f8       ldur x28, [x8, -0x100]
+        │   0x102a077fc      68630591       add x8, x27, 0x158
+        │   0x102a07800      000541ad       ldp q0, q1, [x8, 0x20]
+        │   0x102a07804      a0873bad       stp q0, q1, [x29, -0x90]
+        │   0x102a07808      0011c03d       ldr q0, [x8, 0x40]
+        │   0x102a0780c      a003993c       stur q0, [x29, -0x70]
+        │   0x102a07810      010140ad       ldp q1, q0, [x8]
+        │   0x102a07814      a1833aad       stp q1, q0, [x29, -0xb0]
+        │   0x102a07818      e0031aaa       mov x0, x26
+        │   0x102a0781c      e1031caa       mov x1, x28
+        │   0x102a07820      ca9f5897       bl sym.func.10002f748
+        │   0x102a07824      f91002f0       adrp x25, 0x106c26000
+        │   0x102a07828      39431091       add x25, x25, 0x410
+        │   0x102a0782c      b66c01d0       adrp x22, 0x10579d000
+        │   0x102a07830      d6c23d91       add x22, x22, 0xf70
+        │   0x102a07834      a0c302d1       sub x0, x29, 0xb0
+        │   0x102a07838      a10305d1       sub x1, x29, 0x140
+        │   0x102a0783c      e20319aa       mov x2, x25
+        │   0x102a07840      e30316aa       mov x3, x22
+        │   0x102a07844      d7f85797       bl sym.func.100005ba0
+        │   0x102a07848      e00319aa       mov x0, x25
+        │   0x102a0784c      e10316aa       mov x1, x22
+        │   0x102a07850      42f25797       bl sym.func.100004158
+        │   0x102a07854      a80305d1       sub x8, x29, 0x140
+        │   0x102a07858      b4c302d1       sub x20, x29, 0xb0
+        │   0x102a0785c      9dcb6197       bl sym.func.10027a6d0
+        │   0x102a07860      a0c302d1       sub x0, x29, 0xb0
+        │   0x102a07864      e10319aa       mov x1, x25
+        │   0x102a07868      e20316aa       mov x2, x22
+        │   0x102a0786c      f6031aaa       mov x22, x26
+        │   0x102a07870      b3f85797       bl sym.func.100005b3c
+        │   0x102a07874      a80301d1       sub x8, x29, 0x40
+        │   0x102a07878      090150f8       ldur x9, [x8, -0x100]
+        │   0x102a0787c      a8e300d1       sub x8, x29, 0x38
+        │   0x102a07880      140150f8       ldur x20, [x8, -0x100]
+        │   0x102a07884      081b80b9       ldrsw x8, [x24, 0x18]
+        │   0x102a07888      e802088b       add x8, x23, x8
+        │   0x102a0788c      20013fd6       blr x9
+        │   0x102a07890      e00314aa       mov x0, x20
+        │   0x102a07894      41d1ad94       bl sym.imp.swift_release
+        │   0x102a07898      fa7200a9       stp x26, x28, [x23]
+        │   0x102a0789c      b9835bf8       ldur x25, [x29, -0x48]
+        │   0x102a078a0      f36601a9       stp x19, x25, [x23, 0x10]
+        │   0x102a078a4      000080d2       mov x0, 0
+        │   0x102a078a8      519bad94       bl sym.imp.Foundation.JSONEncoder.allocator_...a_ ; Foundation.JSONEncoder.allocator(...a)
+        │   0x102a078ac      013040b9       ldr w1, [x0, 0x30]
+        │   0x102a078b0      02684079       ldrh w2, [x0, 0x34]
+        │   0x102a078b4      e9cfad94       bl sym.imp.swift_allocObject
+        │   0x102a078b8      f40300aa       mov x20, x0
+        │   0x102a078bc      e00313aa       mov x0, x19
+        │   0x102a078c0      e10319aa       mov x1, x25
+        │   0x102a078c4      a19f5897       bl sym.func.10002f748
+        │   0x102a078c8      469bad94       bl sym.imp.Foundation.JSONEncoder.allocator._...cfc_ ; Foundation.JSONEncoder.allocator.(...cfc)
+        │   0x102a078cc      f30300aa       mov x19, x0
+        │   0x102a078d0      e01002f0       adrp x0, 0x106c26000
+        │   0x102a078d4      00601291       add x0, x0, 0x498
+        │   0x102a078d8      21000090       adrp x1, 0x102a0b000
+        │   0x102a078dc      21b03c91       add x1, x1, 0xf2c
+        │   0x102a078e0      a26c01d0       adrp x2, 0x10579d000
+        │   0x102a078e4      42c03b91       add x2, x2, 0xef0
+        │   0x102a078e8      e1935897       bl sym.func.10002c86c
+        │   0x102a078ec      e20300aa       mov x2, x0
+        │   0x102a078f0      e00317aa       mov x0, x23
+        │   0x102a078f4      e10318aa       mov x1, x24
+        │   0x102a078f8      f40313aa       mov x20, x19
+        │   0x102a078fc      a8a301d1       sub x8, x29, 0x68
+        │   0x102a07900      150150f8       ldur x21, [x8, -0x100]
+        │   0x102a07904      2e9bad94       bl sym.imp.Foundation.JSONEncoder.encode.allocator_...AA4DataVxKSERzlFTj_ ; Foundation.JSONEncoder.encode.allocator(...AA4DataVxKSERzlFTj)
+        │   0x102a07908      f90315aa       mov x25, x21
+       ┌──< 0x102a0790c      f50200b4       cbz x21, 0x102a07968
+       ││   0x102a07910      21000090       adrp x1, 0x102a0b000
+       ││   0x102a07914      21b03c91       add x1, x1, 0xf2c
+       ││   0x102a07918      e00317aa       mov x0, x23
+       ││   0x102a0791c      7b0f5997       bl sym.func.10004b708
+       ││   0x102a07920      e00316aa       mov x0, x22
+       ││   0x102a07924      e1031caa       mov x1, x28
+       ││   0x102a07928      b9975897       bl sym.func.10002d80c
+       ││   0x102a0792c      a88301d1       sub x8, x29, 0x60
+       ││   0x102a07930      000150f8       ldur x0, [x8, -0x100]
+       ││   0x102a07934      19d1ad94       bl sym.imp.swift_release
+       ││   0x102a07938      a86301d1       sub x8, x29, 0x58
+       ││   0x102a0793c      000150f8       ldur x0, [x8, -0x100]
+       ││   0x102a07940      16d1ad94       bl sym.imp.swift_release
+       ││   0x102a07944      a84301d1       sub x8, x29, 0x50
+       ││   0x102a07948      000150f8       ldur x0, [x8, -0x100]
+       ││   0x102a0794c      13d1ad94       bl sym.imp.swift_release
+       ││   0x102a07950      a82301d1       sub x8, x29, 0x48
+       ││   0x102a07954      000150f8       ldur x0, [x8, -0x100]
+       ││   0x102a07958      10d1ad94       bl sym.imp.swift_release
+       ││   0x102a0795c      e00313aa       mov x0, x19
+       ││   0x102a07960      0ed1ad94       bl sym.imp.swift_release
+      ┌───< 0x102a07964      5d000014       b 0x102a07ad8
+      │└──> 0x102a07968      22000090       adrp x2, 0x102a0b000
+      │ │   0x102a0796c      42b03c91       add x2, x2, 0xf2c
+      │ │   0x102a07970      a8a301d1       sub x8, x29, 0x68
+      │ │   0x102a07974      000110f8       stur x0, [x8, -0x100]
+      │ │   0x102a07978      e00317aa       mov x0, x23
+      │ │   0x102a0797c      fa0301aa       mov x26, x1
+      │ │   0x102a07980      bc831bf8       stur x28, [x29, -0x48]
+      │ │   0x102a07984      a8c301d1       sub x8, x29, 0x70
+      │ │   0x102a07988      1c0150f8       ldur x28, [x8, -0x100]
+      │ │   0x102a0798c      e1031caa       mov x1, x28
+      │ │   0x102a07990      43115997       bl sym.func.10004be9c
+      │ │   0x102a07994      a8e301d1       sub x8, x29, 0x78
+      │ │   0x102a07998      080150f8       ldur x8, [x8, -0x100]
+      │ │   0x102a0799c      081d40f9       ldr x8, [x8, 0x38]
+      │ │   0x102a079a0      e0031caa       mov x0, x28
+      │ │   0x102a079a4      01008052       mov w1, 0
+      │ │   0x102a079a8      22008052       mov w2, 1
+      │ │   0x102a079ac      e30318aa       mov x3, x24
+      │ │   0x102a079b0      00013fd6       blr x8
+      │ │   0x102a079b4      e81002f0       adrp x8, 0x106c26000
+      │ │   0x102a079b8      14dd40f9       ldr x20, [x8, 0x1b8]
+      │ │   0x102a079bc      6003148b       add x0, x27, x20
+      │ │   0x102a079c0      a10305d1       sub x1, x29, 0x140
+      │ │   0x102a079c4      22048052       mov w2, 0x21               ; '!'
+      │ │   0x102a079c8      030080d2       mov x3, 0
+      │ │   0x102a079cc      c4cfad94       bl sym.imp.swift_beginAccess
+      │ │   0x102a079d0      6103148b       add x1, x27, x20
+      │ │   0x102a079d4      e0031caa       mov x0, x28
+      │ │   0x102a079d8      5a110094       bl sym.func.102a0bf40
+      │ │   0x102a079dc      a00305d1       sub x0, x29, 0x140
+      │ │   0x102a079e0      1fd0ad94       bl sym.imp.swift_endAccess
+      │ │   0x102a079e4      a8a301d1       sub x8, x29, 0x68
+      │ │   0x102a079e8      1c0150f8       ldur x28, [x8, -0x100]
+      │ │   0x102a079ec      a80301d1       sub x8, x29, 0x40
+      │ │   0x102a079f0      1c0110f8       stur x28, [x8, -0x100]
+      │ │   0x102a079f4      a8e300d1       sub x8, x29, 0x38
+      │ │   0x102a079f8      1a0110f8       stur x26, [x8, -0x100]
+      │ │   0x102a079fc      c88801b0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+      │ │   0x102a07a00      08010f91       add x8, x8, 0x3c0
+      │ │   0x102a07a04      148100d1       sub x20, x8, 0x20
+      │ │   0x102a07a08      e01002f0       adrp x0, 0x106c26000
+      │ │   0x102a07a0c      00600591       add x0, x0, 0x158
+      │ │   0x102a07a10      a16c01d0       adrp x1, 0x10579d000
+      │ │   0x102a07a14      21c02291       add x1, x1, 0x8b0
+      │ │   0x102a07a18      d0f15797       bl sym.func.100004158
+      │ │   0x102a07a1c      f80316aa       mov x24, x22
+      │ │   0x102a07a20      f60300aa       mov x22, x0
+      │ │   0x102a07a24      5b110094       bl sym.func.102a0bf90
+      │ │   0x102a07a28      e70300aa       mov x7, x0
+      │ │   0x102a07a2c      26de01f0       adrp x6, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+      │ │   0x102a07a30      c62442f9       ldr x6, [x6, 0x448]
+      │ │   0x102a07a34      a3cc8dd2       mov x3, 0x6e65             ; 'en'
+      │ │   0x102a07a38      634caef2       movk x3, 0x7263, lsl 16    ; 'cr'
+      │ │   0x102a07a3c      230fcef2       movk x3, 0x7079, lsl 32    ; 'yp'
+      │ │   0x102a07a40      832eedf2       movk x3, 0x6974, lsl 48    ; 'ti'
+      │ │   0x102a07a44      e4cd8dd2       mov x4, 0x6e6f             ; 'on'
+      │ │   0x102a07a48      64a9acf2       movk x4, 0x654b, lsl 16    ; 'Ke'
+      │ │   0x102a07a4c      240fc0f2       movk x4, 0x79, lsl 32      ; 'y'
+      │ │   0x102a07a50      04a0fdf2       movk x4, 0xed00, lsl 48
+      │ │   0x102a07a54      a00305d1       sub x0, x29, 0x140
+      │ │   0x102a07a58      820241b2       orr x2, x20, 0x8000000000000000
+      │ │   0x102a07a5c      b4c303d1       sub x20, x29, 0xf0
+      │ │   0x102a07a60      610280d2       mov x1, 0x13
+      │ │   0x102a07a64      0100faf2       movk x1, 0xd000, lsl 48
+      │ │   0x102a07a68      e50316aa       mov x5, x22
+      │ │   0x102a07a6c      f50319aa       mov x21, x25
+      │ │   0x102a07a70      fb029597       bl sym.func.100f4865c
+      │ │   0x102a07a74      f90315aa       mov x25, x21
+      │ │   0x102a07a78      e00317aa       mov x0, x23
+      │ │   0x102a07a7c      21000090       adrp x1, 0x102a0b000
+      │ │   0x102a07a80      21b03c91       add x1, x1, 0xf2c
+      │ │   0x102a07a84      210f5997       bl sym.func.10004b708
+      │ │   0x102a07a88      e00318aa       mov x0, x24
+      │ │   0x102a07a8c      a1835bf8       ldur x1, [x29, -0x48]
+      │ │   0x102a07a90      5f975897       bl sym.func.10002d80c
+      │ │   0x102a07a94      a88301d1       sub x8, x29, 0x60
+      │ │   0x102a07a98      000150f8       ldur x0, [x8, -0x100]
+      │ │   0x102a07a9c      bfd0ad94       bl sym.imp.swift_release
+      │ │   0x102a07aa0      a86301d1       sub x8, x29, 0x58
+      │ │   0x102a07aa4      000150f8       ldur x0, [x8, -0x100]
+      │ │   0x102a07aa8      bcd0ad94       bl sym.imp.swift_release
+      │ │   0x102a07aac      a84301d1       sub x8, x29, 0x50
+      │ │   0x102a07ab0      000150f8       ldur x0, [x8, -0x100]
+      │ │   0x102a07ab4      b9d0ad94       bl sym.imp.swift_release
+      │ │   0x102a07ab8      a82301d1       sub x8, x29, 0x48
+      │ │   0x102a07abc      000150f8       ldur x0, [x8, -0x100]
+      │ │   0x102a07ac0      b6d0ad94       bl sym.imp.swift_release
+      │ │   0x102a07ac4      e00313aa       mov x0, x19
+      │ │   0x102a07ac8      b4d0ad94       bl sym.imp.swift_release
+      │ │   0x102a07acc      e0031caa       mov x0, x28
+      │ │   0x102a07ad0      e1031aaa       mov x1, x26
+      │ │   0x102a07ad4      4e975897       bl sym.func.10002d80c
+      └─└─> 0x102a07ad8      f50319aa       mov x21, x25
+            0x102a07adc      bf4301d1       sub sp, x29, 0x50
+            0x102a07ae0      fd7b45a9       ldp x29, x30, [sp, 0x50]
+            0x102a07ae4      f44f44a9       ldp x20, x19, [sp, 0x40]
+            0x102a07ae8      f75b43a9       ldp x23, x22, [sp, 0x30]
+            0x102a07aec      f96342a9       ldp x25, x24, [sp, 0x20]
+            0x102a07af0      fb6b41a9       ldp x27, x26, [sp, 0x10]
+            0x102a07af4      fc0746f8       ldr x28, [sp], 0x60
+            0x102a07af8      c0035fd6       ret
+            ;-- func.102a07afc:
+            0x102a07afc      fc6fbaa9       stp x28, x27, [sp, -0x60]!
+            0x102a07b00      fa6701a9       stp x26, x25, [sp, 0x10]
+            0x102a07b04      f85f02a9       stp x24, x23, [sp, 0x20]
+            0x102a07b08      f65703a9       stp x22, x21, [sp, 0x30]
+            0x102a07b0c      f44f04a9       stp x20, x19, [sp, 0x40]
+            0x102a07b10      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a07b14      fd430191       add x29, sp, 0x50
+            0x102a07b18      ff0303d1       sub sp, sp, 0xc0
+            0x102a07b1c      f30301aa       mov x19, x1
+            0x102a07b20      f40300aa       mov x20, x0
+            0x102a07b24      48de01b0       adrp x8, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a07b28      087144f9       ldr x8, [x8, 0x8e0]
+            0x102a07b2c      080140f9       ldr x8, [x8]
+            0x102a07b30      a8031af8       stur x8, [x29, -0x60]
+            0x102a07b34      a00732a9       stp x0, x1, [x29, -0xe0]
+            0x102a07b38      a00736a9       stp x0, x1, [x29, -0xa0]
+            0x102a07b3c      e00301aa       mov x0, x1
+            0x102a07b40      70cfad94       bl sym.imp.swift_bridgeObjectRetain
+            0x102a07b44      e01002f0       adrp x0, 0x106c26000
+            0x102a07b48      00c01391       add x0, x0, 0x4f0
+            0x102a07b4c      a16c01f0       adrp x1, 0x10579e000
+            0x102a07b50      21e00191       add x1, x1, 0x78

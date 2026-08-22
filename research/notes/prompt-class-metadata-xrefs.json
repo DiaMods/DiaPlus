@@ -1,0 +1,13 @@
+{
+  "addressMaterializations": [
+    {
+      "instruction": "0x1047db8d8",
+      "add": "0x1047db8dc",
+      "pageRegister": 0,
+      "resultRegister": 0,
+      "distance": 1
+    }
+  ],
+  "loadMaterializations": [],
+  "branchLinks": []
+}

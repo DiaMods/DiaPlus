@@ -1,0 +1,28 @@
+#!/bin/zsh
+set -euo pipefail
+
+project_dir="${0:A:h}"
+command="${1:-help}"
+(( $# == 0 )) || shift
+
+case "$command" in
+  build) exec "$project_dir/scripts/build.sh" "$@" ;;
+  install) exec "$project_dir/scripts/install.sh" "$@" ;;
+  launch) exec "$project_dir/scripts/launch.sh" "$@" ;;
+  doctor) exec "$project_dir/scripts/doctor.sh" "$@" ;;
+  status) exec /usr/bin/sed -n '1,240p' "$project_dir/docs/STATUS.md" ;;
+  help|-h|--help)
+    print 'Dia Custom'
+    print ''
+    print '  ./dia-custom launch             Start the local bridge and browser'
+    print '  ./dia-custom doctor             Check the installed clone'
+    print '  ./dia-custom install            Refresh patches in an existing clone'
+    print '  ./dia-custom build [--replace]  Create a clone from /Applications/Dia.app'
+    print '  ./dia-custom status             Show implemented and remaining work'
+    ;;
+  *)
+    print -u2 "Unknown command: $command"
+    print -u2 "Run './dia-custom help' for available commands."
+    exit 2
+    ;;
+esac

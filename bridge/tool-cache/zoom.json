@@ -1,0 +1,2210 @@
+{
+  "vendor": "zoom",
+  "updated_at": "2026-08-13T18:19:01Z",
+  "mcp_version": "2025-11-25",
+  "server_name": "mcp-gateway",
+  "server_version": "1.0.0",
+  "tools": [
+    {
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "meetingId"
+        ],
+        "properties": {
+          "types": {
+            "type": "string"
+          },
+          "raw_passcode": {
+            "description": "The plaintext passcode for playing the recording. Up to 10 characters, containing lowercase letters, digits, special characters (e.g., !, @, #), or sometimes all digits.",
+            "type": "string"
+          },
+          "play_time": {
+            "type": "integer"
+          },
+          "meetingId": {
+            "description": "The original meetingId is not a pure number, but rather a format similar to atsXxhSEQWit9t+U02HXNQ==. The parameters in this format need to be double-encoded (/docs/api/using-zoom-apis/#meeting-id-and-uuid) to obtain the UUID before making an API request.",
+            "type": "string"
+          },
+          "encode_passcode": {
+            "description": "The encrypted passcode used for playing the recording. It is an encoded string typically appended to the recording’s share link as the pwd parameter.",
+            "type": "string"
+          },
+          "clip_num": {
+            "type": "integer"
+          }
+        }
+      },
+      "outputSchema": {
+        "properties": {
+          "next_steps": {
+            "items": {
+              "properties": {
+                "items": {
+                  "items": {
+                    "properties": {
+                      "text": {
+                        "description": "The next step content of this recording segment",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "maxItems": 99999,
+                  "description": "The number of next-step content nodes in this recording fragment, which is in array format."
+                },
+                "total_items": {
+                  "description": "The number of nextsteps for this recording segment",
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 99999,
+            "description": "The collection of nextstep contents of this record"
+          },
+          "summaries": {
+            "items": {
+              "properties": {
+                "items": {
+                  "items": {
+                    "properties": {
+                      "summary": {
+                        "description": "Content of this chapter",
+                        "type": "string"
+                      },
+                      "label": {
+                        "description": "Tags for this chapter",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "maxItems": 99999,
+                  "description": "This record fragment data"
+                },
+                "total_items": {
+                  "description": "Total number of chapters in this recording segment",
+                  "type": "number"
+                },
+                "overall_summary": {
+                  "description": "A summary of this recording segment.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 99999,
+            "description": "The collection of summary contents of this record"
+          },
+          "transcripts": {
+            "items": {
+              "properties": {
+                "timeline": {
+                  "items": {
+                    "properties": {
+                      "ts": {
+                        "description": "Start time of speech - relative to the start time of the current recording segment",
+                        "type": "string"
+                      },
+                      "text": {
+                        "description": "The node content of this transcript contains the timestamp and content relative to the start of the recording.",
+                        "type": "string"
+                      },
+                      "end_ts": {
+                        "description": "End time of speech - relative to the start time of the current recording segment",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "maxItems": 99999,
+                  "description": "The recorded transcript content is in array format."
+                }
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 99999,
+            "description": "The collection of transcript contents of this record"
+          },
+          "play_urls": {
+            "items": {
+              "properties": {
+                "urls": {
+                  "items": {
+                    "description": "CDN playback link for this recording clip",
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "maxItems": 99999,
+                  "description": "recording resource cdn play links"
+                },
+                "play_time": {
+                  "description": "This indicates how many seconds the recording should start playing.",
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 99999,
+            "description": "This record contains a collection of playback URLs. If the content is empty, then the playback UI does not need to be rendered."
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_recording_resource",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://widget/meeting-recording.html"
+        }
+      },
+      "description": "**Description:**\n\nRetrieves detailed content and metadata for a specific Zoom recording, including transcript text, topic summaries, next steps/action items, and playback URLs. Use this tool when the user explicitly mentions \"recording\" or requests content-level details (e.g., \"What did they say about X?\", \"Play the recording\", \"Find the part where they discussed pricing\"). For general meeting discovery or meeting-level metadata without recording context, prefer the Assets tool.\n\n**Parameters:**\n\n- **types** *(string, optional)*: Comma-separated list of resource types to retrieve. Valid values: `transcript`, `summary`, `nextStep`, `playUrl`. If omitted or empty, all available types are returned. Include `transcript` when answering content questions; include both `transcript` and `playUrl` when the user wants to jump to a specific moment.\n\n- **raw_passcode** *(string, optional)*: Plaintext passcode for the recording (up to 10 characters; letters, digits, or special characters).\n\n- **encode_passcode** *(string, optional)*: Encrypted passcode from the `pwd=` parameter of a Zoom share link.\n\n- **clip_num** *(integer, optional)*: 1-based index of the clip to retrieve for multi-clip recordings. Returns null if the index exceeds available clips.\n\n- **play_time** *(integer, optional)*: Playback start time in seconds within the selected clip (e.g., `20` = start 20 seconds in). Use transcript timestamps to determine the appropriate value when the user asks to jump to a specific topic.\n\n**Return Schema Overview:**\n\n```json\n{\n  \"transcripts\": [{ \"timeline\": [{ \"text\", \"ts\", \"end_ts\", \"display_name\" }], \"recording_id\", \"meeting_id\", \"recording_start\", \"recording_end\" }],\n  \"summaries\":   [{ \"overall_summary\", \"items\": [{ \"label\", \"summary\" }], \"recording_start\", \"total_items\" }],\n  \"next_steps\":  [{ \"items\": [{ \"text\" }], \"recording_start\", \"total_items\" }],\n  \"play_urls\":   [{ \"urls\": [\"string\"], \"recording_start\", \"play_time\" }]\n}\n```\n\nFields are omitted if no data exists for that type.\n\n**Usage Notes:**\n\n- Recording duration = `recording_end − recording_start`.\n- To navigate to a topic: first retrieve `transcript` to find the relevant timestamp, then use that value as `play_time` alongside `playUrl`.\n- When user intent is ambiguous (content + playback), omit `types` to fetch all resources.\n- Tool selection rule: **recording keyword or playback action present → this tool; general meeting queries → Assets tool first.**"
+    },
+    {
+      "inputSchema": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "page_size": {
+            "default": 50,
+            "description": "The number of records returned within a single API call. The maximum value is 300 and the default value is 50.",
+            "type": "integer",
+            "maximum": 300,
+            "minimum": 1
+          },
+          "next_page_token": {
+            "description": "Use the next page token to paginate through large result sets. A next page token is returned whenever the set of available results exceeds the current page size. This token's expiration period is 15 minutes.",
+            "type": "string"
+          },
+          "to": {
+            "description": "The end date for filtering meetings in UTC datetime format, such as `2024-12-31T23:59:59Z`.",
+            "type": "string"
+          },
+          "meeting_number": {
+            "description": "The search query keyword to filter meetings by meeting number.",
+            "type": "integer"
+          },
+          "q": {
+            "description": "Search query keyword to filter meetings by topic, agenda, or other meeting content.",
+            "type": "string"
+          },
+          "from": {
+            "description": "The start date for filtering meetings in UTC datetime format, such as `2024-01-01T00:00:00Z`.",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "page_size": {
+            "description": "The number of records returned with a single API call. Maximum is 300, default is 50.",
+            "type": "integer"
+          },
+          "next_page_token": {
+            "description": "Use the next page token to paginate through large result sets. A next page token will be returned whenever the set of available results exceeds the current page size. This token's expiration period is 15 minutes.",
+            "type": "string"
+          },
+          "meetings": {
+            "items": {
+              "type": "object",
+              "properties": {
+                "panelist": {
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "user_name": {
+                        "description": "The panelist's user name.",
+                        "type": "string"
+                      },
+                      "email": {
+                        "description": "The panelist's email.",
+                        "type": "string"
+                      }
+                    },
+                    "description": "Panelist item for meetings search API."
+                  },
+                  "type": "array",
+                  "description": "The list of panelist in this webinar, if available for the given category."
+                },
+                "has_external_user": {
+                  "description": "Whether this meeting has external users.",
+                  "type": "boolean"
+                },
+                "meeting_type": {
+                  "type": "string",
+                  "enum": [
+                    "INSTANT_MEETING",
+                    "ONE_TIME_MEETING",
+                    "RECURRING_MEETING",
+                    "NO_FIXED_MEETING",
+                    "PMI_MEETING",
+                    "ONE_TIME_WEBINAR",
+                    "RECURRING_WEBINAR",
+                    "NO_FIXED_WEBINAR"
+                  ],
+                  "description": "The meeting type.\n\n* `instant_meeting` - An instant meeting.\n* `one_time_meeting` - A scheduled meeting.\n* recurring_meeting - A recurring meeting with fixed time.\n* `no_fixed_meeting` - A recurring meeting with no fixed time.\n* `pmi_meeting` - A personal room meeting.\n* `one_time_webinar` - A one-time webinar.\n* `recurring_webinar` - A recurring webinar with fixed time.\n* `no_fixed_webinar` - A recurring webinar with no fixed time."
+                },
+                "has_transcript_permission": {
+                  "description": "Whether the current user has permission to view the meeting transcript.",
+                  "type": "boolean"
+                },
+                "schedule_start_time": {
+                  "description": "The scheduled start time of the meeting as configured when the meeting was created. This is the planned start time and may be different from the actual start time when the meeting was held.",
+                  "type": "string"
+                },
+                "master_event_id": {
+                  "description": "The meeting event's unique key.",
+                  "type": "string"
+                },
+                "host_name": {
+                  "description": "The meeting host's name.",
+                  "type": "string"
+                },
+                "meeting_roles": {
+                  "items": {
+                    "enum": [
+                      "invitee",
+                      "attendee",
+                      "panelist",
+                      "alternative-host",
+                      "assistant",
+                      "host"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "Current user's role for this meeting. If the user is the host return null, if the user is not the host return either `invitee` or `attendee.`"
+                },
+                "guests_can_see_other_guests": {
+                  "description": "Whether guests can see other guests.",
+                  "type": "boolean"
+                },
+                "topic": {
+                  "description": "The meeting topic.",
+                  "type": "string"
+                },
+                "meeting_number": {
+                  "description": "The meeting number. For non-PMI meetings, this is always the original meeting number. For meetings scheduled with PMI, when `meeting_category` != history, this field returns the original meeting number, but when `meeting_category` = history, this field returns the PMI number.",
+                  "type": "integer"
+                },
+                "meeting_uuid": {
+                  "description": "Unique key used to identify a meeting in search results. When `meeting_category` = history, this is the meeting UUID. When `meeting_category` != history, this is the meeting number.",
+                  "type": "string"
+                },
+                "original_meeting_type": {
+                  "type": "string",
+                  "enum": [
+                    "INSTANT_MEETING",
+                    "ONE_TIME_MEETING",
+                    "RECURRING_MEETING",
+                    "NO_FIXED_MEETING",
+                    "PMI_MEETING",
+                    "ONE_TIME_WEBINAR",
+                    "RECURRING_WEBINAR",
+                    "NO_FIXED_WEBINAR"
+                  ],
+                  "description": "The original type of the meeting before any PMI-related transformation."
+                },
+                "attendee_size": {
+                  "description": "The total number of attendees in the meeting, if available.",
+                  "type": "integer"
+                },
+                "meeting_category": {
+                  "type": "string",
+                  "enum": [
+                    "history",
+                    "scheduled_upcoming",
+                    "schedule_expired"
+                  ],
+                  "description": "The meeting's category in the context of search results.\n\n* `history` - a historical meeting.\n* `scheduled_upcoming` - a scheduled upcoming meeting, where the current time is later than the scheduled end time.\n* `schedule_expired` - a scheduled meeting with time expired, where the current time is greater than or equal to scheduled end time."
+                },
+                "original_meeting_number": {
+                  "description": "The original meeting number. For non-PMI meetings, this is always null. For meetings scheduled with PMI, this field returns the original meeting number.",
+                  "type": "integer"
+                },
+                "has_summary_permission": {
+                  "description": "Whether the current user has permission to view the meeting summary.",
+                  "type": "boolean"
+                },
+                "schedule_end_time": {
+                  "description": "The scheduled end time of the meeting as configured when the meeting was created. This is the planned end time and may be different from the actual end time when the meeting was held.",
+                  "type": "string"
+                },
+                "guests_can_invite_others": {
+                  "description": "Whether guests can invite others.",
+                  "type": "boolean"
+                },
+                "relevance_score": {
+                  "description": "The relevance score of this meeting in the search results. A higher score means the meeting is considered more relevant to the search query. Results are typically sorted in descending order of this score by the underlying search engine.",
+                  "type": "number"
+                },
+                "recurrence": {
+                  "description": "Whether this meeting is a recurring meeting. 1-Yes, 0-No.",
+                  "type": "integer"
+                },
+                "has_recording": {
+                  "description": "Whether this meeting has a generated recording available.",
+                  "type": "boolean"
+                },
+                "attendees": {
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "user_name": {
+                        "description": "The attendee's user name.",
+                        "type": "string"
+                      },
+                      "email": {
+                        "description": "The attendee's email.",
+                        "type": "string"
+                      }
+                    },
+                    "description": "Attendee item for meetings search API."
+                  },
+                  "type": "array",
+                  "description": "The list of attendees in this meeting, if available for the given category."
+                },
+                "is_zoomevents": {
+                  "description": "Whether this meeting is a Zoom event.",
+                  "type": "boolean"
+                },
+                "occurrence_time": {
+                  "description": "Timestamp for single meeting occurrence.",
+                  "type": "integer"
+                },
+                "meeting_start_time": {
+                  "description": "The actual start time when the meeting was held. This field is populated only when `meeting_category` = history. For upcoming meetings, this field is null or omitted.",
+                  "type": "string"
+                },
+                "has_summary": {
+                  "description": "Whether this meeting has a generated summary available.",
+                  "type": "boolean"
+                },
+                "join_url": {
+                  "description": "The join meeting URL.",
+                  "type": "string"
+                },
+                "meeting_end_time": {
+                  "description": "The actual end time when the meeting was held. This field is populated only when `meeting_category` = history. For upcoming meetings, this field is null or omitted.",
+                  "type": "string"
+                },
+                "host_email": {
+                  "description": "The meeting host's email.",
+                  "type": "string"
+                },
+                "has_transcript": {
+                  "description": "Whether this meeting has a transcript available.",
+                  "type": "boolean"
+                }
+              },
+              "description": "Meeting item for meetings search API."
+            },
+            "type": "array",
+            "description": "List of meeting objects."
+          },
+          "from_server": {
+            "description": "Whether the data is returned from server. Default is `true`.",
+            "type": "boolean"
+          }
+        },
+        "description": "Response model for meetings search API."
+      },
+      "name": "search_meetings",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://widget/meeting-list-card.html"
+        }
+      },
+      "description": "# Search Meetings — Deprecated Legacy Compatibility Tool 4.6\n\n**READ-ONLY**\n\n`search_meetings` is a deprecated meeting-search endpoint retained for backward compatibility with clients that may cache its previously published tool definition. The endpoint remains operational so requests created from that definition can continue to return legacy meeting-search results.\n\nCurrent Zoom workspace meeting retrieval is provided by `search` with the `zoom_meeting` datasource. It supports meeting discovery, full-text retrieval, metadata and time filtering, and pagination through the unified search contract. `search_describe_capabilities` describes the current searchable and filterable fields, their types, and supported values when datasource-specific metadata is needed.\n\nIf you still call the tool, before invoking this tool, you must first obtain the user's current time zone; invoking this tool without knowing the user's current time zone is strictly prohibited. If the current time zone is unknown, please ask the user for it first.\n\nThe legacy request accepts optional meeting keywords, a meeting number, UTC start and end times, a legacy inclusion flag, page size, and a continuation token. These parameters retain their previously published meanings for compatibility. This endpoint uses the legacy request format and does not accept the unified datasource filter structure. New search fields and datasource capabilities are documented through the unified tools.\n\n## Response\n\nReturns the legacy meeting-search response:\n\n- `meetings` — Matching legacy meeting records\n- `page_size` — Number of records included in the response page\n- `next_page_token` — Continuation token when additional records are available\n- `from_server` — Whether the records were returned by the server\n\nMeeting records can contain meeting identifiers, topic, scheduled times, status, host information, duration, timezone, and available meeting metadata. Exact properties follow the published output schema. This read-only endpoint does not create, update, or delete meetings.\n"
+    },
+    {
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "meetingId"
+        ],
+        "properties": {
+          "meetingId": {
+            "description": "The meeting identifier. This field accepts either a UUID-format meeting ID or a numeric meeting number. Prefer passing the UUID-format meeting ID when available. Before invoking the API, the meetingId must be double-encoded; otherwise, the request may fail. If users provide natural language (e.g., 'last meeting'), use searchMeetings to resolve the correct meetingId. Numeric meeting numbers return assets for the latest meeting instance, while UUIDs return assets for the specific occurrence.",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "properties": {
+          "deep_url": {
+            "description": "A deep link URL that allows users to view meeting insights with Zoom AI Companion.",
+            "type": "string"
+          },
+          "meeting_type": {
+            "default": "2",
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "description": "The type of meeting.\n* `1` - An instant meeting. \n* `2` - A scheduled meeting. \n* `3` - A recurring meeting with no fixed time. \n* `4` - A personal room.\n* `8` - A recurring meeting with fixed time. "
+          },
+          "occurrence_id": {
+            "description": "Occurrence ID. The unique identifier for an occurrence of a recurring meeting.",
+            "type": "string"
+          },
+          "meeting_number": {
+            "format": "int64",
+            "type": "integer",
+            "description": "The meeting number."
+          },
+          "meeting_uuid": {
+            "description": "The meeting's universally unique identifier (UUID).",
+            "type": "string"
+          },
+          "original_meeting_type": {
+            "default": "2",
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "description": "The type of original meeting.\n* `1` - An instant meeting. \n* `2` - A scheduled meeting. \n* `3` - A recurring meeting with no fixed time. \n* `4` - A personal room.\n* `8` - A recurring meeting with fixed time. "
+          },
+          "original_meeting_number": {
+            "format": "int64",
+            "type": "integer",
+            "description": "The meeting original number. If the meeting is scheduled with a PMI, this field returns the original meeting number; the `meeting_number` field returns the PMI."
+          },
+          "agenda_doc": {
+            "type": "object",
+            "properties": {
+              "doc_name": {
+                "description": "The name of the agenda document.",
+                "type": "string"
+              },
+              "doc_url": {
+                "description": "The URL where the agenda document can be accessed.",
+                "type": "string"
+              },
+              "doc_id": {
+                "description": "The unique identifier of the agenda document.",
+                "type": "string"
+              }
+            },
+            "description": "The meeting agenda document."
+          },
+          "timezone": {
+            "description": "The meeting's timezone.",
+            "type": "string"
+          },
+          "start_time": {
+            "description": "The meeting's start time. GMT Format",
+            "type": "string"
+          },
+          "whiteboards": {
+            "items": {
+              "properties": {
+                "whiteboard_id": {
+                  "description": "The unique identifier of the whiteboard.",
+                  "type": "string"
+                },
+                "whiteboard_url": {
+                  "description": "The URL where the whiteboard can be accessed.",
+                  "type": "string"
+                },
+                "source": {
+                  "description": "The source of the whiteboard:\n`1` - shared during the meeting.\n`2` - bound to the meeting when it was created.\n`3` - shared via in-meeting chat.",
+                  "type": "integer"
+                },
+                "whiteboard_name": {
+                  "description": "The name of the whiteboard.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "description": "A list of whiteboards associated with the meeting."
+          },
+          "meeting_transcript": {
+            "type": "object",
+            "description": "The meeting aic transcript",
+            "properties": {
+              "transcript_items": {
+                "items": {
+                  "type": "object",
+                  "description": "The meeting aic transcript text item",
+                  "properties": {
+                    "end": {
+                      "type": "string",
+                      "example": "00:01:11.647",
+                      "description": "the transcript end time"
+                    },
+                    "text": {
+                      "type": "string",
+                      "example": "alex hu: Welcome back to natural reader. We're excited to introduce a new era and ai audio with the release of our brand, new hd. Pro voices. These aren't just any voices. They're powered by the newest ai technology to sound incredibly natural and humanlike.",
+                      "description": "the transcript sentence"
+                    },
+                    "start": {
+                      "type": "string",
+                      "example": "00:00:56.550",
+                      "description": "the transcript start time"
+                    }
+                  }
+                },
+                "type": "array",
+                "description": "The meeting aic transcript text items"
+              },
+              "primary_language": {
+                "example": "The meeting aic transcript language",
+                "type": "string"
+              }
+            }
+          },
+          "recording": {
+            "type": "object",
+            "properties": {
+              "duration": {
+                "description": "The duration of the meeting's recording in minutes.",
+                "type": "integer"
+              },
+              "has_permission": {
+                "description": "Whether the current user has permission to access the meeting recording.\r\n\r\nNote: Even when `has_summary` is `true`, summary content fields (such as `quick_recap`, `summary`, `next_steps`, etc.) will only be returned if `has_permission` is also `true`. If `has_permission` is `false`, only the status fields (`has_summary` and `has_permission`) will be included in the response.",
+                "type": "boolean"
+              },
+              "cdn_urls": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "description": "A list of CDN URLs where the recording can be accessed and played."
+              },
+              "has_recording": {
+                "description": "Whether the meeting has an recording available.\r\n\r\nNote: A value of `true` indicates that a summary exists for this meeting, but does not guarantee access. The actual summary content will only be returned if `has_permission` is also `true`. Check both fields to determine whether summary data can be displayed to the user.",
+                "type": "boolean"
+              },
+              "processing": {
+                "description": "Indicates whether the meeting recording is still being processed.",
+                "type": "boolean"
+              },
+              "preview_url": {
+                "description": "The URL of a preview image representing the recording (thumbnail).",
+                "type": "string"
+              },
+              "transcripts": {
+                "items": {
+                  "properties": {
+                    "timeline": {
+                      "items": {
+                        "properties": {
+                          "ts": {
+                            "description": "Start time of speech - relative to the start time of the current recording segment",
+                            "type": "string"
+                          },
+                          "text": {
+                            "description": "The node content of this transcript contains the timestamp and content relative to the start of the recording.",
+                            "type": "string"
+                          },
+                          "end_ts": {
+                            "description": "End time of speech - relative to the start time of the current recording segment",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "maxItems": 99999,
+                      "description": "The recorded transcript content is in array format."
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array",
+                "maxItems": 99999,
+                "description": "The collection of transcript contents of this record"
+              },
+              "summaries": {
+                "items": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "summary": {
+                            "description": "Content of this chapter",
+                            "type": "string"
+                          },
+                          "label": {
+                            "description": "Tags for this chapter",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "maxItems": 99999,
+                      "description": "This record fragment data"
+                    },
+                    "total_items": {
+                      "description": "Total number of chapters in this recording segment",
+                      "type": "number"
+                    },
+                    "overall_summary": {
+                      "description": "A summary of this recording segment.",
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array",
+                "maxItems": 99999,
+                "description": "The collection of summary contents of this record"
+              },
+              "play_url": {
+                "description": "The URL where the recording file can be opened and played.",
+                "type": "string"
+              }
+            },
+            "description": "The meeting recording."
+          },
+          "topic": {
+            "description": "The meeting topic.",
+            "type": "string"
+          },
+          "docs": {
+            "items": {
+              "properties": {
+                "doc_name": {
+                  "description": "The name of the Zoom Doc.",
+                  "type": "string"
+                },
+                "doc_id": {
+                  "description": "The unique identifier of the Zoom Doc.",
+                  "type": "string"
+                },
+                "doc_url": {
+                  "description": "The URL where the Zoom Doc can be accessed.",
+                  "type": "string"
+                },
+                "source": {
+                  "description": "The source of the Zoom Doc:\n`1` - shared during the meeting.\n`2` - bound to the meeting when it was created.\n`3` - shared via in-meeting chat.",
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "description": "A list of Zoom Docs associated with the meeting."
+          },
+          "end_time": {
+            "description": "The meeting's end time. GMT Format",
+            "type": "string"
+          },
+          "my_notes": {
+            "type": "object",
+            "description": "The  user my notes ",
+            "properties": {
+              "content_markdown": {
+                "type": "string",
+                "example": "markdown info",
+                "description": "The markdown format notes info"
+              },
+              "file_id": {
+                "type": "string",
+                "example": "aSgn1XuFSBSiy5-RUmpIPg",
+                "description": "The note file id"
+              },
+              "transcript": {
+                "type": "object",
+                "description": "The my notes transcript",
+                "properties": {
+                  "transcript_items": {
+                    "items": {
+                      "type": "object",
+                      "description": "The meeting aic transcript text item",
+                      "properties": {
+                        "end": {
+                          "type": "string",
+                          "example": "00:01:11.647",
+                          "description": "the transcript end time"
+                        },
+                        "text": {
+                          "type": "string",
+                          "example": "alex hu: Welcome back to natural reader. We're excited to introduce a new era and ai audio with the release of our brand, new hd. Pro voices. These aren't just any voices. They're powered by the newest ai technology to sound incredibly natural and humanlike.",
+                          "description": "the transcript sentence"
+                        },
+                        "start": {
+                          "type": "string",
+                          "example": "00:00:56.550",
+                          "description": "the transcript start time"
+                        }
+                      }
+                    },
+                    "type": "array",
+                    "description": "The meeting aic transcript text items"
+                  },
+                  "primary_language": {
+                    "example": "The meeting aic transcript language",
+                    "type": "string"
+                  }
+                }
+              },
+              "file_link": {
+                "type": "string",
+                "example": "https://docs.zoomdev.us/doc/aSgn1XuFSBSiy5-RUmpIPg",
+                "description": "The  note link"
+              }
+            }
+          },
+          "meeting_summary": {
+            "type": "object",
+            "properties": {
+              "summary_web_url": {
+                "format": "uri",
+                "type": "string",
+                "description": "The URL to view the full summary document in Zoom Zoom Web Portal."
+              },
+              "has_permission": {
+                "description": "Whether the current user has permission to access the meeting summary.\r\n\r\nNote: Even when `has_summary` is `true`, summary content fields (such as `quick_recap`, `summary`, `next_steps`, etc.) will only be returned if `has_permission` is also `true`. If `has_permission` is `false`, only the status fields (`has_summary` and `has_permission`) will be included in the response.",
+                "type": "boolean"
+              },
+              "summary_doc_url": {
+                "format": "uri",
+                "type": "string",
+                "description": "The URL to view the full summary document in Zoom Docs."
+              },
+              "summary_markdown": {
+                "description": "The complete meeting summary in markdown format.",
+                "type": "string"
+              },
+              "next_steps": {
+                "items": {
+                  "description": "The next step.",
+                  "type": "string"
+                },
+                "type": "array",
+                "description": "The next steps."
+              },
+              "summary": {
+                "description": "The summary content.",
+                "type": "string"
+              },
+              "summary_plain_text": {
+                "description": "The complete meeting summary in plain text format.",
+                "type": "string"
+              },
+              "has_summary": {
+                "description": "Whether the meeting has an AI-generated summary available.\r\n\r\nNote: A value of `true` indicates that a summary exists for this meeting, but does not guarantee access. The actual summary content will only be returned if `has_permission` is also `true`. Check both fields to determine whether summary data can be displayed to the user.",
+                "type": "boolean"
+              },
+              "quick_recap": {
+                "description": "The summary quick recap.",
+                "type": "string"
+              }
+            },
+            "description": "The meeting summary."
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_meeting_assets",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://widget/meeting-recap.html"
+        }
+      },
+      "description": "# Get Meeting Assets V4.0\n\n**READ-ONLY**\n\nRetrieve all available assets for a specific Zoom meeting, including AI summaries, My Notes, cloud recordings, whiteboards, Zoom Docs, agenda documents, and participants.\n\n## When to use this tool\n\n- User wants to retrieve assets for a completed meeting\n- User needs access to meeting summaries,My Notes, recordings, whiteboards, Zoom Docs, agenda, or participant information\n- User provides a meeting identifier (numeric meeting ID or UUID)\n\n**Required condition:** User must provide a meeting ID (numeric or UUID format) to use this tool.\n\n## Parameters\n\n### `meetingId` (String, Required)\n\nThe meeting identifier. Accepts either:\n\n1. **UUID** (preferred) — e.g., `\"38DCDB7C-74B1-442F-BE85-390DF0BB96CC\"`. Targets a specific meeting instance.\n2. **Numeric meeting ID** — e.g., `\"123456789\"`. Returns assets for the latest meeting instance when multiple instances exist.\n\n\nAlways prefer UUID when available; numeric ID cannot target specific past instances of recurring meetings.\n\n## Response\n\nReturns a JSON object containing the following asset fields (each may be `null` if unavailable):\n\n- `meeting_summary` — AI-generated summary with quick recap, full text, and next steps\n- `my_notes` — User notes and participant transcripts recorded during the meeting\n- `recording` — Cloud recording with play URL, duration, and processing status\n- `whiteboards` — Whiteboards shared or created during the meeting\n- `docs` — Zoom Docs linked to the meeting\n- `agenda_doc` — Agenda document associated with the meeting\n- `participants` — Meeting participant list\n\n## Access Control\n\nOnly the meeting host or participants explicitly granted access by the host can retrieve meeting assets. Unauthorized requests return a permission error.\n\n## Error Handling\n\n| Error | Meaning |\n|-------|---------|\n| 403 / Permission denied | User lacks access to this meeting's assets. |\n| 404 / Not found | Invalid, expired, or unrecognized meeting ID/UUID. |\n\n## Usage Notes\n\n- Cloud recordings may show `processing: true` while still being generated after a meeting ends.\n- AI summaries require AI Companion to have been enabled and sufficient meeting duration.\n- It is normal for a meeting to have some asset types but not others (e.g., recording but no summary).\n- Timestamps are in UTC (ISO 8601). Convert to the user's local timezone for display.\n"
+    },
+    {
+      "inputSchema": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "page_size": {
+            "default": 30,
+            "type": "integer",
+            "maximum": 300,
+            "description": "The number of records returned within a single API call."
+          },
+          "from": {
+            "description": "The start date in 'yyyy-mm-dd' UTC format for the date range where you would like to retrieve recordings. The maximum range can be a month. If no value is provided for this field, the default will be current date. \n\nFor example, if you make the API request on June 30, 2020, without providing the `from` and `to` parameters, by default the value of 'from' field will be `2020-06-30` and the value of the 'to' field will be `2020-07-01`. \n\n**Note**: The `trash` files cannot be filtered by date range and thus, the `from` and `to` fields should not be used for trash files.",
+            "type": "string"
+          },
+          "mc": {
+            "default": false,
+            "type": "boolean",
+            "description": "The query metadata of the recording if using an on-premise meeting connector for the meeting."
+          },
+          "trash": {
+            "default": false,
+            "type": "boolean",
+            "description": "The query trash.\n* `true` - List recordings from trash.  \n* `false` - Do not list recordings from the trash.  \n\nThe default value is `false`. If you set it to `true`, you can use the `trash_type` property to indicate the type of Cloud recording that you need to retrieve. "
+          },
+          "trash_type": {
+            "default": "meeting_recordings",
+            "type": "string",
+            "description": "The type of cloud recording to retrieve from the trash. \n \n *   `meeting_recordings`: List all meeting recordings from the trash.  \n *  `recording_file`: List all individual recording files from the trash. "
+          },
+          "meeting_id": {
+            "description": "The meeting ID.",
+            "type": "integer"
+          },
+          "next_page_token": {
+            "description": "The next page token paginates through a large set of results. A next page token returns whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.",
+            "type": "string"
+          },
+          "to": {
+            "description": "The end date in 'yyyy-mm-dd' 'yyyy-mm-dd' UTC format. ",
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "properties": {
+          "page_size": {
+            "default": 30,
+            "type": "integer",
+            "maximum": 300,
+            "description": "The number of records returned within a single API call."
+          },
+          "page_count": {
+            "description": "The number of pages returned for the request made.",
+            "type": "integer"
+          },
+          "to": {
+            "description": "The end date.",
+            "type": "string"
+          },
+          "next_page_token": {
+            "description": "The next page token paginates through a large set of results. A next page token returns whenever the set of available results exceeds the current page size. The expiration period for this token is 15 minutes.",
+            "type": "string"
+          },
+          "from": {
+            "description": "The start date.",
+            "type": "string"
+          },
+          "meetings": {
+            "items": {
+              "properties": {
+                "auto_delete_date": {
+                  "description": "The date when the recording will be auto-deleted when `auto_delete` is `true`. Otherwise, no date will be returned.",
+                  "type": "string"
+                },
+                "duration": {
+                  "description": "Meeting duration.",
+                  "type": "integer"
+                },
+                "topic": {
+                  "description": "Meeting topic.",
+                  "type": "string"
+                },
+                "type": {
+                  "type": "integer",
+                  "enum": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    99
+                  ],
+                  "description": "The recording's associated type of meeting or webinar: \n\nIf the recording is of a meeting: \n* `1` - Instant meeting. \n* `2` - Scheduled meeting. \n* `3` - A recurring meeting with no fixed time. \n* `4` - A meeting created viaPersonal Meeting ID (PMI). \n* `7` - A [Personal Audio Conference](https://support.zoom.us/hc/en-us/articles/204517069-Getting-Started-with-Personal-Audio-Conference) (PAC). \n* `8` - Recurring meeting with a fixed time. \n\nIf the recording is of a webinar: \n* `5` - A webinar. \n* `6` - A recurring webinar without a fixed time \n* `9` - A recurring webinar with a fixed time.\n\nIf the recording is **not** from a meeting or webinar: \n\n* `99` - A recording uploaded via the [**Recordings**](https://zoom.us/recording) interface on the Zoom Web Portal."
+                },
+                "recording_count": {
+                  "description": "Number of recording files returned in the response of this API call. This includes the `recording_files` and  `participant_audio_files` files.",
+                  "type": "integer"
+                },
+                "start_time": {
+                  "description": "The time when the meeting started.",
+                  "type": "string"
+                },
+                "auto_delete": {
+                  "description": "Auto-delete status of a meeting's [cloud recording](https://support.zoom.us/hc/en-us/articles/203741855-Cloud-Recording).  \n\nPrerequisite: To get the auto-delete status, the host of the recording must have the recording setting **Delete cloud recordings after a specified number of days** enabled. ",
+                  "type": "boolean"
+                },
+                "host_id": {
+                  "description": "ID of the user set as host of meeting.",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "Meeting ID - also known as the meeting number.",
+                  "type": "integer"
+                },
+                "uuid": {
+                  "description": "Unique Meeting Identifier. Each instance of the meeting will have its own UUID.",
+                  "type": "string"
+                },
+                "recording_play_passcode": {
+                  "description": "The cloud recording's passcode to be used in the URL. \nInclude fields in the response. The password field requires the user role of the authorized account to enable the **View Recording Content** permission to be returned.\nThis recording's passcode can be directly spliced in `play_url` or `share_url` with `?pwd=` to access and play. For example, 'https://zoom.us/rec/share/**************?pwd=yNYIS408EJygs7rE5vVsJwXIz4-VW7MH'. If you want to use this field, please contact Zoom support.",
+                  "type": "string"
+                },
+                "recording_files": {
+                  "items": {
+                    "properties": {
+                      "file_size": {
+                        "description": "The recording file size.",
+                        "type": "number"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "completed",
+                          "processing"
+                        ],
+                        "description": "The recording status."
+                      },
+                      "file_path": {
+                        "description": "The file path to the On-Premise account recording. \n\n**Note:** This API only returns this field for [Zoom On-Premise accounts](https://support.zoom.us/hc/en-us/articles/360034064852-Zoom-On-Premise-Deployment). It does **not** return the `download_url` field.",
+                        "type": "string"
+                      },
+                      "download_url": {
+                        "description": "The URL to download the recording. If a user has authorized and installed your OAuth app that contains recording scopes, use the `download_access_token` or the user's [OAuth access token](https://developers.zoom.us/docs/integrations/oauth/) to download the file. Set the token as a Bearer token in the Authorization header. \n\n`curl -H 'Authorization: Bearer <ACCESS_TOKEN>' https://{{base-domain}}/rec/archive/download/xyz`. \n\n**Note:** This field does **not** return for [Zoom On-Premise accounts](https://support.zoom.us/hc/en-us/articles/360034064852-Zoom-On-Premise-Deployment). Instead, this API will return the `file_path` field. The URL may be a redirect. In that case, use `curl --location` to follow redirects or use another tool, like Postman.",
+                        "type": "string"
+                      },
+                      "deleted_time": {
+                        "description": "The time when recording was deleted. Returned in the response only for trash query.",
+                        "type": "string"
+                      },
+                      "file_extension": {
+                        "type": "string",
+                        "enum": [
+                          "MP4",
+                          "M4A",
+                          "TXT",
+                          "VTT",
+                          "CSV",
+                          "JSON",
+                          "JPG"
+                        ],
+                        "description": "The file extension type of the recording file."
+                      },
+                      "play_url": {
+                        "description": "The URL to play a recording file.",
+                        "type": "string"
+                      },
+                      "id": {
+                        "description": "The recording file ID. Included in the response of general query.",
+                        "type": "string"
+                      },
+                      "file_type": {
+                        "type": "string",
+                        "enum": [
+                          "MP4",
+                          "M4A",
+                          "CHAT",
+                          "TRANSCRIPT",
+                          "CSV",
+                          "TB",
+                          "CC",
+                          "CHAT_MESSAGE",
+                          "SUMMARY",
+                          "TIMELINE",
+                          "CUSTOM_CAPTION"
+                        ],
+                        "description": "The recording file type.  \n \n`MP4` - Video file of the recording.  \n `M4A` Audio-only file of the recording.  \n `TIMELINE` - Timestamp file of the recording in JSON file format. To get a timeline file, the **Add a timestamp to the recording** setting must be enabled in the [recording settings](https://support.zoom.us/hc/en-us/articles/203741855-Cloud-recording#h_3f14c3a4-d16b-4a3c-bbe5-ef7d24500048). The time will display in the host's timezone, set on their Zoom profile.\n  \n  `TRANSCRIPT` - Transcription file of the recording in VTT format.  \n  `CHAT` - A TXT file containing in-meeting chat messages that were sent during the meeting.  \n `CC` - File containing closed captions of the recording in VTT file format.  \n `CSV` - File containing polling data in CSV format.\n\n  \n \n\nA recording file object with file type of either `CC` or `TIMELINE` **does not have** the following properties:  \n \n\t`id`, `status`, `file_size`, `recording_type`, and `play_url`.  \n `SUMMARY` - Summary file of the recording in JSON file format."
+                      },
+                      "recording_type": {
+                        "type": "string",
+                        "enum": [
+                          "shared_screen_with_speaker_view(CC)",
+                          "shared_screen_with_speaker_view",
+                          "shared_screen_with_gallery_view",
+                          "active_speaker",
+                          "gallery_view",
+                          "shared_screen",
+                          "audio_only",
+                          "audio_transcript",
+                          "chat_file",
+                          "poll",
+                          "host_video",
+                          "closed_caption",
+                          "timeline",
+                          "thumbnail",
+                          "audio_interpretation",
+                          "summary",
+                          "summary_next_steps",
+                          "summary_smart_chapters",
+                          "sign_interpretation",
+                          "production_studio",
+                          "custom_caption"
+                        ],
+                        "description": "The recording type.  \n `shared_screen_with_speaker_view(CC)`  \n `shared_screen_with_speaker_view`  \n `shared_screen_with_gallery_view`  \n `active_speaker`  \n `gallery_view`  \n `shared_screen`  \n `audio_only`  \n `audio_transcript`  \n `chat_file`  \n `poll`  \n `timeline`  \n `closed_caption`  \n `audio_interpretation`  \n `summary`  \n `summary_next_steps`  \n `summary_smart_chapters`  \n `sign_interpretation`  \n `production_studio`"
+                      },
+                      "meeting_id": {
+                        "description": "The meeting ID. ",
+                        "type": "string"
+                      },
+                      "recording_end": {
+                        "description": "The recording end time. Response in general query.",
+                        "type": "string"
+                      },
+                      "recording_start": {
+                        "description": "The recording start time.",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "description": "List of recording file."
+                },
+                "account_id": {
+                  "description": "Unique Identifier of the user account.",
+                  "type": "string"
+                },
+                "total_size": {
+                  "description": "The total file size of the recording. This includes the `recording_files` and `participant_audio_files` files.",
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "description": "List of recordings."
+          },
+          "total_records": {
+            "description": "The number of all records available across pages.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "recordings_list",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List user all recordings\nLists all [cloud recordings](https://support.zoom.us/hc/en-us/articles/203741855-Cloud-Recording) for a user."
+    },
+    {
+      "inputSchema": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "datasources": {
+            "items": {
+              "enum": [
+                "zoom_meeting",
+                "zoom_chat_message",
+                "zoom_chat_session",
+                "zoom_canvas",
+                "third_party_file",
+                "calendar"
+              ],
+              "type": "string"
+            },
+            "type": "array",
+            "description": "One or more datasource names to return schema for. \n\nPass multiple values as repeated query parameters (e.g., `?datasources=zoom_meeting&datasources=calendar`). \n\nWhen omitted, schemas for all six datasources are returned."
+          }
+        }
+      },
+      "outputSchema": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "zoom_canvas": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "searchable": {
+                      "description": "Whether this field supports full-text search via the top-level `query` parameter or the `match` filter operator.",
+                      "type": "boolean"
+                    },
+                    "field_name": {
+                      "description": "The API field name used in filter `key` values or the `match` operator.",
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "A human-readable description of the field.",
+                      "type": "string"
+                    },
+                    "field_type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "integer",
+                        "boolean",
+                        "datetime",
+                        "array<object>",
+                        "array<string>"
+                      ],
+                      "description": "The data type of the field."
+                    },
+                    "filterable": {
+                      "description": "Whether this field can be used in filter operators (`eq`, `gt`, `gte`, `lt`, `lte`, `contains_all`, `contains_any`, `exists`).",
+                      "type": "boolean"
+                    },
+                    "enum": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "Allowed values for this field. Only present when the field has a fixed set of valid inputs (e.g., `meeting_type`, `file_type`, `type`)."
+                    }
+                  },
+                  "description": "Metadata for a single searchable or filterable field within a datasource."
+                },
+                "type": "array",
+                "description": "Field definitions for the `zoom_canvas` datasource."
+              },
+              "third_party_file": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "searchable": {
+                      "description": "Whether this field supports full-text search via the top-level `query` parameter or the `match` filter operator.",
+                      "type": "boolean"
+                    },
+                    "field_name": {
+                      "description": "The API field name used in filter `key` values or the `match` operator.",
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "A human-readable description of the field.",
+                      "type": "string"
+                    },
+                    "field_type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "integer",
+                        "boolean",
+                        "datetime",
+                        "array<object>",
+                        "array<string>"
+                      ],
+                      "description": "The data type of the field."
+                    },
+                    "filterable": {
+                      "description": "Whether this field can be used in filter operators (`eq`, `gt`, `gte`, `lt`, `lte`, `contains_all`, `contains_any`, `exists`).",
+                      "type": "boolean"
+                    },
+                    "enum": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "Allowed values for this field. Only present when the field has a fixed set of valid inputs (e.g., `source`, `file_type`, `type`)."
+                    }
+                  },
+                  "description": "Metadata for a single searchable or filterable field within a datasource."
+                },
+                "type": "array",
+                "description": "Field definitions for the `third_party_file` datasource."
+              },
+              "calendar": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "searchable": {
+                      "description": "Whether this field supports full-text search via the top-level `query` parameter or the `match` filter operator.",
+                      "type": "boolean"
+                    },
+                    "field_name": {
+                      "description": "The API field name used in filter `key` values or the `match` operator.",
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "A human-readable description of the field.",
+                      "type": "string"
+                    },
+                    "field_type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "integer",
+                        "boolean",
+                        "datetime",
+                        "array<object>",
+                        "array<string>"
+                      ],
+                      "description": "The data type of the field."
+                    },
+                    "filterable": {
+                      "description": "Whether this field can be used in filter operators (`eq`, `gt`, `gte`, `lt`, `lte`, `contains_all`, `contains_any`, `exists`).",
+                      "type": "boolean"
+                    },
+                    "enum": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "Allowed values for this field. Only present when the field has a fixed set of valid inputs (e.g., `meeting_type`, `file_type`, `type`)."
+                    }
+                  },
+                  "description": "Metadata for a single searchable or filterable field within a datasource."
+                },
+                "type": "array",
+                "description": "Field definitions for the `calendar` datasource."
+              },
+              "zoom_meeting": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "searchable": {
+                      "description": "Whether this field supports full-text search via the top-level `query` parameter or the `match` filter operator.",
+                      "type": "boolean"
+                    },
+                    "field_name": {
+                      "description": "The API field name used in filter `key` values or the `match` operator.",
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "A human-readable description of the field.",
+                      "type": "string"
+                    },
+                    "field_type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "integer",
+                        "boolean",
+                        "datetime",
+                        "array<object>",
+                        "array<string>"
+                      ],
+                      "description": "The data type of the field."
+                    },
+                    "filterable": {
+                      "description": "Whether this field can be used in filter operators (`eq`, `gt`, `gte`, `lt`, `lte`, `contains_all`, `contains_any`, `exists`).",
+                      "type": "boolean"
+                    },
+                    "enum": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "Allowed values for this field. Only present when the field has a fixed set of valid inputs (e.g., `meeting_type`, `file_type`, `type`)."
+                    }
+                  },
+                  "description": "Metadata for a single searchable or filterable field within a datasource."
+                },
+                "type": "array",
+                "description": "Field definitions for the `zoom_meeting` datasource."
+              },
+              "zoom_chat_message": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "searchable": {
+                      "description": "Whether this field supports full-text search via the top-level `query` parameter or the `match` filter operator.",
+                      "type": "boolean"
+                    },
+                    "field_name": {
+                      "description": "The API field name used in filter `key` values or the `match` operator.",
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "A human-readable description of the field.",
+                      "type": "string"
+                    },
+                    "field_type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "integer",
+                        "boolean",
+                        "datetime",
+                        "array<object>",
+                        "array<string>"
+                      ],
+                      "description": "The data type of the field."
+                    },
+                    "filterable": {
+                      "description": "Whether this field can be used in filter operators (`eq`, `gt`, `gte`, `lt`, `lte`, `contains_all`, `contains_any`, `exists`).",
+                      "type": "boolean"
+                    },
+                    "enum": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "Allowed values for this field. Only present when the field has a fixed set of valid inputs (e.g., `meeting_type`, `file_type`, `type`)."
+                    }
+                  },
+                  "description": "Metadata for a single searchable or filterable field within a datasource."
+                },
+                "type": "array",
+                "description": "Field definitions for the `zoom_chat_message` datasource."
+              },
+              "zoom_chat_session": {
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "searchable": {
+                      "description": "Whether this field supports full-text search via the top-level `query` parameter or the `match` filter operator.",
+                      "type": "boolean"
+                    },
+                    "field_name": {
+                      "description": "The API field name used in filter `key` values or the `match` operator.",
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "A human-readable description of the field.",
+                      "type": "string"
+                    },
+                    "field_type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "integer",
+                        "boolean",
+                        "datetime",
+                        "array<object>",
+                        "array<string>"
+                      ],
+                      "description": "The data type of the field."
+                    },
+                    "filterable": {
+                      "description": "Whether this field can be used in filter operators (`eq`, `gt`, `gte`, `lt`, `lte`, `contains_all`, `contains_any`, `exists`).",
+                      "type": "boolean"
+                    },
+                    "enum": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "Allowed values for this field. Only present when the field has a fixed set of valid inputs (e.g., `meeting_type`, `file_type`, `type`)."
+                    }
+                  },
+                  "description": "Metadata for a single searchable or filterable field within a datasource."
+                },
+                "type": "array",
+                "description": "Field definitions for the `zoom_chat_session` datasource."
+              }
+            },
+            "description": "A map where each key is a datasource name and the value is a list of field definitions for that datasource. \n\nOnly requested datasources are included. \n\nWhen `datasources` is omitted, all six keys are present."
+          }
+        },
+        "type": "object"
+      },
+      "name": "search_describe_capabilities",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "# Search Describe Capabilities\n\n**READ-ONLY**\n\nReturns authoritative per-datasource metadata for constructing Search filters; it returns no user content. Supported datasources are `zoom_meeting`, `zoom_chat_message`, `zoom_chat_session`, `zoom_canvas`, `third_party_file`, and `calendar`.\n\n## Capability planning\n\nUse this tool before invoking Search when the request has been routed to the Search workflow and slot decoding identifies metadata constraints. A request containing only full-text terms and datasource scope needs no capability discovery. When required:\n\n1. **Recognize slots.** Metadata slots include identifiers; type, subtype, or format; view, provider, owner, or hierarchy; people or organization; time ranges; boolean state or asset availability; and numeric thresholds. Natural-language expressions of these concepts are slots even without API field names.\n\n2. **Resolve time context.** For a relative or local time slot, obtain the user's current time zone from user or client context. If unavailable, ask and wait; call neither this tool nor Search until the zone is known. Never infer a zone.\n\n3. **Request capabilities.** Request every selected datasource. If selection is uncertain, request several schemas together rather than guessing.\n\n4. **Construct filters.** Resolve each slot from the response's field name, type, enum, `filterable`/`searchable` flags, and operator restrictions. My Notes currently maps to `doc_type=notes` under `zoom_canvas`. Resolve time fields separately for each datasource. Never transfer fields between schemas or enforce metadata only through `query`. A `filterable` field supports its documented filter operators; a `searchable` field supports top-level `query` or supported `match`.\n\n## Parameters\n\n- **`datasources`** (array, optional) — Datasource schemas to return. Multiple values are supported; omission returns all schemas.\n\n## Response\n\nReturns `{\"data\": {<datasource>: [<field>, ...]}}`. Fields include `field_name`, `field_type`, `description`, `filterable`, `searchable`, and optional `enum`.\n"
+    },
+    {
+      "inputSchema": {
+        "$defs": {
+          "GtOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Greater than — numeric/date field strictly greater than `value`."
+          },
+          "EqOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Equals — field value must exactly equal `value`."
+          },
+          "GteOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Greater than or equal to — numeric/date field >= `value` (e.g. lower bound of a time range)."
+          },
+          "ExistsOp": {
+            "description": "Field must be present and non-null. Value is the field name itself, e.g. `\"exists\": \"agenda\"`.",
+            "type": "string"
+          },
+          "LtOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Less than — numeric/date field strictly less than `value`."
+          },
+          "FilterL3": {
+            "type": "object",
+            "properties": {
+              "exists": {
+                "$ref": "#/$defs/ExistsOp"
+              },
+              "eq": {
+                "$ref": "#/$defs/EqOp"
+              },
+              "match": {
+                "$ref": "#/$defs/MatchOp"
+              },
+              "gte": {
+                "$ref": "#/$defs/GteOp"
+              },
+              "lte": {
+                "$ref": "#/$defs/LteOp"
+              },
+              "contains_all": {
+                "$ref": "#/$defs/ContainsAllOp"
+              },
+              "contains_any": {
+                "$ref": "#/$defs/ContainsAnyOp"
+              },
+              "lt": {
+                "$ref": "#/$defs/LtOp"
+              },
+              "gt": {
+                "$ref": "#/$defs/GtOp"
+              }
+            },
+            "description": "Leaf filter node (nesting level 3 of 3) — comparison operators only, no further boolean nesting."
+          },
+          "LteOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Less than or equal to — numeric/date field <= `value` (e.g. upper bound of a time range)."
+          },
+          "FilterL1": {
+            "type": "object",
+            "properties": {
+              "exists": {
+                "$ref": "#/$defs/ExistsOp"
+              },
+              "eq": {
+                "$ref": "#/$defs/EqOp"
+              },
+              "match": {
+                "$ref": "#/$defs/MatchOp"
+              },
+              "gte": {
+                "$ref": "#/$defs/GteOp"
+              },
+              "lte": {
+                "$ref": "#/$defs/LteOp"
+              },
+              "contains_all": {
+                "$ref": "#/$defs/ContainsAllOp"
+              },
+              "contains_any": {
+                "$ref": "#/$defs/ContainsAnyOp"
+              },
+              "lt": {
+                "$ref": "#/$defs/LtOp"
+              },
+              "or": {
+                "items": {
+                  "$ref": "#/$defs/FilterL2"
+                },
+                "type": "array",
+                "description": "Logical OR — at least one nested filter must match."
+              },
+              "and": {
+                "items": {
+                  "$ref": "#/$defs/FilterL2"
+                },
+                "type": "array",
+                "description": "Logical AND — all nested filters must match."
+              },
+              "gt": {
+                "$ref": "#/$defs/GtOp"
+              },
+              "not": {
+                "$ref": "#/$defs/FilterL2"
+              }
+            },
+            "description": "Top-level filter tree — `and`/`or`/`not` combine FilterL2 nodes; also supports its own comparison operators directly. Max 3 nesting levels total."
+          },
+          "MatchOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Full/partial text match of `value` against a `searchable` field. Use to target one specific field instead of the top-level `query`."
+          },
+          "FilterL2": {
+            "type": "object",
+            "properties": {
+              "exists": {
+                "$ref": "#/$defs/ExistsOp"
+              },
+              "eq": {
+                "$ref": "#/$defs/EqOp"
+              },
+              "match": {
+                "$ref": "#/$defs/MatchOp"
+              },
+              "gte": {
+                "$ref": "#/$defs/GteOp"
+              },
+              "lte": {
+                "$ref": "#/$defs/LteOp"
+              },
+              "contains_all": {
+                "$ref": "#/$defs/ContainsAllOp"
+              },
+              "contains_any": {
+                "$ref": "#/$defs/ContainsAnyOp"
+              },
+              "lt": {
+                "$ref": "#/$defs/LtOp"
+              },
+              "or": {
+                "items": {
+                  "$ref": "#/$defs/FilterL3"
+                },
+                "type": "array",
+                "description": "Logical OR — at least one nested filter must match."
+              },
+              "and": {
+                "items": {
+                  "$ref": "#/$defs/FilterL3"
+                },
+                "type": "array",
+                "description": "Logical AND — all nested filters must match."
+              },
+              "gt": {
+                "$ref": "#/$defs/GtOp"
+              },
+              "not": {
+                "$ref": "#/$defs/FilterL3"
+              }
+            },
+            "description": "Mid-level filter node (nesting level 2 of 3) — `and`/`or`/`not` combine FilterL3 leaves; also supports its own comparison operators directly."
+          },
+          "ContainsAnyOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Array field must contain at least one element of `value`."
+          },
+          "ContainsAllOp": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/KV"
+              }
+            ],
+            "description": "Array field must contain every element of `value`."
+          },
+          "KV": {
+            "required": [
+              "key",
+              "value"
+            ],
+            "type": "object",
+            "properties": {
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "items": {
+                      "type": "integer"
+                    },
+                    "type": "array"
+                  }
+                ]
+              },
+              "key": {
+                "type": "string"
+              }
+            },
+            "description": "A {key, value} pair: `key` is the field name to filter on (supported fields depend on the datasource), `value` is what to compare it against."
+          }
+        },
+        "type": "object",
+        "required": [],
+        "properties": {
+          "page_size": {
+            "default": 10,
+            "description": "Maximum number of results to return per datasource in a single response. This limit is applied independently to each requested datasource, while `next_page_token`/`has_more` in the response describe pagination across the merged result set as a whole.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "next_page_token": {
+            "description": "Opaque pagination token returned by a previous response. When supplied, the search resumes from where the previous page ended — items already returned are excluded from the results. Must be paired with the same `query` and `datasource_filters` as the original request.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Primary full-text search input. The keyword or phrase is matched against each datasource's fields marked `searchable` by Search Describe Capabilities. Supports partial matching. Prefer this for general \"find X about Y\" searches. Use the per-field `match` operator inside `filters` only when you need to target one specific searchable field. If omitted, all accessible records are returned subject to the `page_size` limit (browse mode).",
+            "type": "string"
+          },
+          "datasource_filters": {
+            "items": {
+              "type": "object",
+              "required": [
+                "datasource"
+              ],
+              "properties": {
+                "filters": {
+                  "description": "Optional advanced filter tree for this datasource. Field names, types, enum values, and capabilities come from Search Describe Capabilities. See $defs/FilterL1 for the operator reference.",
+                  "$ref": "#/$defs/FilterL1"
+                },
+                "datasource": {
+                  "type": "string",
+                  "enum": [
+                    "zoom_meeting",
+                    "zoom_chat_message",
+                    "zoom_chat_session",
+                    "zoom_canvas",
+                    "third_party_file",
+                    "calendar"
+                  ],
+                  "description": "The datasource to search. Each datasource exposes its own filterable and searchable fields; Search Describe Capabilities returns the authoritative per-datasource field list, types, and `filterable`/`searchable` flags. See the AdvancedFilter schema for the operator reference. The `calendar` datasource does not support `or`, `not`, `exists`, or `match`."
+                }
+              }
+            },
+            "type": "array",
+            "description": "Restricts the search to one or more specific datasources, with optional advanced filters for each. Each element is discriminated by `datasource`. Supported values: `zoom_meeting`, `zoom_chat_message`, `zoom_chat_session`, `zoom_canvas`, `third_party_file`, `calendar`. When omitted, the default Zoom datasources and `calendar` are searched; `third_party_file` must be requested explicitly."
+          }
+        }
+      },
+      "outputSchema": {
+        "properties": {
+          "data": {
+            "items": {
+              "anyOf": [
+                {
+                  "title": "MeetingResponseItem",
+                  "type": "object",
+                  "properties": {
+                    "has_external_user": {
+                      "description": "Whether this meeting includes at least one external (non-organization) user.",
+                      "type": "boolean"
+                    },
+                    "agenda": {
+                      "description": "The meeting agenda text.",
+                      "type": "string"
+                    },
+                    "schedule_start_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The scheduled start time of the meeting (ISO 8601 UTC). Present only for scheduled meetings; absent for instant meetings (INSTANT_MEETING), which have no scheduled time."
+                    },
+                    "is_recurring": {
+                      "description": "Whether this meeting is recurring. Derived from meeting_type (true for RECURRING_MEETING, NO_FIXED_MEETING).",
+                      "type": "boolean"
+                    },
+                    "host_name": {
+                      "description": "The display name of the meeting host. Resolved from host_id via UCS. Omitted when the host cannot be resolved.",
+                      "type": "string"
+                    },
+                    "meeting_roles": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "The roles held by the current user in this meeting (e.g., host, attendee)."
+                    },
+                    "schedule_end_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The scheduled end time of the meeting (ISO 8601 UTC). Present only for scheduled meetings; absent for instant meetings (INSTANT_MEETING), which have no scheduled time."
+                    },
+                    "meeting_uuid": {
+                      "description": "The meeting UUID, used as the unique meeting identifier in URL paths.",
+                      "type": "string"
+                    },
+                    "original_meeting_type": {
+                      "type": "string",
+                      "enum": [
+                        "INSTANT_MEETING",
+                        "ONE_TIME_MEETING"
+                      ],
+                      "description": "The original type of a PMI meeting before transformation. Indicates whether the PMI meeting was instant or scheduled."
+                    },
+                    "original_meeting_number": {
+                      "format": "int64",
+                      "type": "integer",
+                      "description": "The original meeting number (non-null only for PMI meetings)."
+                    },
+                    "has_summary_permission": {
+                      "description": "Whether the current user has permission to view the meeting summary.",
+                      "type": "boolean"
+                    },
+                    "datasource": {
+                      "type": "string",
+                      "enum": [
+                        "zoom_meeting"
+                      ],
+                      "description": "Identifies this result as a meeting item."
+                    },
+                    "topic": {
+                      "description": "The meeting topic.",
+                      "type": "string"
+                    },
+                    "has_transcript_permission": {
+                      "description": "Whether the current user has permission to view the meeting transcript.",
+                      "type": "boolean"
+                    },
+                    "attendee_count": {
+                      "description": "The total number of attendees in the meeting.",
+                      "type": "integer"
+                    },
+                    "attendees": {
+                      "items": {
+                        "properties": {
+                          "display_name": {
+                            "description": "The attendee's display name.",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "description": "The list of attendees in this meeting."
+                    },
+                    "has_recording": {
+                      "description": "Whether this meeting has a cloud recording available.",
+                      "type": "boolean"
+                    },
+                    "occurrence_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The scheduled occurrence time for a single instance of a recurring meeting (ISO 8601 UTC). Only present for recurring meetings."
+                    },
+                    "meeting_start_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The actual start time of the meeting (ISO 8601 UTC)."
+                    },
+                    "has_summary": {
+                      "description": "Whether this meeting has a generated AI summary available.",
+                      "type": "boolean"
+                    },
+                    "meeting_number": {
+                      "format": "int64",
+                      "type": "integer",
+                      "description": "The meeting number."
+                    },
+                    "meeting_end_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The actual end time of the meeting (ISO 8601 UTC)."
+                    },
+                    "meeting_type": {
+                      "type": "string",
+                      "enum": [
+                        "INSTANT_MEETING",
+                        "ONE_TIME_MEETING",
+                        "RECURRING_MEETING",
+                        "NO_FIXED_MEETING",
+                        "PMI_MEETING"
+                      ],
+                      "description": "The type of meeting (INSTANT_MEETING, ONE_TIME_MEETING, RECURRING_MEETING, NO_FIXED_MEETING, PMI_MEETING)."
+                    },
+                    "has_transcript": {
+                      "description": "Whether this meeting has a transcript available.",
+                      "type": "boolean"
+                    }
+                  }
+                },
+                {
+                  "title": "ChatMessageResponseItem",
+                  "type": "object",
+                  "properties": {
+                    "session_name": {
+                      "description": "The display name of the chat channel or direct message session.",
+                      "type": "string"
+                    },
+                    "session_id": {
+                      "description": "The chat session identifier.",
+                      "type": "string"
+                    },
+                    "messages": {
+                      "items": {
+                        "properties": {
+                          "sender_display_name": {
+                            "description": "The display name of the user who sent this message.",
+                            "type": "string"
+                          },
+                          "message_id": {
+                            "description": "The globally unique identifier for this message.",
+                            "type": "string"
+                          },
+                          "message": {
+                            "description": "The plain-text content of the message.",
+                            "type": "string"
+                          },
+                          "reply_main_message_id": {
+                            "description": "The message_id of the main message in the reply thread. For a top-level message, this equals the message's own message_id.",
+                            "type": "string"
+                          },
+                          "sent_time": {
+                            "format": "date-time",
+                            "type": "string",
+                            "description": "The time when this message was originally sent (ISO 8601 UTC)."
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "description": "List of messages from this channel that matched the search query, sorted by sent_time ascending."
+                    },
+                    "datasource": {
+                      "type": "string",
+                      "enum": [
+                        "zoom_chat_message"
+                      ],
+                      "description": "Identifies this result as a chat message item."
+                    }
+                  }
+                },
+                {
+                  "title": "ChatSessionResponseItem",
+                  "type": "object",
+                  "properties": {
+                    "session_name": {
+                      "description": "The display name of the chat session or channel.",
+                      "type": "string"
+                    },
+                    "created_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The time when the session was created (ISO 8601 UTC)."
+                    },
+                    "member_count": {
+                      "description": "The number of members in the session.",
+                      "type": "integer"
+                    },
+                    "session_id": {
+                      "description": "The unique session identifier.",
+                      "type": "string"
+                    },
+                    "datasource": {
+                      "type": "string",
+                      "enum": [
+                        "zoom_chat_session"
+                      ],
+                      "description": "Identifies this result as a chat session item."
+                    },
+                    "description": {
+                      "description": "The description of the chat session.",
+                      "type": "string"
+                    },
+                    "is_archived": {
+                      "description": "Whether the session is archived.",
+                      "type": "boolean"
+                    }
+                  }
+                },
+                {
+                  "title": "ZoomCanvasResponseItem",
+                  "type": "object",
+                  "properties": {
+                    "datasource": {
+                      "type": "string",
+                      "enum": [
+                        "zoom_canvas"
+                      ],
+                      "description": "Identifies this result as a Zoom Canvas item."
+                    },
+                    "ancestors": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "description": "The ancestor folder IDs in the document hierarchy."
+                    },
+                    "create_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The time when the document was created (ISO 8601 UTC)."
+                    },
+                    "modify_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The time when the document was last modified (ISO 8601 UTC)."
+                    },
+                    "public_status": {
+                      "description": "The public sharing status of the document.",
+                      "type": "string"
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "enum": [
+                        "doc",
+                        "space",
+                        "folder",
+                        "sheet",
+                        "database",
+                        "presentation",
+                        "shortcut",
+                        "classicDoc"
+                      ],
+                      "description": "The content type of the document (doc, space, folder, sheet, etc.)."
+                    },
+                    "title": {
+                      "description": "The display title of the document.",
+                      "type": "string"
+                    },
+                    "file_id": {
+                      "description": "The unique identifier of the document.",
+                      "type": "string"
+                    },
+                    "link": {
+                      "description": "The URL link to the document.",
+                      "type": "string"
+                    },
+                    "created_by": {
+                      "description": "The user ID of the document creator.",
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "title": "ThirdPartyFileResponseItem",
+                  "type": "object",
+                  "properties": {
+                    "extension": {
+                      "description": "The file extension.",
+                      "type": "string"
+                    },
+                    "datasource": {
+                      "type": "string",
+                      "enum": [
+                        "third_party_file"
+                      ],
+                      "description": "Identifies this result as a third-party file item."
+                    },
+                    "create_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The time when the file was created (ISO 8601 UTC)."
+                    },
+                    "size": {
+                      "format": "int64",
+                      "type": "integer",
+                      "description": "The file size in bytes."
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "box",
+                        "seismic",
+                        "confluence",
+                        "workday",
+                        "google_drive",
+                        "one_drive",
+                        "salesforce",
+                        "service_now",
+                        "sharepoint",
+                        "zendesk"
+                      ],
+                      "description": "The third-party source that owns the file."
+                    },
+                    "file_type": {
+                      "type": "string",
+                      "enum": [
+                        "google_slides",
+                        "google_sheets",
+                        "google_docs",
+                        "pptx",
+                        "xlsx",
+                        "docx",
+                        "pdf",
+                        "md",
+                        "csv",
+                        "html",
+                        "txt"
+                      ],
+                      "description": "The canonical third-party file type."
+                    },
+                    "modify_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The time when the file was last modified (ISO 8601 UTC)."
+                    },
+                    "file_id": {
+                      "description": "The unique identifier of the third-party file.",
+                      "type": "string"
+                    },
+                    "title": {
+                      "description": "The display title of the file.",
+                      "type": "string"
+                    },
+                    "file_link": {
+                      "description": "The direct URL to open this third-party file.",
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "title": "CalendarResponseItem",
+                  "type": "object",
+                  "properties": {
+                    "event_id": {
+                      "description": "The unique event identifier.",
+                      "type": "string"
+                    },
+                    "occurrence_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The scheduled occurrence time for a single instance of a recurring event (ISO 8601 UTC)."
+                    },
+                    "topic": {
+                      "description": "The topic or title of the calendar event.",
+                      "type": "string"
+                    },
+                    "datasource": {
+                      "type": "string",
+                      "enum": [
+                        "calendar"
+                      ],
+                      "description": "Identifies this result as a calendar item."
+                    },
+                    "schedule_start_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The scheduled start time of the calendar event (ISO 8601 UTC). Only the gte operator is supported for filtering."
+                    },
+                    "attendee_count": {
+                      "description": "The total number of attendees in the event.",
+                      "type": "integer"
+                    },
+                    "location": {
+                      "description": "The location of the calendar event.",
+                      "type": "string"
+                    },
+                    "description": {
+                      "description": "The description of the calendar event.",
+                      "type": "string"
+                    },
+                    "organizer_email": {
+                      "description": "The email address of the event organizer.",
+                      "type": "string"
+                    },
+                    "source": {
+                      "description": "The calendar source type.",
+                      "type": "string"
+                    },
+                    "schedule_end_time": {
+                      "format": "date-time",
+                      "type": "string",
+                      "description": "The scheduled end time of the calendar event (ISO 8601 UTC). Only the lte operator is supported for filtering."
+                    },
+                    "meeting_number": {
+                      "format": "int64",
+                      "type": "integer",
+                      "description": "The meeting number associated with the calendar event."
+                    },
+                    "attendees": {
+                      "items": {
+                        "properties": {
+                          "display_name": {
+                            "description": "The display name of the attendee.",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "description": "The list of attendees in this event."
+                    },
+                    "is_recurring": {
+                      "description": "Whether the event is recurring.",
+                      "type": "boolean"
+                    },
+                    "organizer_display_name": {
+                      "description": "The display name of the event organizer. Omitted when the host cannot be resolved.",
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            },
+            "type": "array",
+            "description": "Flat list of search result items merged from all requested datasources. Each item's shape is determined by its `datasource` field. Items are sorted by relevance score (descending) and temporal proximity to the current time."
+          },
+          "has_more": {
+            "description": "Whether additional results are available beyond the current page across any of the queried datasources. When true, pass `next_page_token` in the next request to fetch more.",
+            "type": "boolean"
+          },
+          "next_page_token": {
+            "description": "Opaque pagination token for the merged result set. When `has_more` is true, pass this exact value back in a subsequent request (with the same `query`/`datasource_filters`) to retrieve the next page. Null when there are no further results.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "search",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://widget/meeting-list-card.html"
+        }
+      },
+      "description": "# Search\n\n**READ-ONLY**\n\nReturns pageable records from the user's accessible Zoom workspace across `zoom_meeting`, `calendar`, `zoom_chat_message`, `zoom_chat_session`, `zoom_canvas`, and `third_party_file`.\n\n## Tool selection\n\nSearch suits get, find, list, browse, and open requests. Ask suits summaries, explanations, comparisons, decisions, risks, themes, and action items requiring one synthesized answer.\n\n## Search planning\n\n1. **Decode the request.** Separate full-text terms for `query`, datasource families, and metadata slots. Slots include identifiers, type or format, view or provider, ownership or hierarchy, people or organization, time ranges, states or availability, and numeric thresholds. A natural-language constraint is a slot even when its API field name is unknown.\n2. **Select datasources.** Use the union of all matching record families:\n   - Notes or My Notes add `zoom_canvas` with `doc_type=notes`.\n   - Meetings or schedules add both `zoom_meeting` and `calendar`.\n   - A request combining Notes and meeting terms therefore searches all three, applying `doc_type=notes` only to `zoom_canvas`.\n   - Zoom Chat adds both `zoom_chat_session` for chat groups and `zoom_chat_message` for message content.\n   - Files from Box, Seismic, Confluence, Workday, Google Drive, OneDrive, Salesforce, ServiceNow, SharePoint, or Zendesk add `third_party_file`; the provider creates a `source` slot.\n3. **Resolve time context.** Relative or local time slots include today, tomorrow, yesterday, this/last week, named weekdays, and clock times without an offset. Search requires the user's current time zone from user or client context. If unavailable, the user must provide it before Search Describe Capabilities or Search can proceed; an inferred zone is not valid. Local boundaries are converted to ISO 8601 UTC before Search. UTC or offset-aware timestamps need no conversion.\n4. **Resolve filters.** Without metadata slots, Search accepts `query` and datasource scope without filter trees. A metadata slot requires Search Describe Capabilities for every selected datasource. If scope is uncertain, request several schemas together. Each datasource uses a separate filter tree based on its returned names, types, enums, capabilities, and operator restrictions. Fields cannot be transferred between schemas; metadata constraints belong in filters rather than `query` alone.\n\nSearch applies submitted constraints exactly. Empty `data` means no match. Third-party file results may include up to five highest-scored query-matching content chunks.\n\n## Parameters\n\n- **`query`** — Optional full-text terms.\n- **`datasource_filters`** — Optional datasource scopes and separate filter trees.\n- **`page_size`** — Records per datasource; 1–100, default 10.\n- **`next_page_token`** — Continuation token used with the original request.\n\n## Response\n\nReturns `{data, has_more, next_page_token}`.\n"
+    }
+  ]
+}

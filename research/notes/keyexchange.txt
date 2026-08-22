@@ -1,0 +1,2170 @@
+            ;-- func.102a05584:
+            0x102a05584      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a05588      ffc300d1       sub sp, sp, 0x30
+            0x102a0558c      f5cf00a9       stp x21, x19, [sp, 8]
+            0x102a05590      fd7b02a9       stp x29, x30, [sp, 0x20]
+            0x102a05594      f60f00f9       str x22, [sp, 0x18]
+            0x102a05598      fd830091       add x29, sp, 0x20
+            0x102a0559c      c3b600f9       str x3, [x22, 0x168]
+            0x102a055a0      000080d2       mov x0, 0
+            0x102a055a4      43bbad94       bl sym.imp.CryptoKit.SymmetricKey...VMa
+            0x102a055a8      c0ba00f9       str x0, [x22, 0x170]
+            0x102a055ac      08805ff8       ldur x8, [x0, -8]
+            0x102a055b0      c8be00f9       str x8, [x22, 0x178]
+            0x102a055b4      082140f9       ldr x8, [x8, 0x40]
+            0x102a055b8      083d0091       add x8, x8, 0xf
+            0x102a055bc      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a055c0      2cdaad94       bl sym.imp.swift_task_alloc
+            0x102a055c4      c0c200f9       str x0, [x22, 0x180]
+            0x102a055c8      000080d2       mov x0, 0
+            0x102a055cc      81bbad94       bl sym.imp.CryptoKit.P256.Signing.ECDSASignature...VMa
+            0x102a055d0      c0c600f9       str x0, [x22, 0x188]
+            0x102a055d4      08805ff8       ldur x8, [x0, -8]
+            0x102a055d8      c8ca00f9       str x8, [x22, 0x190]
+            0x102a055dc      082140f9       ldr x8, [x8, 0x40]
+            0x102a055e0      083d0091       add x8, x8, 0xf
+            0x102a055e4      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a055e8      22daad94       bl sym.imp.swift_task_alloc
+            0x102a055ec      c0ce00f9       str x0, [x22, 0x198]
+            0x102a055f0      000080d2       mov x0, 0
+            0x102a055f4      80bbad94       bl sym.imp.CryptoKit.P256.Signing.PublicKey...VMa
+            0x102a055f8      c0d200f9       str x0, [x22, 0x1a0]
+            0x102a055fc      08805ff8       ldur x8, [x0, -8]
+            0x102a05600      c8d600f9       str x8, [x22, 0x1a8]
+            0x102a05604      082140f9       ldr x8, [x8, 0x40]
+            0x102a05608      083d0091       add x8, x8, 0xf
+            0x102a0560c      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a05610      18daad94       bl sym.imp.swift_task_alloc
+            0x102a05614      c0da00f9       str x0, [x22, 0x1b0]
+            0x102a05618      000080d2       mov x0, 0
+            0x102a0561c      7fbbad94       bl sym.imp.CryptoKit.SHA256...VMa
+            0x102a05620      c0de00f9       str x0, [x22, 0x1b8]
+            0x102a05624      08805ff8       ldur x8, [x0, -8]
+            0x102a05628      c8e200f9       str x8, [x22, 0x1c0]
+            0x102a0562c      082140f9       ldr x8, [x8, 0x40]
+            0x102a05630      083d0091       add x8, x8, 0xf
+            0x102a05634      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a05638      0edaad94       bl sym.imp.swift_task_alloc
+            0x102a0563c      c0e600f9       str x0, [x22, 0x1c8]
+            0x102a05640      000080d2       mov x0, 0
+            0x102a05644      0cbbad94       bl sym.imp.CryptoKit.SHA256Digest...VMa
+            0x102a05648      c0ea00f9       str x0, [x22, 0x1d0]
+            0x102a0564c      08805ff8       ldur x8, [x0, -8]
+            0x102a05650      c8ee00f9       str x8, [x22, 0x1d8]
+            0x102a05654      082140f9       ldr x8, [x8, 0x40]
+            0x102a05658      083d0091       add x8, x8, 0xf
+            0x102a0565c      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a05660      04daad94       bl sym.imp.swift_task_alloc
+            0x102a05664      c0f200f9       str x0, [x22, 0x1e0]
+            0x102a05668      000080d2       mov x0, 0
+            0x102a0566c      47bbad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Public...D0VMa
+            0x102a05670      c0f600f9       str x0, [x22, 0x1e8]
+            0x102a05674      08805ff8       ldur x8, [x0, -8]
+            0x102a05678      c8fa00f9       str x8, [x22, 0x1f0]
+            0x102a0567c      082140f9       ldr x8, [x8, 0x40]
+            0x102a05680      083d0091       add x8, x8, 0xf
+            0x102a05684      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a05688      fad9ad94       bl sym.imp.swift_task_alloc
+            0x102a0568c      c0fe00f9       str x0, [x22, 0x1f8]
+            0x102a05690      000080d2       mov x0, 0
+            0x102a05694      49bbad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Private...D0VMa
+            0x102a05698      c00201f9       str x0, [x22, 0x200]
+            0x102a0569c      08805ff8       ldur x8, [x0, -8]
+            0x102a056a0      c80601f9       str x8, [x22, 0x208]
+            0x102a056a4      082140f9       ldr x8, [x8, 0x40]
+            0x102a056a8      083d0091       add x8, x8, 0xf
+            0x102a056ac      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a056b0      f0d9ad94       bl sym.imp.swift_task_alloc
+            0x102a056b4      c00a01f9       str x0, [x22, 0x210]
+            0x102a056b8      000080d2       mov x0, 0
+            0x102a056bc      febfad94       bl sym.imp....ScMMa
+            0x102a056c0      f30300aa       mov x19, x0
+            0x102a056c4      b5de01b0       adrp x21, reloc.Dispatch.Time.now_...yFZ_ ; 0x1065da000
+            0x102a056c8      b52e43f9       ldr x21, [x21, 0x658]
+            0x102a056cc      f40300aa       mov x20, x0
+            0x102a056d0      f6bfad94       bl sym.imp.shared_...cMvgZ_ ; shared(...cMvgZ)
+            0x102a056d4      f40300aa       mov x20, x0
+            0x102a056d8      c00e01f9       str x0, [x22, 0x218]
+            0x102a056dc      001102b0       adrp x0, 0x106c26000
+            0x102a056e0      00400691       add x0, x0, 0x190
+            0x102a056e4      a2de01b0       adrp x2, reloc.Dispatch.Time.now_...yFZ_ ; 0x1065da000
+            0x102a056e8      423043f9       ldr x2, [x2, 0x660]
+            0x102a056ec      e10315aa       mov x1, x21
+            0x102a056f0      5f9c5897       bl sym.func.10002c86c
+            0x102a056f4      e10300aa       mov x1, x0
+            0x102a056f8      e00313aa       mov x0, x19
+            0x102a056fc      b8bfad94       bl sym.imp.unownedExecutor_...cevgTj_ ; unownedExecutor(...cevgTj)
+            0x102a05700      e80300aa       mov x8, x0
+            0x102a05704      e20301aa       mov x2, x1
+            0x102a05708      c01201f9       str x0, [x22, 0x220]
+            0x102a0570c      c11601f9       str x1, [x22, 0x228]
+            0x102a05710      00000090       adrp x0, 0x102a05000
+            0x102a05714      00c01c91       add x0, x0, 0x730
+            0x102a05718      e10308aa       mov x1, x8
+            0x102a0571c      fd7b42a9       ldp x29, x30, [sp, 0x20]
+            0x102a05720      f5cf40a9       ldp x21, x19, [sp, 8]
+            0x102a05724      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a05728      ffc30091       add sp, sp, 0x30
+            0x102a0572c      f5d9ad14       b sym.imp.swift_task_switch
+            ;-- func.102a05730:
+            0x102a05730      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a05734      ff4301d1       sub sp, sp, 0x50
+            0x102a05738      f90b00f9       str x25, [sp, 0x10]
+            0x102a0573c      f8df01a9       stp x24, x23, [sp, 0x18]
+            0x102a05740      f5cf02a9       stp x21, x19, [sp, 0x28]
+            0x102a05744      fd7b04a9       stp x29, x30, [sp, 0x40]
+            0x102a05748      f61f00f9       str x22, [sp, 0x38]
+            0x102a0574c      fd030191       add x29, sp, 0x40
+            0x102a05750      d40a41f9       ldr x20, [x22, 0x210]
+            0x102a05754      d94e5fa9       ldp x25, x19, [x22, 0x1f0]
+            0x102a05758      d5f640f9       ldr x21, [x22, 0x1e8]
+            0x102a0575c      e80314aa       mov x8, x20
+            0x102a05760      13bbad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Private...D0VAGycfC
+            0x102a05764      e80313aa       mov x8, x19
+            0x102a05768      0ebbad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Private...D0V06publicD0AE06PublicD0Vvg
+            0x102a0576c      f40313aa       mov x20, x19
+            0x102a05770      00bbad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Public...D0V17rawRepresentation10Foundation4DataVvg
+            0x102a05774      f70300aa       mov x23, x0
+            0x102a05778      f80301aa       mov x24, x1
+            0x102a0577c      c01a01f9       str x0, [x22, 0x230]
+            0x102a05780      c11e01f9       str x1, [x22, 0x238]
+            0x102a05784      280740f9       ldr x8, [x25, 8]
+            0x102a05788      e00313aa       mov x0, x19
+            0x102a0578c      e10315aa       mov x1, x21
+            0x102a05790      00013fd6       blr x8
+            0x102a05794      0800fcd2       mov x8, -0x2000000000000000
+            0x102a05798      ff2300a9       stp xzr, x8, [sp]
+            0x102a0579c      f4030091       mov x20, sp
+            0x102a057a0      60038052       mov w0, 0x1b
+            0x102a057a4      c9c6ad94       bl sym.imp._StringGuts.grow_...SiF_ ; _StringGuts.grow(...SiF)
+            0x102a057a8      e00740f9       ldr x0, [sp, 8]
+            0x102a057ac      4fd8ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a057b0      c88801f0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a057b4      08811791       add x8, x8, 0x5e0
+            0x102a057b8      088100d1       sub x8, x8, 0x20
+            0x102a057bc      080141b2       orr x8, x8, 0x8000000000000000
+            0x102a057c0      c90280d2       mov x9, 0x16
+            0x102a057c4      0900faf2       movk x9, 0xd000, lsl 48
+            0x102a057c8      e92300a9       stp x9, x8, [sp]
+            0x102a057cc      000080d2       mov x0, 0
+            0x102a057d0      e10317aa       mov x1, x23
+            0x102a057d4      e20318aa       mov x2, x24
+            0x102a057d8      b5a6ad94       bl sym.imp.Foundation.Data.base64EncodedString.options.NSDataBase64EncodingOptions...V_tF
+            0x102a057dc      f30301aa       mov x19, x1
+            0x102a057e0      f4030091       mov x20, sp
+            0x102a057e4      e9bdad94       bl sym.imp.append_...ySSF_ ; append(...ySSF)
+            0x102a057e8      e00313aa       mov x0, x19
+            0x102a057ec      3fd8ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a057f0      f4030091       mov x20, sp
+            0x102a057f4      40048452       mov w0, 0x2022             ; '\" '
+            0x102a057f8      a00fa072       movk w0, 0x7d, lsl 16      ; '}'
+            0x102a057fc      0160fcd2       mov x1, -0x1d00000000000000
+            0x102a05800      e2bdad94       bl sym.imp.append_...ySSF_ ; append(...ySSF)
+            0x102a05804      e00740a9       ldp x0, x1, [sp]
+            0x102a05808      bd080094       bl sym.func.102a07afc
+            0x102a0580c      f50300aa       mov x21, x0
+            0x102a05810      f30301aa       mov x19, x1
+            0x102a05814      c02201f9       str x0, [x22, 0x240]
+            0x102a05818      c12601f9       str x1, [x22, 0x248]
+            0x102a0581c      c86c01b0       adrp x8, 0x10579e000
+            0x102a05820      001d40b9       ldr w0, [x8, 0x1c]
+            0x102a05824      93d9ad94       bl sym.imp.swift_task_alloc
+            0x102a05828      e80300aa       mov x8, x0
+            0x102a0582c      c02a01f9       str x0, [x22, 0x250]
+            0x102a05830      09000090       adrp x9, 0x102a05000
+            0x102a05834      29b12191       add x9, x9, 0x86c
+            0x102a05838      162400a9       stp x22, x9, [x0]
+            0x102a0583c      d4b640f9       ldr x20, [x22, 0x168]
+            0x102a05840      c0c20291       add x0, x22, 0xb0
+            0x102a05844      f60308aa       mov x22, x8
+            0x102a05848      e10315aa       mov x1, x21
+            0x102a0584c      e20313aa       mov x2, x19
+            0x102a05850      fd7b44a9       ldp x29, x30, [sp, 0x40]
+            0x102a05854      f5cf42a9       ldp x21, x19, [sp, 0x28]
+            0x102a05858      f8df41a9       ldp x24, x23, [sp, 0x18]
+            0x102a0585c      f90b40f9       ldr x25, [sp, 0x10]
+            0x102a05860      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a05864      ff430191       add sp, sp, 0x50
+            0x102a05868      cd030014       b sym.func.102a0679c
+            ;-- func.102a0586c:
+            0x102a0586c      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a05870      f30f1ef8       str x19, [sp, -0x20]!
+            0x102a05874      fd7b01a9       stp x29, x30, [sp, 0x10]
+            0x102a05878      f60700f9       str x22, [sp, 8]
+            0x102a0587c      fd430091       add x29, sp, 0x10
+            0x102a05880      d30240f9       ldr x19, [x22]
+            0x102a05884      b3831ff8       stur x19, [x29, -8]
+            0x102a05888      602a41f9       ldr x0, [x19, 0x250]
+            0x102a0588c      d60240f9       ldr x22, [x22]
+            0x102a05890      b6831ff8       stur x22, [x29, -8]
+            0x102a05894      742e01f9       str x20, [x19, 0x258]
+            0x102a05898      7cd9ad94       bl sym.imp.swift_task_dealloc
+            0x102a0589c      621641f9       ldr x2, [x19, 0x228]
+            0x102a058a0      611241f9       ldr x1, [x19, 0x220]
+            0x102a058a4      940000b4       cbz x20, 0x102a058b4
+            0x102a058a8      000000b0       adrp x0, 0x102a06000
+            0x102a058ac      00b01691       add x0, x0, 0x5ac
+            0x102a058b0      03000014       b 0x102a058bc
+            0x102a058b4      00000090       adrp x0, 0x102a05000
+            0x102a058b8      00302391       add x0, x0, 0x8cc
+            0x102a058bc      fd7b41a9       ldp x29, x30, [sp, 0x10]
+            0x102a058c0      f30742f8       ldr x19, [sp], 0x20
+            0x102a058c4      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a058c8      8ed9ad14       b sym.imp.swift_task_switch
+            ;-- func.102a058cc:
+            0x102a058cc      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a058d0      ffc301d1       sub sp, sp, 0x70
+            0x102a058d4      fcef01a9       stp x28, x27, [sp, 0x18]
+            0x102a058d8      fae702a9       stp x26, x25, [sp, 0x28]
+            0x102a058dc      f8df03a9       stp x24, x23, [sp, 0x38]
+            0x102a058e0      f5cf04a9       stp x21, x19, [sp, 0x48]
+            0x102a058e4      fd7b06a9       stp x29, x30, [sp, 0x60]
+            0x102a058e8      f62f00f9       str x22, [sp, 0x58]
+            0x102a058ec      fd830191       add x29, sp, 0x60
+            0x102a058f0      fb0316aa       mov x27, x22
+            0x102a058f4      6057cba9       ldp x0, x21, [x27, 0xb0]!
+            0x102a058f8      75db00f9       str x21, [x27, 0x1b0]
+            0x102a058fc      e10315aa       mov x1, x21
+            0x102a05900      020080d2       mov x2, 0
+            0x102a05904      43a6ad94       bl sym.imp.Foundation.Data.base64Encoded.options.NSDataBase64DecodingOptions...VtcfC__1
+            0x102a05908      60871ba9       stp x0, x1, [x27, 0x1b8]
+            0x102a0590c      28fc7cd3       lsr x8, x1, 0x3c
+            0x102a05910      1f3d00f1       cmp x8, 0xf
+            0x102a05914      c3010054       b.lo 0x102a0594c
+            0x102a05918      c00e41f9       ldr x0, [x22, 0x218]
+            0x102a0591c      1fd9ad94       bl sym.imp.swift_release
+            0x102a05920      e00315aa       mov x0, x21
+            0x102a05924      f1d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05928      c032c03d       ldr q0, [x22, 0xc0]
+            0x102a0592c      6083853c       stur q0, [x27, 0x58]
+            0x102a05930      60630191       add x0, x27, 0x58
+            0x102a05934      050d5a97       bl sym.func.100088d48
+            0x102a05938      c036c03d       ldr q0, [x22, 0xd0]
+            0x102a0593c      6083863c       stur q0, [x27, 0x68]
+            0x102a05940      60a30191       add x0, x27, 0x68
+            0x102a05944      010d5a97       bl sym.func.100088d48
+            0x102a05948      31000014       b 0x102a05a0c
+            0x102a0594c      f30300aa       mov x19, x0
+            0x102a05950      f40301aa       mov x20, x1
+            0x102a05954      c05e4ca9       ldp x0, x23, [x22, 0xc0]
+            0x102a05958      d73e01f9       str x23, [x22, 0x278]
+            0x102a0595c      e10317aa       mov x1, x23
+            0x102a05960      020080d2       mov x2, 0
+            0x102a05964      2ba6ad94       bl sym.imp.Foundation.Data.base64Encoded.options.NSDataBase64DecodingOptions...VtcfC__1
+            0x102a05968      c04201f9       str x0, [x22, 0x280]
+            0x102a0596c      c14601f9       str x1, [x22, 0x288]
+            0x102a05970      28fc7cd3       lsr x8, x1, 0x3c
+            0x102a05974      1f3d00f1       cmp x8, 0xf
+            0x102a05978      83010054       b.lo 0x102a059a8
+            0x102a0597c      c00e41f9       ldr x0, [x22, 0x218]
+            0x102a05980      06d9ad94       bl sym.imp.swift_release
+            0x102a05984      e00315aa       mov x0, x21
+            0x102a05988      d8d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a0598c      e00317aa       mov x0, x23
+            0x102a05990      d6d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05994      c036c03d       ldr q0, [x22, 0xd0]
+            0x102a05998      6083873c       stur q0, [x27, 0x78]
+            0x102a0599c      60e30191       add x0, x27, 0x78
+            0x102a059a0      ea0c5a97       bl sym.func.100088d48
+            0x102a059a4      17000014       b 0x102a05a00
+            0x102a059a8      f80301aa       mov x24, x1
+            0x102a059ac      f90300aa       mov x25, x0
+            0x102a059b0      c06a4da9       ldp x0, x26, [x22, 0xd0]
+            0x102a059b4      c04a01f9       str x0, [x22, 0x290]
+            0x102a059b8      da4e01f9       str x26, [x22, 0x298]
+            0x102a059bc      e1031aaa       mov x1, x26
+            0x102a059c0      020080d2       mov x2, 0
+            0x102a059c4      13a6ad94       bl sym.imp.Foundation.Data.base64Encoded.options.NSDataBase64DecodingOptions...VtcfC__1
+            0x102a059c8      28fc7cd3       lsr x8, x1, 0x3c
+            0x102a059cc      1f3900f1       cmp x8, 0xe
+            0x102a059d0      090a0054       b.ls 0x102a05b10
+            0x102a059d4      c00e41f9       ldr x0, [x22, 0x218]
+            0x102a059d8      f0d8ad94       bl sym.imp.swift_release
+            0x102a059dc      e00315aa       mov x0, x21
+            0x102a059e0      c2d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a059e4      e00317aa       mov x0, x23
+            0x102a059e8      c0d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a059ec      e0031aaa       mov x0, x26
+            0x102a059f0      bed7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a059f4      e00319aa       mov x0, x25
+            0x102a059f8      e10318aa       mov x1, x24
+            0x102a059fc      63a75897       bl sym.func.10002f788
+            0x102a05a00      e00313aa       mov x0, x19
+            0x102a05a04      e10314aa       mov x1, x20
+            0x102a05a08      60a75897       bl sym.func.10002f788
+            0x102a05a0c      d32641f9       ldr x19, [x22, 0x248]
+            0x102a05a10      d72241f9       ldr x23, [x22, 0x240]
+            0x102a05a14      d81e41f9       ldr x24, [x22, 0x238]
+            0x102a05a18      d91a41f9       ldr x25, [x22, 0x230]
+            0x102a05a1c      da0a41f9       ldr x26, [x22, 0x210]
+            0x102a05a20      dc0641f9       ldr x28, [x22, 0x208]
+            0x102a05a24      db0241f9       ldr x27, [x22, 0x200]
+            0x102a05a28      c88801f0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a05a2c      08011891       add x8, x8, 0x600
+            0x102a05a30      088100d1       sub x8, x8, 0x20
+            0x102a05a34      150141b2       orr x21, x8, 0x8000000000000000
+            0x102a05a38      9b210094       bl sym.func.102a0e0a4
+            0x102a05a3c      e10300aa       mov x1, x0
+            0x102a05a40      40eb01f0       adrp x0, 0x106770000
+            0x102a05a44      00000d91       add x0, x0, 0x340
+            0x102a05a48      020080d2       mov x2, 0
+            0x102a05a4c      03008052       mov w3, 0
+            0x102a05a50      7fd7ad94       bl sym.imp.swift_allocError
+            0x102a05a54      f40300aa       mov x20, x0
+            0x102a05a58      080680d2       mov x8, 0x30               ; '0'
+            0x102a05a5c      0800faf2       movk x8, 0xd000, lsl 48
+            0x102a05a60      285400a9       stp x8, x21, [x1]
+            0x102a05a64      28008052       mov w8, 1
+            0x102a05a68      28400039       strb w8, [x1, 0x10]
+            0x102a05a6c      f50300aa       mov x21, x0
+            0x102a05a70      7bd9ad94       bl sym.imp.swift_willThrow
+            0x102a05a74      e00317aa       mov x0, x23
+            0x102a05a78      e10313aa       mov x1, x19
+            0x102a05a7c      649f5897       bl sym.func.10002d80c
+            0x102a05a80      e00319aa       mov x0, x25
+            0x102a05a84      e10318aa       mov x1, x24
+            0x102a05a88      619f5897       bl sym.func.10002d80c
+            0x102a05a8c      880740f9       ldr x8, [x28, 8]
+            0x102a05a90      e0031aaa       mov x0, x26
+            0x102a05a94      e1031baa       mov x1, x27
+            0x102a05a98      00013fd6       blr x8
+            0x102a05a9c      c00a41f9       ldr x0, [x22, 0x210]
+            0x102a05aa0      d3fe40f9       ldr x19, [x22, 0x1f8]
+            0x102a05aa4      d5f240f9       ldr x21, [x22, 0x1e0]
+            0x102a05aa8      d7e640f9       ldr x23, [x22, 0x1c8]
+            0x102a05aac      d8da40f9       ldr x24, [x22, 0x1b0]
+            0x102a05ab0      d9ce40f9       ldr x25, [x22, 0x198]
+            0x102a05ab4      dac240f9       ldr x26, [x22, 0x180]
+            0x102a05ab8      f4d8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05abc      e00313aa       mov x0, x19
+            0x102a05ac0      f2d8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05ac4      e00315aa       mov x0, x21
+            0x102a05ac8      f0d8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05acc      e00317aa       mov x0, x23
+            0x102a05ad0      eed8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05ad4      e00318aa       mov x0, x24
+            0x102a05ad8      ecd8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05adc      e00319aa       mov x0, x25
+            0x102a05ae0      ead8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05ae4      e0031aaa       mov x0, x26
+            0x102a05ae8      e8d8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05aec      c00640f9       ldr x0, [x22, 8]
+            0x102a05af0      fd7b46a9       ldp x29, x30, [sp, 0x60]
+            0x102a05af4      f5cf44a9       ldp x21, x19, [sp, 0x48]
+            0x102a05af8      f8df43a9       ldp x24, x23, [sp, 0x38]
+            0x102a05afc      fae742a9       ldp x26, x25, [sp, 0x28]
+            0x102a05b00      fcef41a9       ldp x28, x27, [sp, 0x18]
+            0x102a05b04      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a05b08      ffc30191       add sp, sp, 0x70
+            0x102a05b0c      00001fd6       br x0
+            0x102a05b10      748302d1       sub x20, x27, 0xa0
+            0x102a05b14      d3b640f9       ldr x19, [x22, 0x168]
+            0x102a05b18      1ca75897       bl sym.func.10002f788
+            0x102a05b1c      68620991       add x8, x19, 0x258
+            0x102a05b20      0001c03d       ldr q0, [x8]
+            0x102a05b24      8002803d       str q0, [x20]
+            0x102a05b28      008540ad       ldp q0, q1, [x8, 0x10]
+            0x102a05b2c      028d41ad       ldp q2, q3, [x8, 0x30]
+            0x102a05b30      828e01ad       stp q2, q3, [x20, 0x30]
+            0x102a05b34      808600ad       stp q0, q1, [x20, 0x10]
+            0x102a05b38      131102b0       adrp x19, 0x106c26000
+            0x102a05b3c      73e21191       add x19, x19, 0x478
+            0x102a05b40      d56c01b0       adrp x21, 0x10579e000
+            0x102a05b44      b5820091       add x21, x21, 0x20
+            0x102a05b48      c1820191       add x1, x22, 0x60
+            0x102a05b4c      e00314aa       mov x0, x20
+            0x102a05b50      e20313aa       mov x2, x19
+            0x102a05b54      e30315aa       mov x3, x21
+            0x102a05b58      12005897       bl sym.func.100005ba0
+            0x102a05b5c      e00313aa       mov x0, x19
+            0x102a05b60      e10315aa       mov x1, x21
+            0x102a05b64      7df95797       bl sym.func.100004158
+            0x102a05b68      c8e20491       add x8, x22, 0x138
+            0x102a05b6c      d9d26197       bl sym.func.10027a6d0
+            0x102a05b70      e00314aa       mov x0, x20
+            0x102a05b74      e10313aa       mov x1, x19
+            0x102a05b78      e20315aa       mov x2, x21
+            0x102a05b7c      f0ff5797       bl sym.func.100005b3c
+            0x102a05b80      c8d253a9       ldp x8, x20, [x22, 0x138]
+            0x102a05b84      d45201f9       str x20, [x22, 0x2a0]
+            0x102a05b88      09014029       ldp w9, w0, [x8]
+            0x102a05b8c      297d4093       sxtw x9, w9
+            0x102a05b90      2101088b       add x1, x9, x8
+            0x102a05b94      e10700f9       str x1, [sp, 8]
+            0x102a05b98      b6d8ad94       bl sym.imp.swift_task_alloc
+            0x102a05b9c      c05601f9       str x0, [x22, 0x2a8]
+            0x102a05ba0      08000090       adrp x8, 0x102a05000
+            0x102a05ba4      08e12e91       add x8, x8, 0xbb8
+            0x102a05ba8      162000a9       stp x22, x8, [x0]
+            0x102a05bac      f60300aa       mov x22, x0
+            0x102a05bb0      e00740f9       ldr x0, [sp, 8]
+            0x102a05bb4      cfffff17       b 0x102a05af0
+            ;-- func.102a05bb8:
+            0x102a05bb8      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a05bbc      f70f1df8       str x23, [sp, -0x30]!
+            0x102a05bc0      f5cf00a9       stp x21, x19, [sp, 8]
+            0x102a05bc4      fd7b02a9       stp x29, x30, [sp, 0x20]
+            0x102a05bc8      f60f00f9       str x22, [sp, 0x18]
+            0x102a05bcc      fd830091       add x29, sp, 0x20
+            0x102a05bd0      d70240f9       ldr x23, [x22]
+            0x102a05bd4      b7831ff8       stur x23, [x29, -8]
+            0x102a05bd8      e85641f9       ldr x8, [x23, 0x2a8]
+            0x102a05bdc      d60240f9       ldr x22, [x22]
+            0x102a05be0      b6831ff8       stur x22, [x29, -8]
+            0x102a05be4      e05a01f9       str x0, [x23, 0x2b0]
+            0x102a05be8      e15e01f9       str x1, [x23, 0x2b8]
+            0x102a05bec      f46201f9       str x20, [x23, 0x2c0]
+            0x102a05bf0      e00308aa       mov x0, x8
+            0x102a05bf4      a5d8ad94       bl sym.imp.swift_task_dealloc
+            0x102a05bf8      e05241f9       ldr x0, [x23, 0x2a0]
+            0x102a05bfc      140200b4       cbz x20, 0x102a05c3c
+            0x102a05c00      f44e41f9       ldr x20, [x23, 0x298]
+            0x102a05c04      f33e41f9       ldr x19, [x23, 0x278]
+            0x102a05c08      f53241f9       ldr x21, [x23, 0x260]
+            0x102a05c0c      63d8ad94       bl sym.imp.swift_release
+            0x102a05c10      e00315aa       mov x0, x21
+            0x102a05c14      35d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05c18      e00313aa       mov x0, x19
+            0x102a05c1c      33d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05c20      e00314aa       mov x0, x20
+            0x102a05c24      31d7ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05c28      e21641f9       ldr x2, [x23, 0x228]
+            0x102a05c2c      e11241f9       ldr x1, [x23, 0x220]
+            0x102a05c30      000000b0       adrp x0, 0x102a06000
+            0x102a05c34      00301a91       add x0, x0, 0x68c
+            0x102a05c38      06000014       b 0x102a05c50
+            0x102a05c3c      57d8ad94       bl sym.imp.swift_release
+            0x102a05c40      e21641f9       ldr x2, [x23, 0x228]
+            0x102a05c44      e11241f9       ldr x1, [x23, 0x220]
+            0x102a05c48      00000090       adrp x0, 0x102a05000
+            0x102a05c4c      00903191       add x0, x0, 0xc64
+            0x102a05c50      fd7b42a9       ldp x29, x30, [sp, 0x20]
+            0x102a05c54      f5cf40a9       ldp x21, x19, [sp, 8]
+            0x102a05c58      f70743f8       ldr x23, [sp], 0x30
+            0x102a05c5c      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a05c60      a8d8ad14       b sym.imp.swift_task_switch
+            ;-- func.102a05c64:
+            0x102a05c64      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a05c68      ff0304d1       sub sp, sp, 0x100
+            0x102a05c6c      fcef0aa9       stp x28, x27, [sp, 0xa8]
+            0x102a05c70      fae70ba9       stp x26, x25, [sp, 0xb8]
+            0x102a05c74      f8df0ca9       stp x24, x23, [sp, 0xc8]
+            0x102a05c78      f5cf0da9       stp x21, x19, [sp, 0xd8]
+            0x102a05c7c      fd7b0fa9       stp x29, x30, [sp, 0xf0]
+            0x102a05c80      f67700f9       str x22, [sp, 0xe8]
+            0x102a05c84      fdc30391       add x29, sp, 0xf0
+            0x102a05c88      d56241f9       ldr x21, [x22, 0x2c0]
+            0x102a05c8c      c85e41f9       ldr x8, [x22, 0x2b8]
+            0x102a05c90      a88319f8       stur x8, [x29, -0x68]
+            0x102a05c94      c95a41f9       ldr x9, [x22, 0x2b0]
+            0x102a05c98      d43a41f9       ldr x20, [x22, 0x270]
+            0x102a05c9c      d33641f9       ldr x19, [x22, 0x268]
+            0x102a05ca0      d71e41f9       ldr x23, [x22, 0x238]
+            0x102a05ca4      d91a41f9       ldr x25, [x22, 0x230]
+            0x102a05ca8      c00e41f9       ldr x0, [x22, 0x218]
+            0x102a05cac      caf240f9       ldr x10, [x22, 0x1e0]
+            0x102a05cb0      c82e5ca9       ldp x8, x11, [x22, 0x1c0]
+            0x102a05cb4      eb2b06a9       stp x11, x10, [sp, 0x60]
+            0x102a05cb8      e82707a9       stp x8, x9, [sp, 0x70]
+            0x102a05cbc      c8725ba9       ldp x8, x28, [x22, 0x1b0]
+            0x102a05cc0      a80319f8       stur x8, [x29, -0x70]
+            0x102a05cc4      35d8ad94       bl sym.imp.swift_release
+            0x102a05cc8      f80316aa       mov x24, x22
+            0x102a05ccc      190f0ef8       str x25, [x24, 0xe0]!
+            0x102a05cd0      41de01b0       adrp x1, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a05cd4      212442f9       ldr x1, [x1, 0x448]
+            0x102a05cd8      b3533aa9       stp x19, x20, [x29, -0x60]
+            0x102a05cdc      48de01b0       adrp x8, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a05ce0      081d42f9       ldr x8, [x8, 0x438]
+            0x102a05ce4      01a301a9       stp x1, x8, [x24, 0x18]
+            0x102a05ce8      170700f9       str x23, [x24, 8]
+            0x102a05cec      e00318aa       mov x0, x24
+            0x102a05cf0      39005897       bl sym.func.100005dd4
+            0x102a05cf4      1a6c40a9       ldp x26, x27, [x0]
+            0x102a05cf8      e00313aa       mov x0, x19
+            0x102a05cfc      e10314aa       mov x1, x20
+            0x102a05d00      fe535997       bl sym.func.10005acf8
+            0x102a05d04      e00319aa       mov x0, x25
+            0x102a05d08      e10317aa       mov x1, x23
+            0x102a05d0c      8fa65897       bl sym.func.10002f748
+            0x102a05d10      a28301d1       sub x2, x29, 0x60
+            0x102a05d14      e0031aaa       mov x0, x26
+            0x102a05d18      e1031baa       mov x1, x27
+            0x102a05d1c      f8f96997       bl sym.func.1004844fc
+            0x102a05d20      e00318aa       mov x0, x24
+            0x102a05d24      58f95797       bl sym.func.100004284
+            0x102a05d28      b36b7aa9       ldp x19, x26, [x29, -0x60]
+            0x102a05d2c      001102b0       adrp x0, 0x106c26000
+            0x102a05d30      00001291       add x0, x0, 0x480
+            0x102a05d34      61de01d0       adrp x1, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a05d38      211041f9       ldr x1, [x1, 0x220]
+            0x102a05d3c      62de01d0       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a05d40      420841f9       ldr x2, [x2, 0x210]
+            0x102a05d44      ca9a5897       bl sym.func.10002c86c
+            0x102a05d48      f90300aa       mov x25, x0
+            0x102a05d4c      f73340f9       ldr x23, [sp, 0x60]
+            0x102a05d50      e80317aa       mov x8, x23
+            0x102a05d54      f4031caa       mov x20, x28
+            0x102a05d58      e0031caa       mov x0, x28
+            0x102a05d5c      e10319aa       mov x1, x25
+            0x102a05d60      3fb9ad94       bl sym.imp.CryptoKit.HashFunction_...ycfCTj_ ; CryptoKit.HashFunction(...ycfCTj)
+            0x102a05d64      e00313aa       mov x0, x19
+            0x102a05d68      e1031aaa       mov x1, x26
+            0x102a05d6c      77a65897       bl sym.func.10002f748
+            0x102a05d70      e00313aa       mov x0, x19
+            0x102a05d74      e1031aaa       mov x1, x26
+            0x102a05d78      e20317aa       mov x2, x23
+            0x102a05d7c      1e200094       bl sym.func.102a0ddf4
+            0x102a05d80      e00313aa       mov x0, x19
+            0x102a05d84      e1031aaa       mov x1, x26
+            0x102a05d88      a19e5897       bl sym.func.10002d80c
+            0x102a05d8c      e83740f9       ldr x8, [sp, 0x68]
+            0x102a05d90      f40317aa       mov x20, x23
+            0x102a05d94      e0031caa       mov x0, x28
+            0x102a05d98      e10319aa       mov x1, x25
+            0x102a05d9c      2ab9ad94       bl sym.imp.CryptoKit.HashFunction.finalize.Digest_...zyFTj_ ; CryptoKit.HashFunction.finalize.Digest(...zyFTj)
+            0x102a05da0      e83b40f9       ldr x8, [sp, 0x70]
+            0x102a05da4      080540f9       ldr x8, [x8, 8]
+            0x102a05da8      e00317aa       mov x0, x23
+            0x102a05dac      e1031caa       mov x1, x28
+            0x102a05db0      00013fd6       blr x8
+            0x102a05db4      e03f40f9       ldr x0, [sp, 0x78]
+            0x102a05db8      a18359f8       ldur x1, [x29, -0x68]
+            0x102a05dbc      008706a9       stp x0, x1, [x24, 0x68]
+            0x102a05dc0      62a65897       bl sym.func.10002f748
+            0x102a05dc4      00a30191       add x0, x24, 0x68
+            0x102a05dc8      a80359f8       ldur x8, [x29, -0x70]
+            0x102a05dcc      41de01b0       adrp x1, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a05dd0      212442f9       ldr x1, [x1, 0x448]
+            0x102a05dd4      42de01b0       adrp x2, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a05dd8      421c42f9       ldr x2, [x2, 0x438]
+            0x102a05ddc      83b9ad94       bl sym.imp.CryptoKit.P256.Signing.PublicKey.rawRepresentation.Foundation.ContiguousBytes_...lufC_ ; CryptoKit.P256.Signing.PublicKey.rawRepresentation.Foundation.ContiguousBytes(...lufC)
+            0x102a05de0      b58319f8       stur x21, [x29, -0x68]
+            0x102a05de4      f50600b4       cbz x21, 0x102a05ec0
+            0x102a05de8      d45e41f9       ldr x20, [x22, 0x2b8]
+            0x102a05dec      d85a41f9       ldr x24, [x22, 0x2b0]
+            0x102a05df0      d94e41f9       ldr x25, [x22, 0x298]
+            0x102a05df4      c84641f9       ldr x8, [x22, 0x288]
+            0x102a05df8      e82700f9       str x8, [sp, 0x48]
+            0x102a05dfc      c84241f9       ldr x8, [x22, 0x280]
+            0x102a05e00      e81f00f9       str x8, [sp, 0x38]
+            0x102a05e04      dc3e41f9       ldr x28, [x22, 0x278]
+            0x102a05e08      c93a41f9       ldr x9, [x22, 0x270]
+            0x102a05e0c      c83641f9       ldr x8, [x22, 0x268]
+            0x102a05e10      e82706a9       stp x8, x9, [sp, 0x60]
+            0x102a05e14      db3241f9       ldr x27, [x22, 0x260]
+            0x102a05e18      c12641f9       ldr x1, [x22, 0x248]
+            0x102a05e1c      c02241f9       ldr x0, [x22, 0x240]
+            0x102a05e20      d51e41f9       ldr x21, [x22, 0x238]
+            0x102a05e24      d71a41f9       ldr x23, [x22, 0x230]
+            0x102a05e28      c80a41f9       ldr x8, [x22, 0x210]
+            0x102a05e2c      a80319f8       stur x8, [x29, -0x70]
+            0x102a05e30      c90641f9       ldr x9, [x22, 0x208]
+            0x102a05e34      c80241f9       ldr x8, [x22, 0x200]
+            0x102a05e38      e92307a9       stp x9, x8, [sp, 0x70]
+            0x102a05e3c      c8a65da9       ldp x8, x9, [x22, 0x1d8]
+            0x102a05e40      e82300f9       str x8, [sp, 0x40]
+            0x102a05e44      c8ea40f9       ldr x8, [x22, 0x1d0]
+            0x102a05e48      e82705a9       stp x8, x9, [sp, 0x50]
+            0x102a05e4c      709e5897       bl sym.func.10002d80c
+            0x102a05e50      e00313aa       mov x0, x19
+            0x102a05e54      e1031aaa       mov x1, x26
+            0x102a05e58      6d9e5897       bl sym.func.10002d80c
+            0x102a05e5c      e00318aa       mov x0, x24
+            0x102a05e60      e10314aa       mov x1, x20
+            0x102a05e64      6a9e5897       bl sym.func.10002d80c
+            0x102a05e68      e0031baa       mov x0, x27
+            0x102a05e6c      9fd6ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05e70      e0031caa       mov x0, x28
+            0x102a05e74      9dd6ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05e78      e00319aa       mov x0, x25
+            0x102a05e7c      9bd6ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05e80      e01f40f9       ldr x0, [sp, 0x38]
+            0x102a05e84      e12740f9       ldr x1, [sp, 0x48]
+            0x102a05e88      40a65897       bl sym.func.10002f788
+            0x102a05e8c      e00317aa       mov x0, x23
+            0x102a05e90      e10315aa       mov x1, x21
+            0x102a05e94      5e9e5897       bl sym.func.10002d80c
+            0x102a05e98      e00746a9       ldp x0, x1, [sp, 0x60]
+            0x102a05e9c      3ba65897       bl sym.func.10002f788
+            0x102a05ea0      e82340f9       ldr x8, [sp, 0x40]
+            0x102a05ea4      080540f9       ldr x8, [x8, 8]
+            0x102a05ea8      e10345a9       ldp x1, x0, [sp, 0x50]
+            0x102a05eac      00013fd6       blr x8
+            0x102a05eb0      e80747a9       ldp x8, x1, [sp, 0x70]
+            0x102a05eb4      080540f9       ldr x8, [x8, 8]
+            0x102a05eb8      a00359f8       ldur x0, [x29, -0x70]
+            0x102a05ebc      fb000014       b 0x102a062a8
+            0x102a05ec0      b30319f8       stur x19, [x29, -0x70]
+            0x102a05ec4      c14641f9       ldr x1, [x22, 0x288]
+            0x102a05ec8      c04241f9       ldr x0, [x22, 0x280]
+            0x102a05ecc      d4ce40f9       ldr x20, [x22, 0x198]
+            0x102a05ed0      c08615a9       stp x0, x1, [x22, 0x158]
+            0x102a05ed4      1da65897       bl sym.func.10002f748
+            0x102a05ed8      61250094       bl sym.func.102a0f45c
+            0x102a05edc      e20300aa       mov x2, x0
+            0x102a05ee0      41de01b0       adrp x1, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a05ee4      212442f9       ldr x1, [x1, 0x448]
+            0x102a05ee8      00e30191       add x0, x24, 0x78
+            0x102a05eec      e80314aa       mov x8, x20
+            0x102a05ef0      b58359f8       ldur x21, [x29, -0x68]
+            0x102a05ef4      34b9ad94       bl sym.imp.CryptoKit.P256.Signing.ECDSASignature.derRepresentation.Foundation.DataProtocol_...lufC_ ; CryptoKit.P256.Signing.ECDSASignature.derRepresentation.Foundation.DataProtocol(...lufC)
+            0x102a05ef8      b58319f8       stur x21, [x29, -0x68]
+            0x102a05efc      350800b4       cbz x21, 0x102a06000
+            0x102a05f00      d35e41f9       ldr x19, [x22, 0x2b8]
+            0x102a05f04      d55a41f9       ldr x21, [x22, 0x2b0]
+            0x102a05f08      d74e41f9       ldr x23, [x22, 0x298]
+            0x102a05f0c      c84641f9       ldr x8, [x22, 0x288]
+            0x102a05f10      e81f00f9       str x8, [sp, 0x38]
+            0x102a05f14      c84241f9       ldr x8, [x22, 0x280]
+            0x102a05f18      e81700f9       str x8, [sp, 0x28]
+            0x102a05f1c      db3e41f9       ldr x27, [x22, 0x278]
+            0x102a05f20      c93a41f9       ldr x9, [x22, 0x270]
+            0x102a05f24      ca3641f9       ldr x10, [x22, 0x268]
+            0x102a05f28      d83241f9       ldr x24, [x22, 0x260]
+            0x102a05f2c      c12641f9       ldr x1, [x22, 0x248]
+            0x102a05f30      c02241f9       ldr x0, [x22, 0x240]
+            0x102a05f34      dc1e41f9       ldr x28, [x22, 0x238]
+            0x102a05f38      d41a41f9       ldr x20, [x22, 0x230]
+            0x102a05f3c      cb0a41f9       ldr x11, [x22, 0x210]
+            0x102a05f40      c80641f9       ldr x8, [x22, 0x208]
+            0x102a05f44      e83700f9       str x8, [sp, 0x68]
+            0x102a05f48      c80241f9       ldr x8, [x22, 0x200]
+            0x102a05f4c      e82f07a9       stp x8, x11, [sp, 0x70]
+            0x102a05f50      c8ae5da9       ldp x8, x11, [x22, 0x1d8]
+            0x102a05f54      e9af05a9       stp x9, x11, [sp, 0x58]
+            0x102a05f58      e82b04a9       stp x8, x10, [sp, 0x40]
+            0x102a05f5c      c8ea40f9       ldr x8, [x22, 0x1d0]
+            0x102a05f60      e82b00f9       str x8, [sp, 0x50]
+            0x102a05f64      d9a25aa9       ldp x25, x8, [x22, 0x1a8]
+            0x102a05f68      e81b00f9       str x8, [sp, 0x30]
+            0x102a05f6c      c8d240f9       ldr x8, [x22, 0x1a0]
+            0x102a05f70      e81300f9       str x8, [sp, 0x20]
+            0x102a05f74      269e5897       bl sym.func.10002d80c
+            0x102a05f78      a00359f8       ldur x0, [x29, -0x70]
+            0x102a05f7c      e1031aaa       mov x1, x26
+            0x102a05f80      239e5897       bl sym.func.10002d80c
+            0x102a05f84      e00315aa       mov x0, x21
+            0x102a05f88      e10313aa       mov x1, x19
+            0x102a05f8c      209e5897       bl sym.func.10002d80c
+            0x102a05f90      e00318aa       mov x0, x24
+            0x102a05f94      55d6ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05f98      e0031baa       mov x0, x27
+            0x102a05f9c      53d6ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05fa0      e00317aa       mov x0, x23
+            0x102a05fa4      51d6ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a05fa8      e01740f9       ldr x0, [sp, 0x28]
+            0x102a05fac      e11f40f9       ldr x1, [sp, 0x38]
+            0x102a05fb0      f6a55897       bl sym.func.10002f788
+            0x102a05fb4      e00314aa       mov x0, x20
+            0x102a05fb8      e1031caa       mov x1, x28
+            0x102a05fbc      149e5897       bl sym.func.10002d80c
+            0x102a05fc0      e02740f9       ldr x0, [sp, 0x48]
+            0x102a05fc4      e12f40f9       ldr x1, [sp, 0x58]
+            0x102a05fc8      f0a55897       bl sym.func.10002f788
+            0x102a05fcc      280740f9       ldr x8, [x25, 8]
+            0x102a05fd0      e01b40f9       ldr x0, [sp, 0x30]
+            0x102a05fd4      e11340f9       ldr x1, [sp, 0x20]
+            0x102a05fd8      00013fd6       blr x8
+            0x102a05fdc      e82340f9       ldr x8, [sp, 0x40]
+            0x102a05fe0      080540f9       ldr x8, [x8, 8]
+            0x102a05fe4      e03340f9       ldr x0, [sp, 0x60]
+            0x102a05fe8      e12b40f9       ldr x1, [sp, 0x50]
+            0x102a05fec      00013fd6       blr x8
+            0x102a05ff0      e88746a9       ldp x8, x1, [sp, 0x68]
+            0x102a05ff4      080540f9       ldr x8, [x8, 8]
+            0x102a05ff8      e03f40f9       ldr x0, [sp, 0x78]
+            0x102a05ffc      ab000014       b 0x102a062a8
+            0x102a06000      d5f240f9       ldr x21, [x22, 0x1e0]
+            0x102a06004      d3ea40f9       ldr x19, [x22, 0x1d0]
+            0x102a06008      d4da40f9       ldr x20, [x22, 0x1b0]
+            0x102a0600c      d7ce40f9       ldr x23, [x22, 0x198]
+            0x102a06010      00110290       adrp x0, 0x106c26000
+            0x102a06014      00401291       add x0, x0, 0x490
+            0x102a06018      61de01b0       adrp x1, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a0601c      215c40f9       ldr x1, [x1, 0xb8]
+            0x102a06020      62de01b0       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a06024      425840f9       ldr x2, [x2, 0xb0]
+            0x102a06028      119a5897       bl sym.func.10002c86c
+            0x102a0602c      e30300aa       mov x3, x0
+            0x102a06030      e00317aa       mov x0, x23
+            0x102a06034      e10315aa       mov x1, x21
+            0x102a06038      e20313aa       mov x2, x19
+            0x102a0603c      e8b8ad94       bl sym.imp.CryptoKit.P256.Signing.PublicKey.isValidSignature.for.ECDSASignature.Digest_...lF_ ; CryptoKit.P256.Signing.PublicKey.isValidSignature.for.ECDSASignature.Digest(...lF)
+            0x102a06040      d45e41f9       ldr x20, [x22, 0x2b8]
+            0x102a06044      c85a41f9       ldr x8, [x22, 0x2b0]
+            0x102a06048      e83f00f9       str x8, [sp, 0x78]
+            0x102a0604c      40090036       tbz w0, 0, 0x102a06174
+            0x102a06050      c93a41f9       ldr x9, [x22, 0x270]
+            0x102a06054      c83641f9       ldr x8, [x22, 0x268]
+            0x102a06058      e8a706a9       stp x8, x9, [sp, 0x68]
+            0x102a0605c      c90a41f9       ldr x9, [x22, 0x210]
+            0x102a06060      d9a25da9       ldp x25, x8, [x22, 0x1d8]
+            0x102a06064      e8a705a9       stp x8, x9, [sp, 0x58]
+            0x102a06068      c8ea40f9       ldr x8, [x22, 0x1d0]
+            0x102a0606c      e82b00f9       str x8, [sp, 0x50]
+            0x102a06070      e1031aaa       mov x1, x26
+            0x102a06074      daee5aa9       ldp x26, x27, [x22, 0x1a8]
+            0x102a06078      d3f259a9       ldp x19, x28, [x22, 0x198]
+            0x102a0607c      d5e258a9       ldp x21, x24, [x22, 0x188]
+            0x102a06080      d7c240f9       ldr x23, [x22, 0x180]
+            0x102a06084      a00359f8       ldur x0, [x29, -0x70]
+            0x102a06088      e19d5897       bl sym.func.10002d80c
+            0x102a0608c      e03f40f9       ldr x0, [sp, 0x78]
+            0x102a06090      e10314aa       mov x1, x20
+            0x102a06094      de9d5897       bl sym.func.10002d80c
+            0x102a06098      080740f9       ldr x8, [x24, 8]
+            0x102a0609c      e00313aa       mov x0, x19
+            0x102a060a0      e10315aa       mov x1, x21
+            0x102a060a4      00013fd6       blr x8
+            0x102a060a8      480740f9       ldr x8, [x26, 8]
+            0x102a060ac      e0031baa       mov x0, x27
+            0x102a060b0      e1031caa       mov x1, x28
+            0x102a060b4      00013fd6       blr x8
+            0x102a060b8      280740f9       ldr x8, [x25, 8]
+            0x102a060bc      e10345a9       ldp x1, x0, [sp, 0x50]
+            0x102a060c0      00013fd6       blr x8
+            0x102a060c4      e80317aa       mov x8, x23
+            0x102a060c8      e00746a9       ldp x0, x1, [sp, 0x60]
+            0x102a060cc      e23b40f9       ldr x2, [sp, 0x70]
+            0x102a060d0      b58359f8       ldur x21, [x29, -0x68]
+            0x102a060d4      de040094       bl sym.func.102a0744c
+            0x102a060d8      d44e41f9       ldr x20, [x22, 0x298]
+            0x102a060dc      d33e41f9       ldr x19, [x22, 0x278]
+            0x102a060e0      b58319f8       stur x21, [x29, -0x68]
+            0x102a060e4      151200b4       cbz x21, 0x102a06324
+            0x102a060e8      d54641f9       ldr x21, [x22, 0x288]
+            0x102a060ec      d74241f9       ldr x23, [x22, 0x280]
+            0x102a060f0      d83a41f9       ldr x24, [x22, 0x270]
+            0x102a060f4      d93641f9       ldr x25, [x22, 0x268]
+            0x102a060f8      c83241f9       ldr x8, [x22, 0x260]
+            0x102a060fc      e83f00f9       str x8, [sp, 0x78]
+            0x102a06100      db2641f9       ldr x27, [x22, 0x248]
+            0x102a06104      dc2241f9       ldr x28, [x22, 0x240]
+            0x102a06108      da1e41f9       ldr x26, [x22, 0x238]
+            0x102a0610c      b30319f8       stur x19, [x29, -0x70]
+            0x102a06110      d31a41f9       ldr x19, [x22, 0x230]
+            0x102a06114      c00a41f9       ldr x0, [x22, 0x210]
+            0x102a06118      c80641f9       ldr x8, [x22, 0x208]
+            0x102a0611c      c10241f9       ldr x1, [x22, 0x200]
+            0x102a06120      080540f9       ldr x8, [x8, 8]
+            0x102a06124      00013fd6       blr x8
+            0x102a06128      e00319aa       mov x0, x25
+            0x102a0612c      e10318aa       mov x1, x24
+            0x102a06130      96a55897       bl sym.func.10002f788
+            0x102a06134      e00317aa       mov x0, x23
+            0x102a06138      e10315aa       mov x1, x21
+            0x102a0613c      93a55897       bl sym.func.10002f788
+            0x102a06140      e0031caa       mov x0, x28
+            0x102a06144      e1031baa       mov x1, x27
+            0x102a06148      b19d5897       bl sym.func.10002d80c
+            0x102a0614c      e00313aa       mov x0, x19
+            0x102a06150      e1031aaa       mov x1, x26
+            0x102a06154      ae9d5897       bl sym.func.10002d80c
+            0x102a06158      e03f40f9       ldr x0, [sp, 0x78]
+            0x102a0615c      e3d5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a06160      a00359f8       ldur x0, [x29, -0x70]
+            0x102a06164      e1d5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a06168      e00314aa       mov x0, x20
+            0x102a0616c      dfd5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a06170      4f000014       b 0x102a062ac
+            0x102a06174      d34e41f9       ldr x19, [x22, 0x298]
+            0x102a06178      c94641f9       ldr x9, [x22, 0x288]
+            0x102a0617c      c84241f9       ldr x8, [x22, 0x280]
+            0x102a06180      e82701a9       stp x8, x9, [sp, 0x10]
+            0x102a06184      d53e41f9       ldr x21, [x22, 0x278]
+            0x102a06188      c93a41f9       ldr x9, [x22, 0x270]
+            0x102a0618c      c83641f9       ldr x8, [x22, 0x268]
+            0x102a06190      e8a703a9       stp x8, x9, [sp, 0x38]
+            0x102a06194      c03241f9       ldr x0, [x22, 0x260]
+            0x102a06198      d72641f9       ldr x23, [x22, 0x248]
+            0x102a0619c      db2241f9       ldr x27, [x22, 0x240]
+            0x102a061a0      c81e41f9       ldr x8, [x22, 0x238]
+            0x102a061a4      e80700f9       str x8, [sp, 8]
+            0x102a061a8      d81a41f9       ldr x24, [x22, 0x230]
+            0x102a061ac      c90a41f9       ldr x9, [x22, 0x210]
+            0x102a061b0      ca0641f9       ldr x10, [x22, 0x208]
+            0x102a061b4      c80241f9       ldr x8, [x22, 0x200]
+            0x102a061b8      e8a706a9       stp x8, x9, [sp, 0x68]
+            0x102a061bc      cba65da9       ldp x11, x9, [x22, 0x1d8]
+            0x102a061c0      e9ab05a9       stp x9, x10, [sp, 0x58]
+            0x102a061c4      c8ea40f9       ldr x8, [x22, 0x1d0]
+            0x102a061c8      eba304a9       stp x11, x8, [sp, 0x48]
+            0x102a061cc      c8a65aa9       ldp x8, x9, [x22, 0x1a8]
+            0x102a061d0      e81300f9       str x8, [sp, 0x20]
+            0x102a061d4      c8aa59a9       ldp x8, x10, [x22, 0x198]
+            0x102a061d8      eaa702a9       stp x10, x9, [sp, 0x28]
+            0x102a061dc      e80300f9       str x8, [sp]
+            0x102a061e0      d9f258a9       ldp x25, x28, [x22, 0x188]
+            0x102a061e4      c1d5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a061e8      e00315aa       mov x0, x21
+            0x102a061ec      bfd5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a061f0      e00313aa       mov x0, x19
+            0x102a061f4      bdd5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a061f8      ab1f0094       bl sym.func.102a0e0a4
+            0x102a061fc      e10300aa       mov x1, x0
+            0x102a06200      40eb01d0       adrp x0, 0x106770000
+            0x102a06204      00000d91       add x0, x0, 0x340
+            0x102a06208      020080d2       mov x2, 0
+            0x102a0620c      03008052       mov w3, 0
+            0x102a06210      8fd5ad94       bl sym.imp.swift_allocError
+            0x102a06214      a08319f8       stur x0, [x29, -0x68]
+            0x102a06218      3f7c00a9       stp xzr, xzr, [x1]
+            0x102a0621c      88008052       mov w8, 4
+            0x102a06220      28400039       strb w8, [x1, 0x10]
+            0x102a06224      f50300aa       mov x21, x0
+            0x102a06228      8dd7ad94       bl sym.imp.swift_willThrow
+            0x102a0622c      e0031baa       mov x0, x27
+            0x102a06230      e10317aa       mov x1, x23
+            0x102a06234      769d5897       bl sym.func.10002d80c
+            0x102a06238      a00359f8       ldur x0, [x29, -0x70]
+            0x102a0623c      e1031aaa       mov x1, x26
+            0x102a06240      739d5897       bl sym.func.10002d80c
+            0x102a06244      e03f40f9       ldr x0, [sp, 0x78]
+            0x102a06248      e10314aa       mov x1, x20
+            0x102a0624c      709d5897       bl sym.func.10002d80c
+            0x102a06250      e00741a9       ldp x0, x1, [sp, 0x10]
+            0x102a06254      4da55897       bl sym.func.10002f788
+            0x102a06258      e00318aa       mov x0, x24
+            0x102a0625c      e10740f9       ldr x1, [sp, 8]
+            0x102a06260      6b9d5897       bl sym.func.10002d80c
+            0x102a06264      e08743a9       ldp x0, x1, [sp, 0x38]
+            0x102a06268      48a55897       bl sym.func.10002f788
+            0x102a0626c      880740f9       ldr x8, [x28, 8]
+            0x102a06270      e00340f9       ldr x0, [sp]
+            0x102a06274      e10319aa       mov x1, x25
+            0x102a06278      00013fd6       blr x8
+            0x102a0627c      e80742a9       ldp x8, x1, [sp, 0x20]
+            0x102a06280      080540f9       ldr x8, [x8, 8]
+            0x102a06284      e01b40f9       ldr x0, [sp, 0x30]
+            0x102a06288      00013fd6       blr x8
+            0x102a0628c      e88744a9       ldp x8, x1, [sp, 0x48]
+            0x102a06290      080540f9       ldr x8, [x8, 8]
+            0x102a06294      e02f40f9       ldr x0, [sp, 0x58]
+            0x102a06298      00013fd6       blr x8
+            0x102a0629c      e80746a9       ldp x8, x1, [sp, 0x60]
+            0x102a062a0      080540f9       ldr x8, [x8, 8]
+            0x102a062a4      e03b40f9       ldr x0, [sp, 0x70]
+            0x102a062a8      00013fd6       blr x8
+            0x102a062ac      c00a41f9       ldr x0, [x22, 0x210]
+            0x102a062b0      d4fe40f9       ldr x20, [x22, 0x1f8]
+            0x102a062b4      d3f240f9       ldr x19, [x22, 0x1e0]
+            0x102a062b8      d5e640f9       ldr x21, [x22, 0x1c8]
+            0x102a062bc      d7da40f9       ldr x23, [x22, 0x1b0]
+            0x102a062c0      d8ce40f9       ldr x24, [x22, 0x198]
+            0x102a062c4      d9c240f9       ldr x25, [x22, 0x180]
+            0x102a062c8      f0d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a062cc      e00314aa       mov x0, x20
+            0x102a062d0      eed6ad94       bl sym.imp.swift_task_dealloc
+            0x102a062d4      e00313aa       mov x0, x19
+            0x102a062d8      ecd6ad94       bl sym.imp.swift_task_dealloc
+            0x102a062dc      e00315aa       mov x0, x21
+            0x102a062e0      ead6ad94       bl sym.imp.swift_task_dealloc
+            0x102a062e4      e00317aa       mov x0, x23
+            0x102a062e8      e8d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a062ec      e00318aa       mov x0, x24
+            0x102a062f0      e6d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a062f4      e00319aa       mov x0, x25
+            0x102a062f8      e4d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a062fc      c00640f9       ldr x0, [x22, 8]
+            0x102a06300      b48359f8       ldur x20, [x29, -0x68]
+            0x102a06304      fd7b4fa9       ldp x29, x30, [sp, 0xf0]
+            0x102a06308      f5cf4da9       ldp x21, x19, [sp, 0xd8]
+            0x102a0630c      f8df4ca9       ldp x24, x23, [sp, 0xc8]
+            0x102a06310      fae74ba9       ldp x26, x25, [sp, 0xb8]
+            0x102a06314      fcef4aa9       ldp x28, x27, [sp, 0xa8]
+            0x102a06318      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a0631c      ff030491       add sp, sp, 0x100
+            0x102a06320      00001fd6       br x0
+            0x102a06324      c04a41f9       ldr x0, [x22, 0x290]
+            0x102a06328      d53241f9       ldr x21, [x22, 0x260]
+            0x102a0632c      e10314aa       mov x1, x20
+            0x102a06330      020080d2       mov x2, 0
+            0x102a06334      b7a3ad94       bl sym.imp.Foundation.Data.base64Encoded.options.NSDataBase64DecodingOptions...VtcfC__1
+            0x102a06338      f80300aa       mov x24, x0
+            0x102a0633c      f70301aa       mov x23, x1
+            0x102a06340      e00315aa       mov x0, x21
+            0x102a06344      69d5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a06348      e00313aa       mov x0, x19
+            0x102a0634c      67d5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a06350      e00314aa       mov x0, x20
+            0x102a06354      65d5ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a06358      e8fe7cd3       lsr x8, x23, 0x3c
+            0x102a0635c      1f3d00f1       cmp x8, 0xf
+            0x102a06360      83060054       b.lo 0x102a06430
+            0x102a06364      d84641f9       ldr x24, [x22, 0x288]
+            0x102a06368      d94241f9       ldr x25, [x22, 0x280]
+            0x102a0636c      c93a41f9       ldr x9, [x22, 0x270]
+            0x102a06370      c83641f9       ldr x8, [x22, 0x268]
+            0x102a06374      e82706a9       stp x8, x9, [sp, 0x60]
+            0x102a06378      db2641f9       ldr x27, [x22, 0x248]
+            0x102a0637c      dc2241f9       ldr x28, [x22, 0x240]
+            0x102a06380      d41e41f9       ldr x20, [x22, 0x238]
+            0x102a06384      d31a41f9       ldr x19, [x22, 0x230]
+            0x102a06388      c80a41f9       ldr x8, [x22, 0x210]
+            0x102a0638c      a80319f8       stur x8, [x29, -0x70]
+            0x102a06390      c90641f9       ldr x9, [x22, 0x208]
+            0x102a06394      c80241f9       ldr x8, [x22, 0x200]
+            0x102a06398      e92307a9       stp x9, x8, [sp, 0x70]
+            0x102a0639c      d7a257a9       ldp x23, x8, [x22, 0x178]
+            0x102a063a0      e82f00f9       str x8, [sp, 0x58]
+            0x102a063a4      c88801d0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a063a8      08011991       add x8, x8, 0x640
+            0x102a063ac      088100d1       sub x8, x8, 0x20
+            0x102a063b0      150141b2       orr x21, x8, 0x8000000000000000
+            0x102a063b4      daba40f9       ldr x26, [x22, 0x170]
+            0x102a063b8      3b1f0094       bl sym.func.102a0e0a4
+            0x102a063bc      e10300aa       mov x1, x0
+            0x102a063c0      40eb01d0       adrp x0, 0x106770000
+            0x102a063c4      00000d91       add x0, x0, 0x340
+            0x102a063c8      020080d2       mov x2, 0
+            0x102a063cc      03008052       mov w3, 0
+            0x102a063d0      1fd5ad94       bl sym.imp.swift_allocError
+            0x102a063d4      a08319f8       stur x0, [x29, -0x68]
+            0x102a063d8      e80380d2       mov x8, 0x1f
+            0x102a063dc      0800faf2       movk x8, 0xd000, lsl 48
+            0x102a063e0      285400a9       stp x8, x21, [x1]
+            0x102a063e4      28008052       mov w8, 1
+            0x102a063e8      28400039       strb w8, [x1, 0x10]
+            0x102a063ec      f50300aa       mov x21, x0
+            0x102a063f0      1bd7ad94       bl sym.imp.swift_willThrow
+            0x102a063f4      e0031caa       mov x0, x28
+            0x102a063f8      e1031baa       mov x1, x27
+            0x102a063fc      049d5897       bl sym.func.10002d80c
+            0x102a06400      e00319aa       mov x0, x25
+            0x102a06404      e10318aa       mov x1, x24
+            0x102a06408      e0a45897       bl sym.func.10002f788
+            0x102a0640c      e00313aa       mov x0, x19
+            0x102a06410      e10314aa       mov x1, x20
+            0x102a06414      fe9c5897       bl sym.func.10002d80c
+            0x102a06418      e00746a9       ldp x0, x1, [sp, 0x60]
+            0x102a0641c      dba45897       bl sym.func.10002f788
+            0x102a06420      e80640f9       ldr x8, [x23, 8]
+            0x102a06424      e02f40f9       ldr x0, [sp, 0x58]
+            0x102a06428      e1031aaa       mov x1, x26
+            0x102a0642c      a0feff17       b 0x102a05eac
+            0x102a06430      c0c240f9       ldr x0, [x22, 0x180]
+            0x102a06434      d4b640f9       ldr x20, [x22, 0x168]
+            0x102a06438      e10318aa       mov x1, x24
+            0x102a0643c      e20317aa       mov x2, x23
+            0x102a06440      b58359f8       ldur x21, [x29, -0x68]
+            0x102a06444      8a040094       bl sym.func.102a0766c
+            0x102a06448      db4641f9       ldr x27, [x22, 0x288]
+            0x102a0644c      d34241f9       ldr x19, [x22, 0x280]
+            0x102a06450      c93a41f9       ldr x9, [x22, 0x270]
+            0x102a06454      c83641f9       ldr x8, [x22, 0x268]
+            0x102a06458      e8a706a9       stp x8, x9, [sp, 0x68]
+            0x102a0645c      c12641f9       ldr x1, [x22, 0x248]
+            0x102a06460      c02241f9       ldr x0, [x22, 0x240]
+            0x102a06464      dc1e41f9       ldr x28, [x22, 0x238]
+            0x102a06468      d91a41f9       ldr x25, [x22, 0x230]
+            0x102a0646c      da0a41f9       ldr x26, [x22, 0x210]
+            0x102a06470      c80641f9       ldr x8, [x22, 0x208]
+            0x102a06474      e83f00f9       str x8, [sp, 0x78]
+            0x102a06478      c80241f9       ldr x8, [x22, 0x200]
+            0x102a0647c      a85739a9       stp x8, x21, [x29, -0x70]
+            0x102a06480      350300b4       cbz x21, 0x102a064e4
+            0x102a06484      fa3300f9       str x26, [sp, 0x60]
+            0x102a06488      dad657a9       ldp x26, x21, [x22, 0x178]
+            0x102a0648c      d4ba40f9       ldr x20, [x22, 0x170]
+            0x102a06490      df9c5897       bl sym.func.10002d80c
+            0x102a06494      e00318aa       mov x0, x24
+            0x102a06498      e10317aa       mov x1, x23
+            0x102a0649c      bba45897       bl sym.func.10002f788
+            0x102a064a0      e00313aa       mov x0, x19
+            0x102a064a4      e1031baa       mov x1, x27
+            0x102a064a8      b8a45897       bl sym.func.10002f788
+            0x102a064ac      e00319aa       mov x0, x25
+            0x102a064b0      e1031caa       mov x1, x28
+            0x102a064b4      d69c5897       bl sym.func.10002d80c
+            0x102a064b8      e08746a9       ldp x0, x1, [sp, 0x68]
+            0x102a064bc      b3a45897       bl sym.func.10002f788
+            0x102a064c0      480740f9       ldr x8, [x26, 8]
+            0x102a064c4      e00315aa       mov x0, x21
+            0x102a064c8      e10314aa       mov x1, x20
+            0x102a064cc      00013fd6       blr x8
+            0x102a064d0      e83f40f9       ldr x8, [sp, 0x78]
+            0x102a064d4      080540f9       ldr x8, [x8, 8]
+            0x102a064d8      e03340f9       ldr x0, [sp, 0x60]
+            0x102a064dc      a10359f8       ldur x1, [x29, -0x70]
+            0x102a064e0      72ffff17       b 0x102a062a8
+            0x102a064e4      c9fe40f9       ldr x9, [x22, 0x1f8]
+            0x102a064e8      c8f240f9       ldr x8, [x22, 0x1e0]
+            0x102a064ec      e9a304a9       stp x9, x8, [sp, 0x48]
+            0x102a064f0      c9e640f9       ldr x9, [x22, 0x1c8]
+            0x102a064f4      c8da40f9       ldr x8, [x22, 0x1b0]
+            0x102a064f8      e9a305a9       stp x9, x8, [sp, 0x58]
+            0x102a064fc      c8ce40f9       ldr x8, [x22, 0x198]
+            0x102a06500      a88319f8       stur x8, [x29, -0x68]
+            0x102a06504      d4a257a9       ldp x20, x8, [x22, 0x178]
+            0x102a06508      e82300f9       str x8, [sp, 0x40]
+            0x102a0650c      d5ba40f9       ldr x21, [x22, 0x170]
+            0x102a06510      bf9c5897       bl sym.func.10002d80c
+            0x102a06514      e00318aa       mov x0, x24
+            0x102a06518      e10317aa       mov x1, x23
+            0x102a0651c      9ba45897       bl sym.func.10002f788
+            0x102a06520      e00313aa       mov x0, x19
+            0x102a06524      e1031baa       mov x1, x27
+            0x102a06528      98a45897       bl sym.func.10002f788
+            0x102a0652c      e00319aa       mov x0, x25
+            0x102a06530      e1031caa       mov x1, x28
+            0x102a06534      b69c5897       bl sym.func.10002d80c
+            0x102a06538      e08746a9       ldp x0, x1, [sp, 0x68]
+            0x102a0653c      93a45897       bl sym.func.10002f788
+            0x102a06540      880640f9       ldr x8, [x20, 8]
+            0x102a06544      f42340f9       ldr x20, [sp, 0x40]
+            0x102a06548      e00314aa       mov x0, x20
+            0x102a0654c      e10315aa       mov x1, x21
+            0x102a06550      00013fd6       blr x8
+            0x102a06554      e83f40f9       ldr x8, [sp, 0x78]
+            0x102a06558      080540f9       ldr x8, [x8, 8]
+            0x102a0655c      e0031aaa       mov x0, x26
+            0x102a06560      a10359f8       ldur x1, [x29, -0x70]
+            0x102a06564      00013fd6       blr x8
+            0x102a06568      e0031aaa       mov x0, x26
+            0x102a0656c      47d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06570      e02740f9       ldr x0, [sp, 0x48]
+            0x102a06574      45d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06578      e02b40f9       ldr x0, [sp, 0x50]
+            0x102a0657c      43d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06580      e02f40f9       ldr x0, [sp, 0x58]
+            0x102a06584      41d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06588      e03340f9       ldr x0, [sp, 0x60]
+            0x102a0658c      3fd6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06590      a08359f8       ldur x0, [x29, -0x68]
+            0x102a06594      3dd6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06598      e00314aa       mov x0, x20
+            0x102a0659c      3bd6ad94       bl sym.imp.swift_task_dealloc
+            0x102a065a0      c00640f9       ldr x0, [x22, 8]
+            0x102a065a4      140080d2       mov x20, 0
+            0x102a065a8      57ffff17       b 0x102a06304
+            ;-- func.102a065ac:
+            0x102a065ac      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a065b0      ff4301d1       sub sp, sp, 0x50
+            0x102a065b4      fae700a9       stp x26, x25, [sp, 8]
+            0x102a065b8      f8df01a9       stp x24, x23, [sp, 0x18]
+            0x102a065bc      f5cf02a9       stp x21, x19, [sp, 0x28]
+            0x102a065c0      fd7b04a9       stp x29, x30, [sp, 0x40]
+            0x102a065c4      f61f00f9       str x22, [sp, 0x38]
+            0x102a065c8      fd030191       add x29, sp, 0x40
+            0x102a065cc      d42641f9       ldr x20, [x22, 0x248]
+            0x102a065d0      d32241f9       ldr x19, [x22, 0x240]
+            0x102a065d4      d51e41f9       ldr x21, [x22, 0x238]
+            0x102a065d8      d71a41f9       ldr x23, [x22, 0x230]
+            0x102a065dc      c00e41f9       ldr x0, [x22, 0x218]
+            0x102a065e0      d80a41f9       ldr x24, [x22, 0x210]
+            0x102a065e4      da0641f9       ldr x26, [x22, 0x208]
+            0x102a065e8      d90241f9       ldr x25, [x22, 0x200]
+            0x102a065ec      ebd5ad94       bl sym.imp.swift_release
+            0x102a065f0      e00313aa       mov x0, x19
+            0x102a065f4      e10314aa       mov x1, x20
+            0x102a065f8      859c5897       bl sym.func.10002d80c
+            0x102a065fc      e00317aa       mov x0, x23
+            0x102a06600      e10315aa       mov x1, x21
+            0x102a06604      829c5897       bl sym.func.10002d80c
+            0x102a06608      480740f9       ldr x8, [x26, 8]
+            0x102a0660c      e00318aa       mov x0, x24
+            0x102a06610      e10319aa       mov x1, x25
+            0x102a06614      00013fd6       blr x8
+            0x102a06618      d42e41f9       ldr x20, [x22, 0x258]
+            0x102a0661c      c00a41f9       ldr x0, [x22, 0x210]
+            0x102a06620      d3fe40f9       ldr x19, [x22, 0x1f8]
+            0x102a06624      d5f240f9       ldr x21, [x22, 0x1e0]
+            0x102a06628      d7e640f9       ldr x23, [x22, 0x1c8]
+            0x102a0662c      d8da40f9       ldr x24, [x22, 0x1b0]
+            0x102a06630      d9ce40f9       ldr x25, [x22, 0x198]
+            0x102a06634      dac240f9       ldr x26, [x22, 0x180]
+            0x102a06638      14d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a0663c      e00313aa       mov x0, x19
+            0x102a06640      12d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06644      e00315aa       mov x0, x21
+            0x102a06648      10d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a0664c      e00317aa       mov x0, x23
+            0x102a06650      0ed6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06654      e00318aa       mov x0, x24
+            0x102a06658      0cd6ad94       bl sym.imp.swift_task_dealloc
+            0x102a0665c      e00319aa       mov x0, x25
+            0x102a06660      0ad6ad94       bl sym.imp.swift_task_dealloc
+            0x102a06664      e0031aaa       mov x0, x26
+            0x102a06668      08d6ad94       bl sym.imp.swift_task_dealloc
+            0x102a0666c      c00640f9       ldr x0, [x22, 8]
+            0x102a06670      fd7b44a9       ldp x29, x30, [sp, 0x40]
+            0x102a06674      f5cf42a9       ldp x21, x19, [sp, 0x28]
+            0x102a06678      f8df41a9       ldp x24, x23, [sp, 0x18]
+            0x102a0667c      fae740a9       ldp x26, x25, [sp, 8]
+            0x102a06680      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a06684      ff430191       add sp, sp, 0x50
+            0x102a06688      00001fd6       br x0
+            ;-- func.102a0668c:
+            0x102a0668c      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a06690      ffc301d1       sub sp, sp, 0x70
+            0x102a06694      fcef01a9       stp x28, x27, [sp, 0x18]
+            0x102a06698      fae702a9       stp x26, x25, [sp, 0x28]
+            0x102a0669c      f8df03a9       stp x24, x23, [sp, 0x38]
+            0x102a066a0      f5cf04a9       stp x21, x19, [sp, 0x48]
+            0x102a066a4      fd7b06a9       stp x29, x30, [sp, 0x60]
+            0x102a066a8      f62f00f9       str x22, [sp, 0x58]
+            0x102a066ac      fd830191       add x29, sp, 0x60
+            0x102a066b0      d44641f9       ldr x20, [x22, 0x288]
+            0x102a066b4      d34241f9       ldr x19, [x22, 0x280]
+            0x102a066b8      c93a41f9       ldr x9, [x22, 0x270]
+            0x102a066bc      c83641f9       ldr x8, [x22, 0x268]
+            0x102a066c0      e8a700a9       stp x8, x9, [sp, 8]
+            0x102a066c4      d82641f9       ldr x24, [x22, 0x248]
+            0x102a066c8      d92241f9       ldr x25, [x22, 0x240]
+            0x102a066cc      da1e41f9       ldr x26, [x22, 0x238]
+            0x102a066d0      db1a41f9       ldr x27, [x22, 0x230]
+            0x102a066d4      c00e41f9       ldr x0, [x22, 0x218]
+            0x102a066d8      dc0a41f9       ldr x28, [x22, 0x210]
+            0x102a066dc      d70641f9       ldr x23, [x22, 0x208]
+            0x102a066e0      d50241f9       ldr x21, [x22, 0x200]
+            0x102a066e4      add5ad94       bl sym.imp.swift_release
+            0x102a066e8      e00319aa       mov x0, x25
+            0x102a066ec      e10318aa       mov x1, x24
+            0x102a066f0      479c5897       bl sym.func.10002d80c
+            0x102a066f4      e00313aa       mov x0, x19
+            0x102a066f8      e10314aa       mov x1, x20
+            0x102a066fc      23a45897       bl sym.func.10002f788
+            0x102a06700      e0031baa       mov x0, x27
+            0x102a06704      e1031aaa       mov x1, x26
+            0x102a06708      419c5897       bl sym.func.10002d80c
+            0x102a0670c      e08740a9       ldp x0, x1, [sp, 8]
+            0x102a06710      1ea45897       bl sym.func.10002f788
+            0x102a06714      e80640f9       ldr x8, [x23, 8]
+            0x102a06718      e0031caa       mov x0, x28
+            0x102a0671c      e10315aa       mov x1, x21
+            0x102a06720      00013fd6       blr x8
+            0x102a06724      d46241f9       ldr x20, [x22, 0x2c0]
+            0x102a06728      c00a41f9       ldr x0, [x22, 0x210]
+            0x102a0672c      d3fe40f9       ldr x19, [x22, 0x1f8]
+            0x102a06730      d5f240f9       ldr x21, [x22, 0x1e0]
+            0x102a06734      d7e640f9       ldr x23, [x22, 0x1c8]
+            0x102a06738      d8da40f9       ldr x24, [x22, 0x1b0]
+            0x102a0673c      d9ce40f9       ldr x25, [x22, 0x198]
+            0x102a06740      dac240f9       ldr x26, [x22, 0x180]
+            0x102a06744      d1d5ad94       bl sym.imp.swift_task_dealloc
+            0x102a06748      e00313aa       mov x0, x19
+            0x102a0674c      cfd5ad94       bl sym.imp.swift_task_dealloc
+            0x102a06750      e00315aa       mov x0, x21
+            0x102a06754      cdd5ad94       bl sym.imp.swift_task_dealloc
+            0x102a06758      e00317aa       mov x0, x23
+            0x102a0675c      cbd5ad94       bl sym.imp.swift_task_dealloc
+            0x102a06760      e00318aa       mov x0, x24
+            0x102a06764      c9d5ad94       bl sym.imp.swift_task_dealloc
+            0x102a06768      e00319aa       mov x0, x25
+            0x102a0676c      c7d5ad94       bl sym.imp.swift_task_dealloc
+            0x102a06770      e0031aaa       mov x0, x26
+            0x102a06774      c5d5ad94       bl sym.imp.swift_task_dealloc
+            0x102a06778      c00640f9       ldr x0, [x22, 8]
+            0x102a0677c      fd7b46a9       ldp x29, x30, [sp, 0x60]
+            0x102a06780      f5cf44a9       ldp x21, x19, [sp, 0x48]
+            0x102a06784      f8df43a9       ldp x24, x23, [sp, 0x38]
+            0x102a06788      fae742a9       ldp x26, x25, [sp, 0x28]
+            0x102a0678c      fcef41a9       ldp x28, x27, [sp, 0x18]
+            0x102a06790      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a06794      ffc30191       add sp, sp, 0x70
+            0x102a06798      00001fd6       br x0
+            ;-- func.102a0679c:
+            0x102a0679c      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a067a0      ffc300d1       sub sp, sp, 0x30
+            0x102a067a4      f5cf00a9       stp x21, x19, [sp, 8]
+            0x102a067a8      fd7b02a9       stp x29, x30, [sp, 0x20]
+            0x102a067ac      f60f00f9       str x22, [sp, 0x18]
+            0x102a067b0      fd830091       add x29, sp, 0x20
+            0x102a067b4      d4b201f9       str x20, [x22, 0x360]
+            0x102a067b8      c2ae01f9       str x2, [x22, 0x358]
+            0x102a067bc      c1aa01f9       str x1, [x22, 0x350]
+            0x102a067c0      c0a601f9       str x0, [x22, 0x348]
+            0x102a067c4      000080d2       mov x0, 0
+            0x102a067c8      27959597       bl sym.func.100f6bc64
+            0x102a067cc      c0b601f9       str x0, [x22, 0x368]
+            0x102a067d0      08805ff8       ldur x8, [x0, -8]
+            0x102a067d4      082140f9       ldr x8, [x8, 0x40]
+            0x102a067d8      083d0091       add x8, x8, 0xf
+            0x102a067dc      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a067e0      a4d5ad94       bl sym.imp.swift_task_alloc
+            0x102a067e4      c0ba01f9       str x0, [x22, 0x370]
+            0x102a067e8      00110290       adrp x0, 0x106c26000
+            0x102a067ec      00a01291       add x0, x0, 0x4a8
+            0x102a067f0      c16c0190       adrp x1, 0x10579e000
+            0x102a067f4      21a00091       add x1, x1, 0x28
+            0x102a067f8      58f65797       bl sym.func.100004158
+            0x102a067fc      08805ff8       ldur x8, [x0, -8]
+            0x102a06800      082140f9       ldr x8, [x8, 0x40]
+            0x102a06804      083d0091       add x8, x8, 0xf
+            0x102a06808      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a0680c      99d5ad94       bl sym.imp.swift_task_alloc
+            0x102a06810      c0be01f9       str x0, [x22, 0x378]
+            0x102a06814      000080d2       mov x0, 0
+            0x102a06818      ef949597       bl sym.func.100f6bbd4
+            0x102a0681c      08805ff8       ldur x8, [x0, -8]
+            0x102a06820      082140f9       ldr x8, [x8, 0x40]
+            0x102a06824      083d0091       add x8, x8, 0xf
+            0x102a06828      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a0682c      91d5ad94       bl sym.imp.swift_task_alloc
+            0x102a06830      c0c201f9       str x0, [x22, 0x380]
+            0x102a06834      000080d2       mov x0, 0
+            0x102a06838      ec949597       bl sym.func.100f6bbe8
+            0x102a0683c      c0c601f9       str x0, [x22, 0x388]
+            0x102a06840      08805ff8       ldur x8, [x0, -8]
+            0x102a06844      c8ca01f9       str x8, [x22, 0x390]
+            0x102a06848      082140f9       ldr x8, [x8, 0x40]
+            0x102a0684c      083d0091       add x8, x8, 0xf
+            0x102a06850      00ed7c92       and x0, x8, 0xfffffffffffffff0
+            0x102a06854      87d5ad94       bl sym.imp.swift_task_alloc
+            0x102a06858      c0ce01f9       str x0, [x22, 0x398]
+            0x102a0685c      000080d2       mov x0, 0
+            0x102a06860      95bbad94       bl sym.imp....ScMMa
+            0x102a06864      f30300aa       mov x19, x0
+            0x102a06868      b5de0190       adrp x21, reloc.Dispatch.Time.now_...yFZ_ ; 0x1065da000
+            0x102a0686c      b52e43f9       ldr x21, [x21, 0x658]
+            0x102a06870      f40300aa       mov x20, x0
+            0x102a06874      8dbbad94       bl sym.imp.shared_...cMvgZ_ ; shared(...cMvgZ)
+            0x102a06878      f40300aa       mov x20, x0
+            0x102a0687c      c0d201f9       str x0, [x22, 0x3a0]
+            0x102a06880      00110290       adrp x0, 0x106c26000
+            0x102a06884      00400691       add x0, x0, 0x190
+            0x102a06888      a2de0190       adrp x2, reloc.Dispatch.Time.now_...yFZ_ ; 0x1065da000
+            0x102a0688c      423043f9       ldr x2, [x2, 0x660]
+            0x102a06890      e10315aa       mov x1, x21
+            0x102a06894      f6975897       bl sym.func.10002c86c
+            0x102a06898      e10300aa       mov x1, x0
+            0x102a0689c      e00313aa       mov x0, x19
+            0x102a068a0      4fbbad94       bl sym.imp.unownedExecutor_...cevgTj_ ; unownedExecutor(...cevgTj)
+            0x102a068a4      e80300aa       mov x8, x0
+            0x102a068a8      e20301aa       mov x2, x1
+            0x102a068ac      c0d601f9       str x0, [x22, 0x3a8]
+            0x102a068b0      c1da01f9       str x1, [x22, 0x3b0]
+            0x102a068b4      00000090       adrp x0, 0x102a06000
+            0x102a068b8      00502391       add x0, x0, 0x8d4
+            0x102a068bc      e10308aa       mov x1, x8
+            0x102a068c0      fd7b42a9       ldp x29, x30, [sp, 0x20]
+            0x102a068c4      f5cf40a9       ldp x21, x19, [sp, 8]
+            0x102a068c8      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a068cc      ffc30091       add sp, sp, 0x30
+            0x102a068d0      8cd5ad14       b sym.imp.swift_task_switch
+            ;-- func.102a068d4:
+            0x102a068d4      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a068d8      ff0302d1       sub sp, sp, 0x80
+            0x102a068dc      fcef00a9       stp x28, x27, [sp, 8]
+            0x102a068e0      fae701a9       stp x26, x25, [sp, 0x18]
+            0x102a068e4      f8df02a9       stp x24, x23, [sp, 0x28]
+            0x102a068e8      f5cf03a9       stp x21, x19, [sp, 0x38]
+            0x102a068ec      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a068f0      f62700f9       str x22, [sp, 0x48]
+            0x102a068f4      fd430191       add x29, sp, 0x50
+            0x102a068f8      d7ce41f9       ldr x23, [x22, 0x398]
+            0x102a068fc      c8ca41f9       ldr x8, [x22, 0x390]
+            0x102a06900      a81700f9       str x8, [x29, 0x28]
+            0x102a06904      c1c641f9       ldr x1, [x22, 0x388]
+            0x102a06908      e10300f9       str x1, [sp]
+            0x102a0690c      d5be41f9       ldr x21, [x22, 0x378]
+            0x102a06910      d8b241f9       ldr x24, [x22, 0x360]
+            0x102a06914      d4ae41f9       ldr x20, [x22, 0x358]
+            0x102a06918      dbaa41f9       ldr x27, [x22, 0x350]
+            0x102a0691c      c87c0190       adrp x8, 0x10599e000
+            0x102a06920      08010f91       add x8, x8, 0x3c0
+            0x102a06924      088100d1       sub x8, x8, 0x20
+            0x102a06928      1c0141b2       orr x28, x8, 0x8000000000000000
+            0x102a0692c      fb5200a9       stp x27, x20, [x23]
+            0x102a06930      130280d2       mov x19, 0x10
+            0x102a06934      1300faf2       movk x19, 0xd000, lsl 48
+            0x102a06938      f37201a9       stp x19, x28, [x23, 0x10]
+            0x102a0693c      e00317aa       mov x0, x23
+            0x102a06940      02008052       mov w2, 0
+            0x102a06944      36d5ad94       bl sym.imp.swift_storeEnumTagMultiPayload
+            0x102a06948      00110290       adrp x0, 0x106c26000
+            0x102a0694c      00c01291       add x0, x0, 0x4b0
+            0x102a06950      c16c0190       adrp x1, 0x10579e000
+            0x102a06954      21c00091       add x1, x1, 0x30
+            0x102a06958      00f65797       bl sym.func.100004158
+            0x102a0695c      c1420091       add x1, x22, 0x10
+            0x102a06960      c6d4ad94       bl sym.imp.swift_initStackObject
+            0x102a06964      fa0300aa       mov x26, x0
+            0x102a06968      885e0190       adrp x8, 0x1055d6000
+            0x102a0696c      0019c13d       ldr q0, [x8, 0x460]
+            0x102a06970      0004803d       str q0, [x0, 0x10]
+            0x102a06974      68e88dd2       mov x8, 0x6f43             ; 'Co'
+            0x102a06978      c88daef2       movk x8, 0x746e, lsl 16    ; 'nt'
+            0x102a0697c      a8cccdf2       movk x8, 0x6e65, lsl 32    ; 'en'
+            0x102a06980      88aee5f2       movk x8, 0x2d74, lsl 48    ; 't-'
+            0x102a06984      f90300aa       mov x25, x0
+            0x102a06988      280f02f8       str x8, [x25, 0x20]!
+            0x102a0698c      882a8fd2       mov x8, 0x7954             ; 'Ty'
+            0x102a06990      08aeacf2       movk x8, 0x6570, lsl 16    ; 'pe'
+            0x102a06994      0880fdf2       movk x8, 0xec00, lsl 48
+            0x102a06998      08cc02a9       stp x8, x19, [x0, 0x28]
+            0x102a0699c      287e0190       adrp x8, 0x1059ca000
+            0x102a069a0      08412791       add x8, x8, 0x9d0
+            0x102a069a4      088100d1       sub x8, x8, 0x20
+            0x102a069a8      080141b2       orr x8, x8, 0x8000000000000000
+            0x102a069ac      1ccc03a9       stp x28, x19, [x0, 0x38]
+            0x102a069b0      082400f9       str x8, [x0, 0x48]
+            0x102a069b4      0083c13c       ldur q0, [x24, 0x18]
+            0x102a069b8      c01e803d       str q0, [x22, 0x70]
+            0x102a069bc      0083c33c       ldur q0, [x24, 0x38]
+            0x102a069c0      0183c43c       ldur q1, [x24, 0x48]
+            0x102a069c4      0283c53c       ldur q2, [x24, 0x58]
+            0x102a069c8      0383c23c       ldur q3, [x24, 0x28]
+            0x102a069cc      c10a05ad       stp q1, q2, [x22, 0xa0]
+            0x102a069d0      c30204ad       stp q3, q0, [x22, 0x80]
+            0x102a069d4      e0031baa       mov x0, x27
+            0x102a069d8      e10314aa       mov x1, x20
+            0x102a069dc      5ba35897       bl sym.func.10002f748
+            0x102a069e0      1b110290       adrp x27, 0x106c26000
+            0x102a069e4      7be31291       add x27, x27, 0x4b8
+            0x102a069e8      dc6c0190       adrp x28, 0x10579e000
+            0x102a069ec      9ce30091       add x28, x28, 0x38
+            0x102a069f0      c0c20191       add x0, x22, 0x70
+            0x102a069f4      c1c20691       add x1, x22, 0x1b0
+            0x102a069f8      e2031baa       mov x2, x27
+            0x102a069fc      e3031caa       mov x3, x28
+            0x102a06a00      68fc5797       bl sym.func.100005ba0
+            0x102a06a04      e0031baa       mov x0, x27
+            0x102a06a08      e1031caa       mov x1, x28
+            0x102a06a0c      d3f55797       bl sym.func.100004158
+            0x102a06a10      c8820591       add x8, x22, 0x160
+            0x102a06a14      d4c20191       add x20, x22, 0x70
+            0x102a06a18      2ecf6197       bl sym.func.10027a6d0
+            0x102a06a1c      c0c20191       add x0, x22, 0x70
+            0x102a06a20      e1031baa       mov x1, x27
+            0x102a06a24      e2031caa       mov x2, x28
+            0x102a06a28      45fc5797       bl sym.func.100005b3c
+            0x102a06a2c      c0064cad       ldp q0, q1, [x22, 0x180]
+            0x102a06a30      c00607ad       stp q0, q1, [x22, 0xe0]
+            0x102a06a34      c06ac03d       ldr q0, [x22, 0x1a0]
+            0x102a06a38      c042803d       str q0, [x22, 0x100]
+            0x102a06a3c      c1024bad       ldp q1, q0, [x22, 0x160]
+            0x102a06a40      c10206ad       stp q1, q0, [x22, 0xc0]
+            0x102a06a44      d4020391       add x20, x22, 0xc0
+            0x102a06a48      bdc1a197       bl sym.func.10127713c
+            0x102a06a4c      f40300aa       mov x20, x0
+            0x102a06a50      fb0301aa       mov x27, x1
+            0x102a06a54      c06640f9       ldr x0, [x22, 0xc8]
+            0x102a06a58      d0d4ad94       bl sym.imp.swift_release
+            0x102a06a5c      c06e40f9       ldr x0, [x22, 0xd8]
+            0x102a06a60      ced4ad94       bl sym.imp.swift_release
+            0x102a06a64      c07640f9       ldr x0, [x22, 0xe8]
+            0x102a06a68      ccd4ad94       bl sym.imp.swift_release
+            0x102a06a6c      c07e40f9       ldr x0, [x22, 0xf8]
+            0x102a06a70      cad4ad94       bl sym.imp.swift_release
+            0x102a06a74      c08640f9       ldr x0, [x22, 0x108]
+            0x102a06a78      c8d4ad94       bl sym.imp.swift_release
+            0x102a06a7c      546f05a9       stp x20, x27, [x26, 0x50]
+            0x102a06a80      e0031aaa       mov x0, x26
+            0x102a06a84      d21d0094       bl sym.func.102a0e1cc
+            0x102a06a88      fb0300aa       mov x27, x0
+            0x102a06a8c      c0de01f9       str x0, [x22, 0x3b8]
+            0x102a06a90      e0031aaa       mov x0, x26
+            0x102a06a94      d3d4ad94       bl sym.imp.swift_setDeallocating
+            0x102a06a98      00110290       adrp x0, 0x106c26000
+            0x102a06a9c      00001391       add x0, x0, 0x4c0
+            0x102a06aa0      c16c0190       adrp x1, 0x10579e000
+            0x102a06aa4      21000191       add x1, x1, 0x40
+            0x102a06aa8      acf55797       bl sym.func.100004158
+            0x102a06aac      e20300aa       mov x2, x0
+            0x102a06ab0      e00319aa       mov x0, x25
+            0x102a06ab4      41008052       mov w1, 2
+            0x102a06ab8      71d3ad94       bl sym.imp.swift_arrayDestroy
+            0x102a06abc      f40318aa       mov x20, x24
+            0x102a06ac0      50050094       bl sym.func.102a08000
+            0x102a06ac4      f40300aa       mov x20, x0
+            0x102a06ac8      f80301aa       mov x24, x1
+            0x102a06acc      f90302aa       mov x25, x2
+            0x102a06ad0      fa0303aa       mov x26, x3
+            0x102a06ad4      c1e201f9       str x1, [x22, 0x3c0]
+            0x102a06ad8      c3e601f9       str x3, [x22, 0x3c8]
+            0x102a06adc      222bffb0       adrp x2, 0x100f6b000
+            0x102a06ae0      42a02f91       add x2, x2, 0xbe8
+            0x102a06ae4      e00317aa       mov x0, x23
+            0x102a06ae8      e10315aa       mov x1, x21
+            0x102a06aec      ec145997       bl sym.func.10004be9c
+            0x102a06af0      a81740f9       ldr x8, [x29, 0x28]        ; 40
+            0x102a06af4      081d40f9       ldr x8, [x8, 0x38]
+            0x102a06af8      e00315aa       mov x0, x21
+            0x102a06afc      01008052       mov w1, 0
+            0x102a06b00      22008052       mov w2, 1
+            0x102a06b04      e30340f9       ldr x3, [sp]
+            0x102a06b08      00013fd6       blr x8
+            0x102a06b0c      086401f0       adrp x8, 0x105689000
+            0x102a06b10      08412091       add x8, x8, 0x810
+            0x102a06b14      000540b9       ldr w0, [x8, 4]
+            0x102a06b18      d6d4ad94       bl sym.imp.swift_task_alloc
+            0x102a06b1c      e80300aa       mov x8, x0
+            0x102a06b20      c0ea01f9       str x0, [x22, 0x3d0]
+            0x102a06b24      09000090       adrp x9, 0x102a06000
+            0x102a06b28      29012e91       add x9, x9, 0xb80
+            0x102a06b2c      162400a9       stp x22, x9, [x0]
+            0x102a06b30      c0c241f9       ldr x0, [x22, 0x380]
+            0x102a06b34      c4be41f9       ldr x4, [x22, 0x378]
+            0x102a06b38      b9eb01a9       stp x25, x26, [x29, 0x18]
+            0x102a06b3c      0090641e       fmov d0, 10.00000000
+            0x102a06b40      b80b00f9       str x24, [x29, 0x10]
+            0x102a06b44      f60308aa       mov x22, x8
+            0x102a06b48      41008052       mov w1, 2
+            0x102a06b4c      02008052       mov w2, 0
+            0x102a06b50      e3031baa       mov x3, x27
+            0x102a06b54      25008052       mov w5, 1
+            0x102a06b58      26008052       mov w6, 1
+            0x102a06b5c      e70314aa       mov x7, x20
+            0x102a06b60      fd7b45a9       ldp x29, x30, [sp, 0x50]
+            0x102a06b64      f5cf43a9       ldp x21, x19, [sp, 0x38]
+            0x102a06b68      f8df42a9       ldp x24, x23, [sp, 0x28]
+            0x102a06b6c      fae741a9       ldp x26, x25, [sp, 0x18]
+            0x102a06b70      fcef40a9       ldp x28, x27, [sp, 8]
+            0x102a06b74      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a06b78      ff830191       add sp, sp, 0x60
+            0x102a06b7c      627d9517       b sym.func.100f66104
+            ;-- func.102a06b80:
+            0x102a06b80      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a06b84      ff0301d1       sub sp, sp, 0x40
+            0x102a06b88      f8df00a9       stp x24, x23, [sp, 8]
+            0x102a06b8c      f5cf01a9       stp x21, x19, [sp, 0x18]
+            0x102a06b90      fd7b03a9       stp x29, x30, [sp, 0x30]
+            0x102a06b94      f61700f9       str x22, [sp, 0x28]
+            0x102a06b98      fdc30091       add x29, sp, 0x30
+            0x102a06b9c      d80240f9       ldr x24, [x22]
+            0x102a06ba0      b8831ff8       stur x24, [x29, -8]
+            0x102a06ba4      00eb41f9       ldr x0, [x24, 0x3d0]
+            0x102a06ba8      d60240f9       ldr x22, [x22]
+            0x102a06bac      b6831ff8       stur x22, [x29, -8]
+            0x102a06bb0      14ef01f9       str x20, [x24, 0x3d8]
+            0x102a06bb4      b5d4ad94       bl sym.imp.swift_task_dealloc
+            0x102a06bb8      13e741f9       ldr x19, [x24, 0x3c8]
+            0x102a06bbc      15e341f9       ldr x21, [x24, 0x3c0]
+            0x102a06bc0      17df41f9       ldr x23, [x24, 0x3b8]
+            0x102a06bc4      00bf41f9       ldr x0, [x24, 0x378]
+            0x102a06bc8      01110290       adrp x1, 0x106c26000
+            0x102a06bcc      21a01291       add x1, x1, 0x4a8
+            0x102a06bd0      c26c0190       adrp x2, 0x10579e000
+            0x102a06bd4      42a00091       add x2, x2, 0x28
+            0x102a06bd8      d9fb5797       bl sym.func.100005b3c
+            0x102a06bdc      e00315aa       mov x0, x21
+            0x102a06be0      6ed4ad94       bl sym.imp.swift_release
+            0x102a06be4      e00313aa       mov x0, x19
+            0x102a06be8      6cd4ad94       bl sym.imp.swift_release
+            0x102a06bec      e00317aa       mov x0, x23
+            0x102a06bf0      3ed3ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a06bf4      02db41f9       ldr x2, [x24, 0x3b0]
+            0x102a06bf8      01d741f9       ldr x1, [x24, 0x3a8]
+            0x102a06bfc      940000b4       cbz x20, 0x102a06c0c
+            0x102a06c00      000000b0       adrp x0, 0x102a07000
+            0x102a06c04      00400f91       add x0, x0, 0x3d0
+            0x102a06c08      03000014       b 0x102a06c14
+            0x102a06c0c      00000090       adrp x0, 0x102a06000
+            0x102a06c10      00b03091       add x0, x0, 0xc2c
+            0x102a06c14      fd7b43a9       ldp x29, x30, [sp, 0x30]
+            0x102a06c18      f5cf41a9       ldp x21, x19, [sp, 0x18]
+            0x102a06c1c      f8df40a9       ldp x24, x23, [sp, 8]
+            0x102a06c20      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a06c24      ff030191       add sp, sp, 0x40
+            0x102a06c28      b6d4ad14       b sym.imp.swift_task_switch
+            ;-- func.102a06c2c:
+            0x102a06c2c      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a06c30      ffc300d1       sub sp, sp, 0x30
+            0x102a06c34      f5cf00a9       stp x21, x19, [sp, 8]
+            0x102a06c38      fd7b02a9       stp x29, x30, [sp, 0x20]
+            0x102a06c3c      f60f00f9       str x22, [sp, 0x18]
+            0x102a06c40      fd830091       add x29, sp, 0x20
+            0x102a06c44      c8b241f9       ldr x8, [x22, 0x360]
+            0x102a06c48      08210891       add x8, x8, 0x208
+            0x102a06c4c      0001c03d       ldr q0, [x8]
+            0x102a06c50      c046803d       str q0, [x22, 0x110]
+            0x102a06c54      008541ad       ldp q0, q1, [x8, 0x30]
+            0x102a06c58      038940ad       ldp q3, q2, [x8, 0x10]
+            0x102a06c5c      c0060aad       stp q0, q1, [x22, 0x140]
+            0x102a06c60      c30a09ad       stp q3, q2, [x22, 0x120]
+            0x102a06c64      13110290       adrp x19, 0x106c26000
+            0x102a06c68      73221391       add x19, x19, 0x4c8
+            0x102a06c6c      d56c0190       adrp x21, 0x10579e000
+            0x102a06c70      b5220191       add x21, x21, 0x48
+            0x102a06c74      c0420491       add x0, x22, 0x110
+            0x102a06c78      c1020891       add x1, x22, 0x200
+            0x102a06c7c      e20313aa       mov x2, x19
+            0x102a06c80      e30315aa       mov x3, x21
+            0x102a06c84      c7fb5797       bl sym.func.100005ba0
+            0x102a06c88      e00313aa       mov x0, x19
+            0x102a06c8c      e10315aa       mov x1, x21
+            0x102a06c90      32f55797       bl sym.func.100004158
+            0x102a06c94      c8020c91       add x8, x22, 0x300
+            0x102a06c98      d4420491       add x20, x22, 0x110
+            0x102a06c9c      8dce6197       bl sym.func.10027a6d0
+            0x102a06ca0      c0420491       add x0, x22, 0x110
+            0x102a06ca4      e10313aa       mov x1, x19
+            0x102a06ca8      e20315aa       mov x2, x21
+            0x102a06cac      a4fb5797       bl sym.func.100005b3c
+            0x102a06cb0      d38241f9       ldr x19, [x22, 0x300]
+            0x102a06cb4      d48641f9       ldr x20, [x22, 0x308]
+            0x102a06cb8      d4f201f9       str x20, [x22, 0x3e0]
+            0x102a06cbc      c88e41f9       ldr x8, [x22, 0x318]
+            0x102a06cc0      c8f601f9       str x8, [x22, 0x3e8]
+            0x102a06cc4      c68c9597       bl sym.func.100f69fdc
+            0x102a06cc8      c1020a91       add x1, x22, 0x280
+            0x102a06ccc      cca69797       bl sym.func.100ff07fc
+            0x102a06cd0      68024029       ldp w8, w0, [x19]
+            0x102a06cd4      087d4093       sxtw x8, w8
+            0x102a06cd8      0101138b       add x1, x8, x19
+            0x102a06cdc      e10300f9       str x1, [sp]
+            0x102a06ce0      64d4ad94       bl sym.imp.swift_task_alloc
+            0x102a06ce4      e80300aa       mov x8, x0
+            0x102a06ce8      c0fa01f9       str x0, [x22, 0x3f0]
+            0x102a06cec      09000090       adrp x9, 0x102a06000
+            0x102a06cf0      29813491       add x9, x9, 0xd20
+            0x102a06cf4      162400a9       stp x22, x9, [x0]
+            0x102a06cf8      c1c241f9       ldr x1, [x22, 0x380]
+            0x102a06cfc      c0ba41f9       ldr x0, [x22, 0x370]
+            0x102a06d00      c2020a91       add x2, x22, 0x280
+            0x102a06d04      f60308aa       mov x22, x8
+            0x102a06d08      e30340f9       ldr x3, [sp]
+            0x102a06d0c      fd7b42a9       ldp x29, x30, [sp, 0x20]
+            0x102a06d10      f5cf40a9       ldp x21, x19, [sp, 8]
+            0x102a06d14      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a06d18      ffc30091       add sp, sp, 0x30
+            0x102a06d1c      60001fd6       br x3
+            ;-- func.102a06d20:
+            0x102a06d20      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a06d24      ff8300d1       sub sp, sp, 0x20
+            0x102a06d28      fd7b01a9       stp x29, x30, [sp, 0x10]
+            0x102a06d2c      f60700f9       str x22, [sp, 8]
+            0x102a06d30      fd430091       add x29, sp, 0x10
+            0x102a06d34      c90240f9       ldr x9, [x22]
+            0x102a06d38      a9831ff8       stur x9, [x29, -8]
+            0x102a06d3c      28f941f9       ldr x8, [x9, 0x3f0]
+            0x102a06d40      d60240f9       ldr x22, [x22]
+            0x102a06d44      b6831ff8       stur x22, [x29, -8]
+            0x102a06d48      20fd01f9       str x0, [x9, 0x3f8]
+            0x102a06d4c      210102f9       str x1, [x9, 0x400]
+            0x102a06d50      340502f9       str x20, [x9, 0x408]
+            0x102a06d54      e00308aa       mov x0, x8
+            0x102a06d58      4cd4ad94       bl sym.imp.swift_task_dealloc
+            0x102a06d5c      940000b4       cbz x20, 0x102a06d6c
+            0x102a06d60      000000b0       adrp x0, 0x102a07000
+            0x102a06d64      00c00b91       add x0, x0, 0x2f0
+            0x102a06d68      03000014       b 0x102a06d74
+            0x102a06d6c      00000090       adrp x0, 0x102a06000
+            0x102a06d70      00303691       add x0, x0, 0xd8c
+            0x102a06d74      010080d2       mov x1, 0
+            0x102a06d78      020080d2       mov x2, 0
+            0x102a06d7c      fd7b41a9       ldp x29, x30, [sp, 0x10]
+            0x102a06d80      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a06d84      ff830091       add sp, sp, 0x20
+            0x102a06d88      5ed4ad14       b sym.imp.swift_task_switch
+            ;-- func.102a06d8c:
+            0x102a06d8c      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a06d90      ff8300d1       sub sp, sp, 0x20
+            0x102a06d94      fd7b01a9       stp x29, x30, [sp, 0x10]
+            0x102a06d98      f60700f9       str x22, [sp, 8]
+            0x102a06d9c      fd430091       add x29, sp, 0x10
+            0x102a06da0      d4f641f9       ldr x20, [x22, 0x3e8]
+            0x102a06da4      c0f241f9       ldr x0, [x22, 0x3e0]
+            0x102a06da8      fcd3ad94       bl sym.imp.swift_release
+            0x102a06dac      e00314aa       mov x0, x20
+            0x102a06db0      fad3ad94       bl sym.imp.swift_release
+            0x102a06db4      c0020a91       add x0, x22, 0x280
+            0x102a06db8      c4259897       bl sym.func.1010104c8
+            0x102a06dbc      c2da41f9       ldr x2, [x22, 0x3b0]
+            0x102a06dc0      c1d641f9       ldr x1, [x22, 0x3a8]
+            0x102a06dc4      00000090       adrp x0, 0x102a06000
+            0x102a06dc8      00703791       add x0, x0, 0xddc
+            0x102a06dcc      fd7b41a9       ldp x29, x30, [sp, 0x10]
+            0x102a06dd0      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a06dd4      ff830091       add sp, sp, 0x20
+            0x102a06dd8      4ad4ad14       b sym.imp.swift_task_switch
+            ;-- func.102a06ddc:
+            0x102a06ddc      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a06de0      ff0303d1       sub sp, sp, 0xc0
+            0x102a06de4      fcef06a9       stp x28, x27, [sp, 0x68]
+            0x102a06de8      fae707a9       stp x26, x25, [sp, 0x78]
+            0x102a06dec      f8df08a9       stp x24, x23, [sp, 0x88]
+            0x102a06df0      f5cf09a9       stp x21, x19, [sp, 0x98]
+            0x102a06df4      fd7b0ba9       stp x29, x30, [sp, 0xb0]
+            0x102a06df8      f65700f9       str x22, [sp, 0xa8]
+            0x102a06dfc      fdc30291       add x29, sp, 0xb0
+            0x102a06e00      c0d241f9       ldr x0, [x22, 0x3a0]
+            0x102a06e04      d4ba41f9       ldr x20, [x22, 0x370]
+            0x102a06e08      d3b641f9       ldr x19, [x22, 0x368]
+            0x102a06e0c      e3d3ad94       bl sym.imp.swift_release
+            0x102a06e10      681680b9       ldrsw x8, [x19, 0x14]
+            0x102a06e14      996a68b8       ldr w25, [x20, x8]
+            0x102a06e18      28230351       sub w8, w25, 0xc8
+            0x102a06e1c      1f8d0171       cmp w8, 0x63               ; 'c'
+            0x102a06e20      c8050054       b.hi 0x102a06ed8
+            0x102a06e24      d50642f9       ldr x21, [x22, 0x408]
+            0x102a06e28      d30242f9       ldr x19, [x22, 0x400]
+            0x102a06e2c      d8fe41f9       ldr x24, [x22, 0x3f8]
+            0x102a06e30      000080d2       mov x0, 0
+            0x102a06e34      c49dad94       bl sym.imp.Foundation.JSONDecoder.allocator_...a_ ; Foundation.JSONDecoder.allocator(...a)
+            0x102a06e38      013040b9       ldr w1, [x0, 0x30]
+            0x102a06e3c      02684079       ldrh w2, [x0, 0x34]
+            0x102a06e40      86d2ad94       bl sym.imp.swift_allocObject
+            0x102a06e44      f40300aa       mov x20, x0
+            0x102a06e48      bc9dad94       bl sym.imp.Foundation.JSONDecoder.allocator._...cfc_ ; Foundation.JSONDecoder.allocator.(...cfc)
+            0x102a06e4c      f70300aa       mov x23, x0
+            0x102a06e50      93210094       bl sym.func.102a0f49c
+            0x102a06e54      e40300aa       mov x4, x0
+            0x102a06e58      40eb01d0       adrp x0, 0x106770000
+            0x102a06e5c      00e01691       add x0, x0, 0x5b8
+            0x102a06e60      c8420991       add x8, x22, 0x250
+            0x102a06e64      e10318aa       mov x1, x24
+            0x102a06e68      e20313aa       mov x2, x19
+            0x102a06e6c      e30300aa       mov x3, x0
+            0x102a06e70      f40317aa       mov x20, x23
+            0x102a06e74      a59dad94       bl sym.imp.Foundation.JSONDecoder.decode.allocator.from...xxm_AA4DataVtKSeRzlFTj
+            0x102a06e78      f40315aa       mov x20, x21
+            0x102a06e7c      d80242f9       ldr x24, [x22, 0x400]
+            0x102a06e80      d9fe41f9       ldr x25, [x22, 0x3f8]
+            0x102a06e84      d3ce41f9       ldr x19, [x22, 0x398]
+            0x102a06e88      d5c241f9       ldr x21, [x22, 0x380]
+            0x102a06e8c      541100b4       cbz x20, 0x102a070b4
+            0x102a06e90      daba41f9       ldr x26, [x22, 0x370]
+            0x102a06e94      e00317aa       mov x0, x23
+            0x102a06e98      c0d3ad94       bl sym.imp.swift_release
+            0x102a06e9c      e00319aa       mov x0, x25
+            0x102a06ea0      e10318aa       mov x1, x24
+            0x102a06ea4      5a9a5897       bl sym.func.10002d80c
+            0x102a06ea8      212bffb0       adrp x1, 0x100f6b000
+            0x102a06eac      21903191       add x1, x1, 0xc64
+            0x102a06eb0      e0031aaa       mov x0, x26
+            0x102a06eb4      15125997       bl sym.func.10004b708
+            0x102a06eb8      212bffb0       adrp x1, 0x100f6b000
+            0x102a06ebc      21502f91       add x1, x1, 0xbd4
+            0x102a06ec0      e00315aa       mov x0, x21
+            0x102a06ec4      11125997       bl sym.func.10004b708
+            0x102a06ec8      212bffb0       adrp x1, 0x100f6b000
+            0x102a06ecc      21a02f91       add x1, x1, 0xbe8
+            0x102a06ed0      e00313aa       mov x0, x19
+            0x102a06ed4      ec000014       b 0x102a07284
+            0x102a06ed8      08110290       adrp x8, 0x106c26000
+            0x102a06edc      083540f9       ldr x8, [x8, 0x68]
+            0x102a06ee0      1f0500b1       cmn x8, 1
+            0x102a06ee4      a11f0054       b.ne 0x102a072d8
+            0x102a06ee8      3b7f4093       sxtw x27, w25
+            0x102a06eec      483f02b0       adrp x8, 0x1071ef000
+            0x102a06ef0      181146f9       ldr x24, [x8, 0xc20]
+            0x102a06ef4      00830091       add x0, x24, 0x20
+            0x102a06ef8      c1820c91       add x1, x22, 0x320
+            0x102a06efc      020080d2       mov x2, 0
+            0x102a06f00      030080d2       mov x3, 0
+            0x102a06f04      76d2ad94       bl sym.imp.swift_beginAccess
+            0x102a06f08      00830091       add x0, x24, 0x20
+            0x102a06f0c      c1c20a91       add x1, x22, 0x2b0
+            0x102a06f10      8ffa5897       bl sym.func.10004594c
+            0x102a06f14      d36641f9       ldr x19, [x22, 0x2c8]
+            0x102a06f18      d56a41f9       ldr x21, [x22, 0x2d0]
+            0x102a06f1c      c0c20a91       add x0, x22, 0x2b0
+            0x102a06f20      e10313aa       mov x1, x19
+            0x102a06f24      acfb5797       bl sym.func.100005dd4
+            0x102a06f28      a83640f9       ldr x8, [x21, 0x68]
+            0x102a06f2c      f40300aa       mov x20, x0
+            0x102a06f30      e00313aa       mov x0, x19
+            0x102a06f34      e10315aa       mov x1, x21
+            0x102a06f38      00013fd6       blr x8
+            0x102a06f3c      141c0012       and w20, w0, 0xff
+            0x102a06f40      c0c20a91       add x0, x22, 0x2b0
+            0x102a06f44      d0f45797       bl sym.func.100004284
+            0x102a06f48      9f120071       cmp w20, 4
+            0x102a06f4c      e8150054       b.hi 0x102a07208
+            0x102a06f50      b50580d2       mov x21, 0x2d              ; '-'
+            0x102a06f54      1500faf2       movk x21, 0xd000, lsl 48
+            0x102a06f58      d7c241f9       ldr x23, [x22, 0x380]
+            0x102a06f5c      c88801d0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a06f60      08c10491       add x8, x8, 0x130
+            0x102a06f64      1c8100d1       sub x28, x8, 0x20
+            0x102a06f68      00830091       add x0, x24, 0x20
+            0x102a06f6c      c1620b91       add x1, x22, 0x2d8
+            0x102a06f70      77fa5897       bl sym.func.10004594c
+            0x102a06f74      c17a41f9       ldr x1, [x22, 0x2f0]
+            0x102a06f78      d37e41f9       ldr x19, [x22, 0x2f8]
+            0x102a06f7c      c0620b91       add x0, x22, 0x2d8
+            0x102a06f80      e12300f9       str x1, [sp, 0x40]
+            0x102a06f84      94fb5797       bl sym.func.100005dd4
+            0x102a06f88      fa0300aa       mov x26, x0
+            0x102a06f8c      0800fcd2       mov x8, -0x2000000000000000
+            0x102a06f90      ff2305a9       stp xzr, x8, [sp, 0x50]
+            0x102a06f94      f4430191       add x20, sp, 0x50
+            0x102a06f98      a0088052       mov w0, 0x45               ; 'E'
+            0x102a06f9c      cbc0ad94       bl sym.imp._StringGuts.grow_...SiF_ ; _StringGuts.grow(...SiF)
+            0x102a06fa0      e82745a9       ldp x8, x9, [sp, 0x50]
+            0x102a06fa4      e82705a9       stp x8, x9, [sp, 0x50]
+            0x102a06fa8      c88801d0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a06fac      08811991       add x8, x8, 0x660
+            0x102a06fb0      088100d1       sub x8, x8, 0x20
+            0x102a06fb4      a0060091       add x0, x21, 1
+            0x102a06fb8      010141b2       orr x1, x8, 0x8000000000000000
+            0x102a06fbc      f4430191       add x20, sp, 0x50
+            0x102a06fc0      f2b7ad94       bl sym.imp.append_...ySSF_ ; append(...ySSF)
+            0x102a06fc4      000080d2       mov x0, 0
+            0x102a06fc8      6ba0ad94       bl sym.imp.Foundation.URL...VMa
+            0x102a06fcc      f80300aa       mov x24, x0
+            0x102a06fd0      41de0190       adrp x1, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a06fd4      215441f9       ldr x1, [x1, 0x2a8]
+            0x102a06fd8      00110290       adrp x0, 0x106c26000
+            0x102a06fdc      00401391       add x0, x0, 0x4d0
+            0x102a06fe0      42de0190       adrp x2, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a06fe4      426c41f9       ldr x2, [x2, 0x2d8]
+            0x102a06fe8      21965897       bl sym.func.10002c86c
+            0x102a06fec      e10300aa       mov x1, x0
+            0x102a06ff0      f40317aa       mov x20, x23
+            0x102a06ff4      e00318aa       mov x0, x24
+            0x102a06ff8      e1c3ad94       bl sym.imp.CustomStringConvertible.description__String_...vgTj_ ; CustomStringConvertible.description__String(...vgTj)
+            0x102a06ffc      f70301aa       mov x23, x1
+            0x102a07000      f4430191       add x20, sp, 0x50
+            0x102a07004      e1b7ad94       bl sym.imp.append_...ySSF_ ; append(...ySSF)
+            0x102a07008      e00317aa       mov x0, x23
+            0x102a0700c      37d2ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a07010      c88801b0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a07014      08411a91       add x8, x8, 0x690
+            0x102a07018      088100d1       sub x8, x8, 0x20
+            0x102a0701c      a06a00d1       sub x0, x21, 0x1a
+            0x102a07020      010141b2       orr x1, x8, 0x8000000000000000
+            0x102a07024      f4430191       add x20, sp, 0x50
+            0x102a07028      d8b7ad94       bl sym.imp.append_...ySSF_ ; append(...ySSF)
+            0x102a0702c      d9ae02b9       str w25, [x22, 0x2ac]
+            0x102a07030      80de01d0       adrp x0, reloc.KeyedEncodingContainerProtocol.encodeConditional.setter.forKey...yqd___0H0QztKRld__CSERd__lF ; 0x1065d9000
+            0x102a07034      00e840f9       ldr x0, [x0, 0x1d0]
+            0x102a07038      81de01d0       adrp x1, reloc.KeyedEncodingContainerProtocol.encodeConditional.setter.forKey...yqd___0H0QztKRld__CSERd__lF ; 0x1065d9000
+            0x102a0703c      210041f9       ldr x1, [x1, 0x200]
+            0x102a07040      d4b20a91       add x20, x22, 0x2ac
+            0x102a07044      cec3ad94       bl sym.imp.CustomStringConvertible.description__String_...vgTj_ ; CustomStringConvertible.description__String(...vgTj)
+            0x102a07048      f70301aa       mov x23, x1
+            0x102a0704c      f4430191       add x20, sp, 0x50
+            0x102a07050      ceb7ad94       bl sym.imp.append_...ySSF_ ; append(...ySSF)
+            0x102a07054      e00317aa       mov x0, x23
+            0x102a07058      24d2ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a0705c      f45f45a9       ldp x20, x23, [sp, 0x50]
+            0x102a07060      94200094       bl sym.func.102a0f2b0
+            0x102a07064      e30300aa       mov x3, x0
+            0x102a07068      a2df01d0       adrp x2, $s5Input7Combine10SubscriberPTl ; 0x1065fd000
+            0x102a0706c      42c02191       add x2, x2, 0x870
+            0x102a07070      c8e20c91       add x8, x22, 0x338
+            0x102a07074      e00314aa       mov x0, x20
+            0x102a07078      e10317aa       mov x1, x23
+            0x102a0707c      f40302aa       mov x20, x2
+            0x102a07080      51c5ad94       bl sym.imp.ExpressibleByStringInterpolation.setterDefault_...cfC_ ; ExpressibleByStringInterpolation.setterDefault(...cfC)
+            0x102a07084      d49e41f9       ldr x20, [x22, 0x338]
+            0x102a07088      d7a241f9       ldr x23, [x22, 0x340]
+            0x102a0708c      820341b2       orr x2, x28, 0x8000000000000000
+            0x102a07090      e0058052       mov w0, 0x2f               ; '/'
+            0x102a07094      a10580d2       mov x1, 0x2d               ; '-'
+            0x102a07098      0100faf2       movk x1, 0xd000, lsl 48
+            0x102a0709c      b6ec5897       bl sym.func.100042374
+            0x102a070a0      61050036       tbz w1, 0, 0x102a0714c
+            0x102a070a4      1860fcd2       mov x24, -0x1d00000000000000
+            0x102a070a8      d9ed8552       mov w25, 0x2f6e            ; 'n/'
+            0x102a070ac      390ca072       movk w25, 0x61, lsl 16     ; 'a'
+            0x102a070b0      3a000014       b 0x102a07198
+            0x102a070b4      d4be41f9       ldr x20, [x22, 0x378]
+            0x102a070b8      daba41f9       ldr x26, [x22, 0x370]
+            0x102a070bc      dba641f9       ldr x27, [x22, 0x348]
+            0x102a070c0      e00317aa       mov x0, x23
+            0x102a070c4      35d3ad94       bl sym.imp.swift_release
+            0x102a070c8      e00319aa       mov x0, x25
+            0x102a070cc      e10318aa       mov x1, x24
+            0x102a070d0      cf995897       bl sym.func.10002d80c
+            0x102a070d4      212bff90       adrp x1, 0x100f6b000
+            0x102a070d8      21903191       add x1, x1, 0xc64
+            0x102a070dc      e0031aaa       mov x0, x26
+            0x102a070e0      8a115997       bl sym.func.10004b708
+            0x102a070e4      212bff90       adrp x1, 0x100f6b000
+            0x102a070e8      21502f91       add x1, x1, 0xbd4
+            0x102a070ec      e00315aa       mov x0, x21
+            0x102a070f0      86115997       bl sym.func.10004b708
+            0x102a070f4      212bff90       adrp x1, 0x100f6b000
+            0x102a070f8      21a02f91       add x1, x1, 0xbe8
+            0x102a070fc      e00313aa       mov x0, x19
+            0x102a07100      82115997       bl sym.func.10004b708
+            0x102a07104      c18252ad       ldp q1, q0, [x22, 0x250]
+            0x102a07108      e08701ad       stp q0, q1, [sp, 0x30]
+            0x102a0710c      d73a41f9       ldr x23, [x22, 0x270]
+            0x102a07110      d83e41f9       ldr x24, [x22, 0x278]
+            0x102a07114      e00313aa       mov x0, x19
+            0x102a07118      5cd3ad94       bl sym.imp.swift_task_dealloc
+            0x102a0711c      e00315aa       mov x0, x21
+            0x102a07120      5ad3ad94       bl sym.imp.swift_task_dealloc
+            0x102a07124      e00314aa       mov x0, x20
+            0x102a07128      58d3ad94       bl sym.imp.swift_task_dealloc
+            0x102a0712c      e0031aaa       mov x0, x26
+            0x102a07130      56d3ad94       bl sym.imp.swift_task_dealloc
+            0x102a07134      e08741ad       ldp q0, q1, [sp, 0x30]
+            0x102a07138      610300ad       stp q1, q0, [x27]
+            0x102a0713c      776302a9       stp x23, x24, [x27, 0x20]
+            0x102a07140      c00640f9       ldr x0, [x22, 8]
+            0x102a07144      140080d2       mov x20, 0
+            0x102a07148      5c000014       b 0x102a072b8
+            0x102a0714c      e20300aa       mov x2, x0
+            0x102a07150      830341b2       orr x3, x28, 0x8000000000000000
+            0x102a07154      e0018052       mov w0, 0xf
+            0x102a07158      e10302aa       mov x1, x2
+            0x102a0715c      a20580d2       mov x2, 0x2d               ; '-'
+            0x102a07160      0200faf2       movk x2, 0xd000, lsl 48
+            0x102a07164      f2b7ad94       bl sym.imp.Index...VGcig
+            0x102a07168      f5031baa       mov x21, x27
+            0x102a0716c      fb031aaa       mov x27, x26
+            0x102a07170      fa0303aa       mov x26, x3
+            0x102a07174      22b7ad94       bl sym.imp._fromSubstring_...SSSshFZ_ ; _fromSubstring(...SSSshFZ)
+            0x102a07178      f90300aa       mov x25, x0
+            0x102a0717c      f80301aa       mov x24, x1
+            0x102a07180      e0031aaa       mov x0, x26
+            0x102a07184      fa031baa       mov x26, x27
+            0x102a07188      fb0315aa       mov x27, x21
+            0x102a0718c      b50580d2       mov x21, 0x2d              ; '-'
+            0x102a07190      1500faf2       movk x21, 0xd000, lsl 48
+            0x102a07194      d5d1ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a07198      c88801b0       adrp x8, str.Error_in_stream_request ; 0x105b20000
+            0x102a0719c      08c11a91       add x8, x8, 0x6b0
+            0x102a071a0      088100d1       sub x8, x8, 0x20
+            0x102a071a4      080141b2       orr x8, x8, 0x8000000000000000
+            0x102a071a8      691640f9       ldr x9, [x19, 0x28]
+            0x102a071ac      aa3e00d1       sub x10, x21, 0xf
+            0x102a071b0      4b158052       mov w11, 0xaa
+            0x102a071b4      ec2340f9       ldr x12, [sp, 0x40]
+            0x102a071b8      eccf01a9       stp x12, x19, [sp, 0x18]
+            0x102a071bc      e8af00a9       stp x8, x11, [sp, 8]
+            0x102a071c0      870341b2       orr x7, x28, 0x8000000000000000
+            0x102a071c4      ea0300f9       str x10, [sp]
+            0x102a071c8      80008052       mov w0, 4
+            0x102a071cc      e10314aa       mov x1, x20
+            0x102a071d0      e20317aa       mov x2, x23
+            0x102a071d4      030080d2       mov x3, 0
+            0x102a071d8      e40319aa       mov x4, x25
+            0x102a071dc      e50318aa       mov x5, x24
+            0x102a071e0      a60580d2       mov x6, 0x2d               ; '-'
+            0x102a071e4      0600faf2       movk x6, 0xd000, lsl 48
+            0x102a071e8      f4031aaa       mov x20, x26
+            0x102a071ec      20013fd6       blr x9
+            0x102a071f0      e00317aa       mov x0, x23
+            0x102a071f4      bdd1ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a071f8      e00318aa       mov x0, x24
+            0x102a071fc      bbd1ad94       bl sym.imp.swift_bridgeObjectRelease
+            0x102a07200      c0620b91       add x0, x22, 0x2d8
+            0x102a07204      20f45797       bl sym.func.100004284
+            0x102a07208      d30242f9       ldr x19, [x22, 0x400]
+            0x102a0720c      d7fe41f9       ldr x23, [x22, 0x3f8]
+            0x102a07210      d8ce41f9       ldr x24, [x22, 0x398]
+            0x102a07214      d9c241f9       ldr x25, [x22, 0x380]
+            0x102a07218      daba41f9       ldr x26, [x22, 0x370]
+            0x102a0721c      a21b0094       bl sym.func.102a0e0a4
+            0x102a07220      e10300aa       mov x1, x0
+            0x102a07224      40eb01b0       adrp x0, 0x106770000
+            0x102a07228      00000d91       add x0, x0, 0x340
+            0x102a0722c      020080d2       mov x2, 0
+            0x102a07230      03008052       mov w3, 0
+            0x102a07234      86d1ad94       bl sym.imp.swift_allocError
+            0x102a07238      f40300aa       mov x20, x0
+            0x102a0723c      3b7c00a9       stp x27, xzr, [x1]
+            0x102a07240      3f400039       strb wzr, [x1, 0x10]
+            0x102a07244      f50300aa       mov x21, x0
+            0x102a07248      85d3ad94       bl sym.imp.swift_willThrow
+            0x102a0724c      e00317aa       mov x0, x23
+            0x102a07250      e10313aa       mov x1, x19
+            0x102a07254      6e995897       bl sym.func.10002d80c
+            0x102a07258      212bff90       adrp x1, 0x100f6b000
+            0x102a0725c      21903191       add x1, x1, 0xc64
+            0x102a07260      e0031aaa       mov x0, x26
+            0x102a07264      29115997       bl sym.func.10004b708
+            0x102a07268      212bff90       adrp x1, 0x100f6b000
+            0x102a0726c      21502f91       add x1, x1, 0xbd4
+            0x102a07270      e00319aa       mov x0, x25
+            0x102a07274      25115997       bl sym.func.10004b708
+            0x102a07278      212bff90       adrp x1, 0x100f6b000
+            0x102a0727c      21a02f91       add x1, x1, 0xbe8
+            0x102a07280      e00318aa       mov x0, x24
+            0x102a07284      21115997       bl sym.func.10004b708
+            0x102a07288      c0ce41f9       ldr x0, [x22, 0x398]
+            0x102a0728c      d3c241f9       ldr x19, [x22, 0x380]
+            0x102a07290      d5be41f9       ldr x21, [x22, 0x378]
+            0x102a07294      d7ba41f9       ldr x23, [x22, 0x370]
+            0x102a07298      fcd2ad94       bl sym.imp.swift_task_dealloc
+            0x102a0729c      e00313aa       mov x0, x19
+            0x102a072a0      fad2ad94       bl sym.imp.swift_task_dealloc
+            0x102a072a4      e00315aa       mov x0, x21
+            0x102a072a8      f8d2ad94       bl sym.imp.swift_task_dealloc
+            0x102a072ac      e00317aa       mov x0, x23
+            0x102a072b0      f6d2ad94       bl sym.imp.swift_task_dealloc
+            0x102a072b4      c00640f9       ldr x0, [x22, 8]
+            0x102a072b8      fd7b4ba9       ldp x29, x30, [sp, 0xb0]
+            0x102a072bc      f5cf49a9       ldp x21, x19, [sp, 0x98]
+            0x102a072c0      f8df48a9       ldp x24, x23, [sp, 0x88]
+            0x102a072c4      fae747a9       ldp x26, x25, [sp, 0x78]
+            0x102a072c8      fcef46a9       ldp x28, x27, [sp, 0x68]
+            0x102a072cc      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a072d0      ff030391       add sp, sp, 0xc0
+            0x102a072d4      00001fd6       br x0
+            0x102a072d8      e01002f0       adrp x0, 0x106c26000
+            0x102a072dc      00a00191       add x0, x0, 0x68
+            0x102a072e0      210000d0       adrp x1, 0x102a0d000
+            0x102a072e4      21901891       add x1, x1, 0x624
+            0x102a072e8      94d2ad94       bl sym.imp.swift_once
+            0x102a072ec      fffeff17       b 0x102a06ee8
+            ;-- func.102a072f0:
+            0x102a072f0      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a072f4      ff8300d1       sub sp, sp, 0x20
+            0x102a072f8      fd7b01a9       stp x29, x30, [sp, 0x10]
+            0x102a072fc      f60700f9       str x22, [sp, 8]
+            0x102a07300      fd430091       add x29, sp, 0x10
+            0x102a07304      d4f641f9       ldr x20, [x22, 0x3e8]
+            0x102a07308      c0f241f9       ldr x0, [x22, 0x3e0]
+            0x102a0730c      a3d2ad94       bl sym.imp.swift_release
+            0x102a07310      e00314aa       mov x0, x20
+            0x102a07314      a1d2ad94       bl sym.imp.swift_release
+            0x102a07318      c0020a91       add x0, x22, 0x280
+            0x102a0731c      6b249897       bl sym.func.1010104c8
+            0x102a07320      c2da41f9       ldr x2, [x22, 0x3b0]
+            0x102a07324      c1d641f9       ldr x1, [x22, 0x3a8]
+            0x102a07328      00000090       adrp x0, 0x102a07000
+            0x102a0732c      00000d91       add x0, x0, 0x340
+            0x102a07330      fd7b41a9       ldp x29, x30, [sp, 0x10]
+            0x102a07334      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a07338      ff830091       add sp, sp, 0x20
+            0x102a0733c      f1d2ad14       b sym.imp.swift_task_switch
+            ;-- func.102a07340:
+            0x102a07340      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a07344      f70f1df8       str x23, [sp, -0x30]!
+            0x102a07348      f5cf00a9       stp x21, x19, [sp, 8]
+            0x102a0734c      fd7b02a9       stp x29, x30, [sp, 0x20]
+            0x102a07350      f60f00f9       str x22, [sp, 0x18]
+            0x102a07354      fd830091       add x29, sp, 0x20
+            0x102a07358      c0d241f9       ldr x0, [x22, 0x3a0]
+            0x102a0735c      d4ce41f9       ldr x20, [x22, 0x398]
+            0x102a07360      d3c241f9       ldr x19, [x22, 0x380]
+            0x102a07364      8dd2ad94       bl sym.imp.swift_release
+            0x102a07368      212bff90       adrp x1, 0x100f6b000
+            0x102a0736c      21502f91       add x1, x1, 0xbd4
+            0x102a07370      e00313aa       mov x0, x19
+            0x102a07374      e5105997       bl sym.func.10004b708
+            0x102a07378      212bff90       adrp x1, 0x100f6b000
+            0x102a0737c      21a02f91       add x1, x1, 0xbe8
+            0x102a07380      e00314aa       mov x0, x20
+            0x102a07384      e1105997       bl sym.func.10004b708
+            0x102a07388      d40642f9       ldr x20, [x22, 0x408]
+            0x102a0738c      c0ce41f9       ldr x0, [x22, 0x398]
+            0x102a07390      d3c241f9       ldr x19, [x22, 0x380]
+            0x102a07394      d5be41f9       ldr x21, [x22, 0x378]
+            0x102a07398      d7ba41f9       ldr x23, [x22, 0x370]
+            0x102a0739c      bbd2ad94       bl sym.imp.swift_task_dealloc
+            0x102a073a0      e00313aa       mov x0, x19
+            0x102a073a4      b9d2ad94       bl sym.imp.swift_task_dealloc
+            0x102a073a8      e00315aa       mov x0, x21
+            0x102a073ac      b7d2ad94       bl sym.imp.swift_task_dealloc
+            0x102a073b0      e00317aa       mov x0, x23
+            0x102a073b4      b5d2ad94       bl sym.imp.swift_task_dealloc
+            0x102a073b8      c00640f9       ldr x0, [x22, 8]
+            0x102a073bc      fd7b42a9       ldp x29, x30, [sp, 0x20]
+            0x102a073c0      f5cf40a9       ldp x21, x19, [sp, 8]
+            0x102a073c4      f70743f8       ldr x23, [sp], 0x30
+            0x102a073c8      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a073cc      00001fd6       br x0
+            ;-- func.102a073d0:
+            0x102a073d0      bd0344b2       orr x29, x29, 0x1000000000000000
+            0x102a073d4      f70f1df8       str x23, [sp, -0x30]!
+            0x102a073d8      f5cf00a9       stp x21, x19, [sp, 8]
+            0x102a073dc      fd7b02a9       stp x29, x30, [sp, 0x20]
+            0x102a073e0      f60f00f9       str x22, [sp, 0x18]
+            0x102a073e4      fd830091       add x29, sp, 0x20
+            0x102a073e8      c0d241f9       ldr x0, [x22, 0x3a0]
+            0x102a073ec      d4ce41f9       ldr x20, [x22, 0x398]
+            0x102a073f0      6ad2ad94       bl sym.imp.swift_release
+            0x102a073f4      212bff90       adrp x1, 0x100f6b000
+            0x102a073f8      21a02f91       add x1, x1, 0xbe8
+            0x102a073fc      e00314aa       mov x0, x20
+            0x102a07400      c2105997       bl sym.func.10004b708
+            0x102a07404      d4ee41f9       ldr x20, [x22, 0x3d8]
+            0x102a07408      c0ce41f9       ldr x0, [x22, 0x398]
+            0x102a0740c      d3c241f9       ldr x19, [x22, 0x380]
+            0x102a07410      d5be41f9       ldr x21, [x22, 0x378]
+            0x102a07414      d7ba41f9       ldr x23, [x22, 0x370]
+            0x102a07418      9cd2ad94       bl sym.imp.swift_task_dealloc
+            0x102a0741c      e00313aa       mov x0, x19
+            0x102a07420      9ad2ad94       bl sym.imp.swift_task_dealloc
+            0x102a07424      e00315aa       mov x0, x21
+            0x102a07428      98d2ad94       bl sym.imp.swift_task_dealloc
+            0x102a0742c      e00317aa       mov x0, x23
+            0x102a07430      96d2ad94       bl sym.imp.swift_task_dealloc
+            0x102a07434      c00640f9       ldr x0, [x22, 8]
+            0x102a07438      fd7b42a9       ldp x29, x30, [sp, 0x20]
+            0x102a0743c      f5cf40a9       ldp x21, x19, [sp, 8]
+            0x102a07440      f70743f8       ldr x23, [sp], 0x30
+            0x102a07444      bdfb4392       and x29, x29, 0xefffffffffffffff
+            0x102a07448      00001fd6       br x0
+            ;-- func.102a0744c:
+            0x102a0744c      fc0f1af8       str x28, [sp, -0x60]!
+            0x102a07450      fb6b01a9       stp x27, x26, [sp, 0x10]
+            0x102a07454      f96302a9       stp x25, x24, [sp, 0x20]
+            0x102a07458      f75b03a9       stp x23, x22, [sp, 0x30]
+            0x102a0745c      f44f04a9       stp x20, x19, [sp, 0x40]
+            0x102a07460      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a07464      fd430191       add x29, sp, 0x50
+            0x102a07468      ff8301d1       sub sp, sp, 0x60
+            0x102a0746c      f60315aa       mov x22, x21
+            0x102a07470      f40302aa       mov x20, x2
+            0x102a07474      f90301aa       mov x25, x1
+            0x102a07478      a08319f8       stur x0, [x29, -0x68]
+            0x102a0747c      a88317f8       stur x8, [x29, -0x88]
+            0x102a07480      000080d2       mov x0, 0
+            0x102a07484      7cb3ad94       bl sym.imp.CryptoKit.SHA256Digest...VMa
+            0x102a07488      08805ff8       ldur x8, [x0, -8]
+            0x102a0748c      a88338a9       stp x8, x0, [x29, -0x78]
+            0x102a07490      082140f9       ldr x8, [x8, 0x40]
+            0x102a07494      e90308aa       mov x9, x8
+            0x102a07498      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a0749c      104244f9       ldr x16, [x16, 0x880]
+            0x102a074a0      00023fd6       blr x16
+            0x102a074a4      e9030091       mov x9, sp
+            0x102a074a8      0a3d0091       add x10, x8, 0xf
+            0x102a074ac      4ced7c92       and x12, x10, 0xfffffffffffffff0
+            0x102a074b0      29010ccb       sub x9, x9, x12
+            0x102a074b4      a90318f8       stur x9, [x29, -0x80]
+            0x102a074b8      3f010091       mov sp, x9
+            0x102a074bc      e90308aa       mov x9, x8
+            0x102a074c0      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a074c4      104244f9       ldr x16, [x16, 0x880]
+            0x102a074c8      00023fd6       blr x16
+            0x102a074cc      e8030091       mov x8, sp
+            0x102a074d0      17010ccb       sub x23, x8, x12
+            0x102a074d4      ff020091       mov sp, x23
+            0x102a074d8      000080d2       mov x0, 0
+            0x102a074dc      6cb3ad94       bl sym.imp.CryptoKit.SharedSecret...VMa
+            0x102a074e0      fb0300aa       mov x27, x0
+            0x102a074e4      18805ff8       ldur x24, [x0, -8]
+            0x102a074e8      082340f9       ldr x8, [x24, 0x40]
+            0x102a074ec      e90308aa       mov x9, x8
+            0x102a074f0      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a074f4      104244f9       ldr x16, [x16, 0x880]
+            0x102a074f8      00023fd6       blr x16
+            0x102a074fc      e9030091       mov x9, sp
+            0x102a07500      083d0091       add x8, x8, 0xf
+            0x102a07504      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a07508      280108cb       sub x8, x9, x8
+            0x102a0750c      a8831bf8       stur x8, [x29, -0x48]
+            0x102a07510      1f010091       mov sp, x8
+            0x102a07514      000080d2       mov x0, 0
+            0x102a07518      9cb3ad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Public...D0VMa
+            0x102a0751c      fc0300aa       mov x28, x0
+            0x102a07520      13805ff8       ldur x19, [x0, -8]
+            0x102a07524      682240f9       ldr x8, [x19, 0x40]
+            0x102a07528      e90308aa       mov x9, x8
+            0x102a0752c      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a07530      104244f9       ldr x16, [x16, 0x880]
+            0x102a07534      00023fd6       blr x16
+            0x102a07538      e9030091       mov x9, sp
+            0x102a0753c      083d0091       add x8, x8, 0xf
+            0x102a07540      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a07544      3a0108cb       sub x26, x9, x8
+            0x102a07548      5f030091       mov sp, x26
+            0x102a0754c      b9533aa9       stp x25, x20, [x29, -0x60]
+            0x102a07550      e00319aa       mov x0, x25
+            0x102a07554      e10314aa       mov x1, x20
+            0x102a07558      7ca05897       bl sym.func.10002f748
+            0x102a0755c      21de01f0       adrp x1, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a07560      212442f9       ldr x1, [x1, 0x448]
+            0x102a07564      22de01f0       adrp x2, reloc.Foundation.NSKeyValueObservation.invalidate.allocator_...yFTj_ ; 0x1065ce000
+            0x102a07568      421c42f9       ldr x2, [x2, 0x438]
+            0x102a0756c      a08301d1       sub x0, x29, 0x60
+            0x102a07570      e8031aaa       mov x8, x26
+            0x102a07574      f50316aa       mov x21, x22
+            0x102a07578      81b3ad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Public_...Kc10Foundation15ContiguousBytesRzlufC_ ; CryptoKit.P256.KeyAgreement.Public(...Kc10Foundation15ContiguousBytesRzlufC)
+            0x102a0757c      f60315aa       mov x22, x21
+            0x102a07580      550600b5       cbnz x21, 0x102a07648
+            0x102a07584      b3f336a9       stp x19, x28, [x29, -0x98]
+            0x102a07588      b8ef35a9       stp x24, x27, [x29, -0xa8]
+            0x102a0758c      bb4f78a9       ldp x27, x19, [x29, -0x80]
+            0x102a07590      b85379a9       ldp x24, x20, [x29, -0x70]
+            0x102a07594      bc835bf8       ldur x28, [x29, -0x48]
+            0x102a07598      e8031caa       mov x8, x28
+            0x102a0759c      e0031aaa       mov x0, x26
+            0x102a075a0      f50316aa       mov x21, x22
+            0x102a075a4      7cb3ad94       bl sym.imp.CryptoKit.P256.KeyAgreement.Private_...KF_ ; CryptoKit.P256.KeyAgreement.Private(...KF)
+            0x102a075a8      f60315aa       mov x22, x21
+            0x102a075ac      750400b5       cbnz x21, 0x102a07638
+            0x102a075b0      000000b0       adrp x0, sym.func.102a08000 ; 0x102a08000
+            0x102a075b4      00500a91       add x0, x0, 0x294
+            0x102a075b8      e80317aa       mov x8, x23
+            0x102a075bc      010080d2       mov x1, 0
+            0x102a075c0      e20318aa       mov x2, x24
+            0x102a075c4      f4031caa       mov x20, x28
+            0x102a075c8      f50316aa       mov x21, x22
+            0x102a075cc      2db3ad94       bl sym.imp.CryptoKit.SharedSecret.withUnsafeBytes_...xSWKXEKlF_ ; CryptoKit.SharedSecret.withUnsafeBytes(...xSWKXEKlF)
+            0x102a075d0      f60315aa       mov x22, x21
+            0x102a075d4      680a40f9       ldr x8, [x19, 0x10]
+            0x102a075d8      e0031baa       mov x0, x27
+            0x102a075dc      e10317aa       mov x1, x23
+            0x102a075e0      e20318aa       mov x2, x24
+            0x102a075e4      00013fd6       blr x8
+            0x102a075e8      e01002f0       adrp x0, 0x106c26000
+            0x102a075ec      00801291       add x0, x0, 0x4a0
+            0x102a075f0      61de0190       adrp x1, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a075f4      215c40f9       ldr x1, [x1, 0xb8]
+            0x102a075f8      62de0190       adrp x2, reloc.CryptoKit.Cha.Poly.allocator.open.using.Foundation..Sy_...etricKeyVtKFZ_ ; 0x1065d3000
+            0x102a075fc      425040f9       ldr x2, [x2, 0xa0]
+            0x102a07600      9b945897       bl sym.func.10002c86c
+            0x102a07604      e20300aa       mov x2, x0
+            0x102a07608      a88357f8       ldur x8, [x29, -0x88]
+            0x102a0760c      e0031baa       mov x0, x27
+            0x102a07610      e10318aa       mov x1, x24
+            0x102a07614      24b3ad94       bl sym.imp.CryptoKit.SymmetricKey.data.Foundation.ContiguousBytes_...lufC_ ; CryptoKit.SymmetricKey.data.Foundation.ContiguousBytes(...lufC)
+            0x102a07618      680640f9       ldr x8, [x19, 8]
+            0x102a0761c      e00317aa       mov x0, x23
+            0x102a07620      e10318aa       mov x1, x24
+            0x102a07624      00013fd6       blr x8
+            0x102a07628      a88775a9       ldp x8, x1, [x29, -0xa8]
+            0x102a0762c      080540f9       ldr x8, [x8, 8]
+            0x102a07630      e0031caa       mov x0, x28
+            0x102a07634      00013fd6       blr x8
+            0x102a07638      a88776a9       ldp x8, x1, [x29, -0x98]
+            0x102a0763c      080540f9       ldr x8, [x8, 8]
+            0x102a07640      e0031aaa       mov x0, x26
+            0x102a07644      00013fd6       blr x8
+            0x102a07648      f50316aa       mov x21, x22
+            0x102a0764c      bf4301d1       sub sp, x29, 0x50
+            0x102a07650      fd7b45a9       ldp x29, x30, [sp, 0x50]
+            0x102a07654      f44f44a9       ldp x20, x19, [sp, 0x40]
+            0x102a07658      f75b43a9       ldp x23, x22, [sp, 0x30]
+            0x102a0765c      f96342a9       ldp x25, x24, [sp, 0x20]
+            0x102a07660      fb6b41a9       ldp x27, x26, [sp, 0x10]
+            0x102a07664      fc0746f8       ldr x28, [sp], 0x60
+            0x102a07668      c0035fd6       ret
+            ;-- func.102a0766c:
+            0x102a0766c      fc0f1af8       str x28, [sp, -0x60]!
+            0x102a07670      fb6b01a9       stp x27, x26, [sp, 0x10]
+            0x102a07674      f96302a9       stp x25, x24, [sp, 0x20]
+            0x102a07678      f75b03a9       stp x23, x22, [sp, 0x30]
+            0x102a0767c      f44f04a9       stp x20, x19, [sp, 0x40]
+            0x102a07680      fd7b05a9       stp x29, x30, [sp, 0x50]
+            0x102a07684      fd430191       add x29, sp, 0x50
+            0x102a07688      ffc304d1       sub sp, sp, 0x130
+            0x102a0768c      f90315aa       mov x25, x21
+            0x102a07690      fb0314aa       mov x27, x20
+            0x102a07694      a2831bf8       stur x2, [x29, -0x48]
+            0x102a07698      f30301aa       mov x19, x1
+            0x102a0769c      f60300aa       mov x22, x0
+            0x102a076a0      e01002f0       adrp x0, 0x106c26000
+            0x102a076a4      00c00691       add x0, x0, 0x1b0
+            0x102a076a8      a16c01d0       adrp x1, 0x10579d000
+            0x102a076ac      21c02b91       add x1, x1, 0xaf0
+            0x102a076b0      aaf25797       bl sym.func.100004158
+            0x102a076b4      08805ff8       ldur x8, [x0, -8]
+            0x102a076b8      092140f9       ldr x9, [x8, 0x40]
+            0x102a076bc      283d0091       add x8, x9, 0xf
+            0x102a076c0      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a076c4      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a076c8      104244f9       ldr x16, [x16, 0x880]
+            0x102a076cc      00023fd6       blr x16
+            0x102a076d0      e9030091       mov x9, sp
+            0x102a076d4      3c0108cb       sub x28, x9, x8
+            0x102a076d8      9f030091       mov sp, x28
+            0x102a076dc      000080d2       mov x0, 0
+            0x102a076e0      13120094       bl sym.func.102a0bf2c
+            0x102a076e4      f80300aa       mov x24, x0
+            0x102a076e8      1a805ff8       ldur x26, [x0, -8]
+            0x102a076ec      482340f9       ldr x8, [x26, 0x40]
+            0x102a076f0      e90308aa       mov x9, x8
+            0x102a076f4      50de01b0       adrp x16, reloc.GRDB.DatabaseMigrator.ForeignKeyChecks_...a_ ; 0x1065d0000
+            0x102a076f8      104244f9       ldr x16, [x16, 0x880]
+            0x102a076fc      00023fd6       blr x16
+            0x102a07700      e9030091       mov x9, sp
+            0x102a07704      083d0091       add x8, x8, 0xf
+            0x102a07708      08ed7c92       and x8, x8, 0xfffffffffffffff0
+            0x102a0770c      370108cb       sub x23, x9, x8
+            0x102a07710      ff020091       mov sp, x23
+            0x102a07714      95d25aa9       ldp x21, x20, [x20, 0x1a8]
+            0x102a07718      e00314aa       mov x0, x20

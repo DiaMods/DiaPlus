@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+.local/
+
+bridge/.state/
+bridge/node_modules/
+
+backups/
+captures/
+*.dylib
+*.log
+*.o
+*.pcap

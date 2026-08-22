@@ -1,0 +1,159 @@
+{
+  "vendor": "granola",
+  "updated_at": "2026-08-16T17:05:16Z",
+  "mcp_version": "2025-11-25",
+  "server_name": "granola-mcp",
+  "server_version": "1.0.0",
+  "tools": [
+    {
+      "name": "list_meetings",
+      "title": "List meetings",
+      "description": "List the user's Granola meeting notes within a time range. Returns meeting titles and metadata.\n\nIMPORTANT: For short-term questions about recent meeting details, prefer using query_granola_meetings instead.\n\nWhen to use:\n- User asks to list their meetings\n- User asks about action items, decisions, or summaries from meetings over a longer or specific date range\n- User asks about content from their meeting transcripts\n- User references 'Granola notes' or 'meeting notes' or 'transcripts'\n\nWhen NOT to use:\n- User is asking about upcoming calendar events or scheduling\n- User wants to create/modify calendar invites\n\nFiltering:\n- Omit workspace_only and involvement to return every meeting the user is allowed to access\n- For 'my meetings' or meetings the user was involved in, set both involvement conditions to true; true conditions combine using OR\n- Set captured_by_me to true for meetings whose Granola notes the user captured, or false to exclude them\n- Set listed_as_participant to true for meetings where the user is a known participant, or false to exclude them\n- False involvement conditions are exclusions and combine with the positive conditions using AND; omit a condition to ignore it\n- For Team Space or public workspace meetings, set workspace_only to true\n- workspace_only and involvement combine using AND\n\nUse get_meetings to retrieve detailed meeting content after identifying relevant meetings.\nUse list_meeting_folders to discover folder IDs, then pass a folder_id to list meetings within a specific folder.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "time_range": {
+            "type": "string",
+            "enum": [
+              "this_week",
+              "last_week",
+              "last_30_days"
+            ],
+            "default": "last_30_days",
+            "description": "Time range to query meetings from"
+          },
+          "workspace_only": {
+            "type": "boolean",
+            "const": true,
+            "description": "Set to true only when the user explicitly asks for Team Space, public workspace, or workspace-visible meetings. Omit to search every meeting the user is allowed to access."
+          },
+          "involvement": {
+            "type": "object",
+            "properties": {
+              "captured_by_me": {
+                "type": "boolean",
+                "description": "True includes meetings whose Granola note was captured by the connected user; false excludes them; omit to ignore who captured the note. This identifies the note owner, not necessarily the meeting organizer."
+              },
+              "listed_as_participant": {
+                "type": "boolean",
+                "description": "True includes meetings where the connected user's email appears in Granola's known participant metadata; false excludes them; omit to ignore participant metadata. Participant metadata can be incomplete and does not prove attendance."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Optional involvement filter. Conditions set to true form an OR inclusion group. Conditions set to false are exclusions applied using AND. Omitted conditions are ignored."
+          }
+        },
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "list_meeting_folders",
+      "title": "List meeting folders",
+      "description": "List the user's Granola meeting folders. Returns folder ID, title, description, and note count including nested folders.\n\nWhen to use:\n- User asks about their folders or wants to browse meetings by folder\n- User wants to narrow down meeting searches to a specific folder\n\nUse the returned folder IDs with list_meetings (folder_id parameter) to list meetings within a specific folder.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_meetings",
+      "title": "Read meetings",
+      "description": "Get detailed meeting information for one or more Granola meetings by ID. Returns private notes, AI-generated summary, attendees, and metadata.\nUse this when you already have specific meeting IDs (e.g. from list_meetings results). For open-ended questions about meeting content, use query_granola_meetings instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "meeting_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "Array of meeting UUIDs (max 10)"
+          }
+        },
+        "required": [
+          "meeting_ids"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_meeting_transcript",
+      "title": "Read meeting transcript",
+      "description": "Get the full transcript for a specific Granola meeting by ID. Returns only the verbatim transcript content, not summaries or notes.\nSpeaker labels: `Me` is the note-taker, `Them` is other unidentified participants, and named speakers are shown by name.\nUse this when the user needs exact quotes, specific wording, or wants to review what was literally said in a meeting. For summarized content or action items, use query_granola_meetings or list_meetings/get_meetings instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "meeting_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Meeting UUID"
+          }
+        },
+        "required": [
+          "meeting_id"
+        ],
+        "additionalProperties": false,
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_account_info",
+      "title": "Get account info",
+      "description": "Get the email, active workspace, and effective note-access scopes for the Granola account currently connected to this MCP session.\n\nWhen to use:\n- User asks 'who am I signed in as?', 'which Granola account is this?', or 'what's my email?'\n- User suspects they connected the wrong Granola account\n- Meeting results may be incomplete or empty because of the user's Granola plan or workspace MCP access controls\n- Before performing actions, to confirm identity if the user references a specific account\n\nWhen scope-based access controls are active, mcp_note_access.scopes contains the note categories this connection can search:\n- personal: notes the connected user owns, notes shared directly with them, and notes accessible through private folders\n- public: notes accessible through workspace-visible Team Space folders\n- Both scopes means both categories can be searched. These scopes describe access, not who captured or participated in a meeting.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}

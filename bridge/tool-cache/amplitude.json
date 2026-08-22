@@ -1,0 +1,1920 @@
+{
+  "vendor": "amplitude",
+  "updated_at": "2026-08-19T23:06:12Z",
+  "mcp_version": "2025-11-25",
+  "server_name": "Amplitude MCP Server",
+  "server_version": "0.4.0",
+  "tools": [
+    {
+      "name": "get_charts",
+      "title": "Reading chart data",
+      "description": "Retrieve full chart objects by their IDs using the chart service directly\n\nWHEN TO USE:\n- You want to retrieve a full chart definition.\n- Useful if you want to base an ad hoc query dataset analysis on an exsiting chart.\n\nINSTRUCTIONS:\n- Use the search tool to find the IDs of charts you want to retrieve, then call this tool with the IDs.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chartIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Array of chart IDs to retrieve (required)"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "chartIds"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Reading chart data",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "chart",
+          "analytics",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "save_chart_edits",
+      "title": "Saving chart edits",
+      "description": "Save temporary chart edits as permanent charts\n\nWHEN TO USE:\n- You have chart edit IDs from query_dataset and want to save them as permanent charts\n- You need to add charts to dashboards or notebooks (which require saved chart IDs)\n\nWORKFLOW:\n1. Use query_dataset to create ad-hoc analyses (returns editId)\n2. Use save_chart_edits to convert editIds into permanent chartIds\n3. Use chartIds in create_dashboard or create_notebook\n\nIMPORTANT:\n- All AI-generated charts are saved as unpublished in your personal space\n- Charts require human review before publishing to shared spaces\n- Use bulk saving to reduce tool calls when creating multiple charts",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "charts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "editId": {
+                  "type": "string",
+                  "description": "Chart edit ID to save"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Name for the saved chart"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Description for the saved chart"
+                }
+              },
+              "required": [
+                "editId",
+                "name",
+                "description"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "description": "Array of chart edits to save with name and description for each"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "charts"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Saving chart edits",
+        "destructiveHint": false,
+        "readOnlyHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "chart",
+          "analytics",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "create"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_cohorts",
+      "title": "Finding cohorts",
+      "description": "Get detailed information about specific cohorts by their IDs.\n\nWHEN TO USE:\n- You want to retrieve full cohort definitions after finding them via search.\n- You need detailed cohort information including definition, metadata, and audience details.\n\nINSTRUCTIONS:\n- Use the search tool to find the IDs of cohorts you want to retrieve, then call this tool with the IDs.\n- This returns full cohort objects with all details, unlike the search tool which returns summary information.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cohortIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "Array of cohort IDs to retrieve (required)"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "cohortIds"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Finding cohorts",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "cohort",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_dashboard",
+      "title": "Getting dashboard data",
+      "description": "Get specific dashboards and all their charts\n\nWHEN TO USE:\n- You want to retrieve full dashboard definitions including chart IDs that you can query and analyze individually.\n\nINSTRUCTIONS:\n- Use the search tool to find the IDs of dashboards you want to retrieve, then call this tool with the IDs.\n- Very commonly you will want to query the charts after retrieving a dashboard.\n- When a dashboard has `activeFilters` (saved Replace Property entries, dashboard filters, or a date range), pass the dashboard's id as `dashboardId` to query_charts so those params are applied — and mention the replaced/filtered view when reporting numbers.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "dashboardIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "Array of dashboard IDs to retrieve (required)"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "dashboardIds"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Getting dashboard data",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "dashboard",
+          "analytics",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_dashboard",
+      "title": "Creating dashboard",
+      "description": "Create a comprehensive dashboard with charts, rich text, and custom layout\n\nWHEN TO USE:\n- After the user has searched existing content or explored some analysis in Amplitude\n- The user has explicitly requested to create a dashboard\n\nCRITICAL - CHART IDs MUST BE FROM SAVED CHARTS:\n- Only use chartIds from SAVED/PERMANENT charts - these are returned by save_chart_edits (in the chartId field) or create_chart\n- DO NOT use editIds from query_dataset - these are temporary IDs that cannot be added to dashboards\n- DO NOT use the editId from query_dataset responses - you must first call save_chart_edits to get a permanent chartId\n- The typical workflow is: query_dataset (returns editId) → save_chart_edits (converts editId to permanent chartId) → create_dashboard (uses chartId)\n- If you use an editId instead of a saved chartId, the dashboard creation will fail with \"NotFoundError: No chart\"\n\nINSTRUCTIONS:\n- Provide a descriptive name for the dashboard\n- Use rows array where each row contains items in left-to-right order\n- Each item specifies width (3-12 columns). If width is omitted, items auto-fill remaining space\n- Each row must specify height in pixels. Only heights of 375, 500, 625, 750 are allowed\n- Total width of items in a row must not exceed 12 columns\n- Max 4 items per row (ensures minimum 3-column width per item)\n- Use chartMetas to configure chart display options (view type, annotations, etc.)\n- Return a link to the new dashboard in the response\n- DO NOT include static analysis in dashboard text content. Dashboards are meant to be long-lived and thus a point in time insight does not help\n- DO group similar charts together and include a header and some text describing how to interpret the charts effectively\n\nMARKDOWN FORMAT:\n- Rich text content uses standard markdown syntax\n- Supported: headers (# ## ###), bold (**text**), italic (*text*), lists (- or 1.), links ([text](url)), code blocks (```), inline code (`code`)\n- Example: \"# Overview\\n\\nThis dashboard shows **key metrics** for user engagement.\"\n\nLAYOUT EXAMPLES:\n- Full-width item: { height: 6, items: [{ type: 'chart', chartId: '123', width: 12 }] }\n- Two side-by-side: { height: 4, items: [{ type: 'chart', chartId: '1', width: 6 }, { type: 'rich_text', content: '# Notes', width: 6 }] }\n- Three columns: { height: 5, items: [{ width: 4 }, { width: 4 }, { width: 4 }] }\n- Auto-fill: { height: 4, items: [{ type: 'chart', chartId: '1' }, { type: 'chart', chartId: '2' }] } (each gets 6 columns)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Descriptive name for the dashboard (e.g., \"User Engagement Overview\", \"Revenue Analytics\")"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description for the dashboard to provide context and details about its purpose"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "height": {
+                  "type": "number",
+                  "description": "Row height in pixels. Allowed values: 375, 500, 625, 750."
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "Item ID (returned from get operations, useful for future updates)",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "chart",
+                          "rich_text",
+                          "session_replay",
+                          "video",
+                          "image",
+                          "cohort"
+                        ],
+                        "description": "Content type"
+                      },
+                      "width": {
+                        "type": "number",
+                        "minimum": 3,
+                        "maximum": 12,
+                        "description": "Width in columns (3-12). If omitted, item auto-fills remaining space equally with other auto-width items."
+                      },
+                      "content": {
+                        "type": "string",
+                        "description": "Rich text content as markdown (for rich_text type)"
+                      },
+                      "chartId": {
+                        "type": "string",
+                        "description": "Saved chart ID (required when type is \"chart\"). IMPORTANT: Must be a permanent chartId from save_chart_edits or create_chart, NOT an editId from query_dataset. Using an editId will cause \"NotFoundError: No chart\"."
+                      },
+                      "sessionReplayIdentifier": {
+                        "type": "string",
+                        "description": "Session replay identifier (for session_replay type)"
+                      },
+                      "note": {
+                        "type": "string",
+                        "description": "Optional note (for session_replay type)"
+                      },
+                      "videoUrl": {
+                        "type": "string",
+                        "description": "Video URL (for video type)"
+                      },
+                      "imageS3Key": {
+                        "type": "string",
+                        "description": "S3 key for image (for image type)"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Title (for video/image types)"
+                      },
+                      "cohortId": {
+                        "type": "string",
+                        "description": "Cohort ID (for cohort type)"
+                      },
+                      "hideChart": {
+                        "type": "boolean",
+                        "description": "Whether to hide visualization (defaults to false)"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 4,
+                  "description": "Items in this row (left-to-right order, max 4 items)"
+                }
+              },
+              "required": [
+                "height",
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "description": "Array of rows, each containing items in left-to-right order with height specification"
+          },
+          "chartMetas": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "view": {
+                  "type": "string",
+                  "enum": [
+                    "series",
+                    "table",
+                    "headline",
+                    "converted",
+                    "dropoff",
+                    "sequences",
+                    "metric_only",
+                    "metrics_with_previous_data",
+                    "table_metrics",
+                    "target_metrics"
+                  ],
+                  "description": "Chart display view: \"series\" for line/bar charts, \"table\" for data tables, \"headline\" for key metrics, \"converted\" for conversion funnels"
+                },
+                "annotation": {
+                  "type": "string",
+                  "description": "Optional annotation text to display on the chart"
+                },
+                "selectedSerieIndex": {
+                  "type": "number",
+                  "description": "Index of the selected data series (0-based) for multi-series charts"
+                }
+              },
+              "additionalProperties": false
+            },
+            "description": "Display configuration for charts. Key is chartId, value contains view type, annotations, and other display options.",
+            "properties": {}
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "name",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Creating dashboard",
+        "destructiveHint": false,
+        "readOnlyHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "dashboard",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "create"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_deployments",
+      "title": "Getting deployments",
+      "description": "Retrieve all deployments for the current project. Deployments are api keys for flags and experiments.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Getting deployments",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "experiment",
+          "deployments",
+          "developer",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_experiments",
+      "title": "Getting experiments",
+      "description": "Retrieve specific experiments by their IDs.\n\nWHEN TO USE:\n- You want to retrieve addition information for experiments like state, decisions, etc.\n\nINSTRUCTIONS:\n- Use the search tool to find the IDs of experiments you want to retrieve, then call this tool with the IDs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Array of IDs to retrieve experiments by."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Getting experiments",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "experiments",
+          "analytics",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "query_dataset",
+      "title": "Analyzing dataset",
+      "description": "Run analytics queries to answer data questions about users, events, funnels, and retention.\n\nChart definitions are validated inline before querying. When validation fails, the response includes chartTypeSchema (parameter schema, valid enums, working example, coercion rules) so you can fix the definition and retry.\n\nOptional: call verify_chart_definition first for a dry-run validation without executing a query.\n\n# WHEN TO USE - Answer questions like:\n- \"How many active users did we have last week?\"\n- \"Show me a funnel from sign up to purchase\"\n- \"What is the retention rate for new users?\"\n- \"How many users completed checkout yesterday?\"\n- Any question asking for metrics, counts, trends, funnels, or retention analysis\n\n# DO NOT USE FOR:\n- Listing or checking which properties exist on an event (e.g. \"what/which properties are on the checkout event?\") → use 'get_properties' (propertyType=\"event\", pass eventType). Do NOT run queries to discover a schema.\n- Finding existing charts/dashboards → use 'search' instead\n- Getting valid chart definition structure → use 'get_chart_definition_params' (or fix from chartTypeSchema in a validation-error response)\n- If you need more information about existing charts in the project as an example → use 'get_charts' instead\n- Project settings (timezone, currency) → use 'get_project_context' instead\n\n# STRATEGIES\n1. Use the 'search' tool to find if there are charts with properties that relate to the data you want to query.\n2. Use 'get_chart_definition_params' when you need the full schema before building a definition (optional — validation errors also return chartTypeSchema).\n3. Use the 'get_charts' tool to find examples of existing charts in the project to understand the events, properties, and dataset schema generally.\n4. Optionally use the 'search' tool again to find additional events, user properties, etc. needed for the query.\n5. Optionally use the 'get_properties' tool (propertyType=\"event\", pass eventType) to get properties on individual events.\n6. Use this tool to query the ad hoc analysis — definitions are validated and auto-corrected inline.\n\n# GENERAL GUIDELINES\n- Don't assume or guess properties, events, or schema. Use the tools provided to you to understand the data before running a dataset query.\n- When running into query failures, try searching for existing charts to understand the data taxonomy and dataset schema.\n- When you receive a validation error, use the returned chartTypeSchema to fix the definition.\n- ALWAYS include a descriptive \"name\" field in the definition object. This name will be displayed as the chart title. Examples: \"Active Users Last 7 Days\", \"Sign Up to Purchase Funnel\", \"New User Retention\".\n\n# AMPLITUDE WIDE META EVENTS TYPES\nSpecial system events available for analysis. Events are passed in the \"event_type\" field:\n- \"_active\": Any active event useful for tracking 'active users' like DAU, MAU(events not marked as inactive)\n- \"_all\": Any event being tracked in Amplitude\n- \"_new\": Events triggered by new users within the time interval. Useful for tracking 'new users'.\n- \"_any_revenue_event\": Any revenue-generating event. Useful for tracking 'revenue'.\n- \"$popularEvents\": Top events by volume (dynamically computed). Useful for more meta taxonomy analyses like 'what are the most common events'.\n\n# PROPERTY TYPES:\n- Amplitude core properties are built-in and use standard names like \"country\", \"platform\", \"device_id\", \"user_id\"\n- Custom properties are organization-defined and are typically prefixed with \"gp:\"\n- Derived/formula properties (from TMS) must use prop_type and group_by.type of \"derivedV2\" in segments and group_by — not \"user\" or legacy \"derived\". Use get_properties with propertyType \"derived\" to list them.\n- Hidden properties are intentionally excluded from get_properties; do not use them. Prefer derived replacements named in project context.\n- If you are unsure which properties exist, use get_properties (propertyType=\"event\", pass eventType) first — this is the direct way to list an event's properties. search/get_charts are fallbacks for discovering related events or example charts.\n\nSupported chart types: eventsSegmentation, funnels, metricExplorer, retention, revenueLtv, sessions, stickiness\n\n\n\nRESPONSE FORMAT:\nReturns {isCsvResponse: bool, csvResponse or jsonResponse, definition}. Only ONE response type present.\nCheck the isCsvResponse flag to determine which response format to parse\n\nCRITICAL — NON-ADDITIVE METRICS (uniques, pct_dau):\n- These metrics cannot be summed across intervals. The chart UI plots per-interval values, not a running total.\n- Additive metrics (totals, sums) CAN be summed across intervals.\n\nHow to read the JSON response, by metric type:\n\n1. COUNT metrics (\"uniques\"):\n   - Use \"overallSeries\" — it is the TRUE deduped unique count across the full date range.\n   - Do NOT sum \"timeSeries\" values — that overstates the count due to user overlap across intervals.\n\n2. RATIO metrics (\"pct_dau\" only):\n   - Use \"timeSeriesAverage\" (mean of per-interval values) — this matches what the chart UI displays.\n     For \"current\" reporting, also consider the most recent N intervals from \"timeSeries\".\n   - Do NOT use \"overallSeries\" for pct_dau over multi-interval ranges. For pct_dau, \"overallSeries\"\n     is a long-range aggregate (deduped numerator over the full range / deduped denominator over the\n     full range). Over many intervals the denominator dedupes a much larger pool than the numerator,\n     which compresses the ratio — typically reporting roughly half of the per-interval values the chart\n     shows. This is mathematically valid as a long-range aggregate but is NOT what users see in the chart.\n   - Do NOT sum \"timeSeries\" values — ratios cannot be summed.\n\nCSV Response Structure (when isCsvResponse is true):\n- Header rows: The top rows contain metadata including chart name, description, events, formulas, and other chart configuration details\n- Data header row: A single row containing column labels for the data points below (typically includes dates or time periods)\n- Data rows: Each row contains:\n  * Label columns: First few columns contain row labels identifying the data series\n  * Value columns: Numerical data organized under the corresponding date/time columns from the data header row\n- Parse by: Skip metadata rows, identify the data header row, then extract labels from first columns and values from remaining columns\n- Cells in the CSV response are delimited by commas and may be prepended with a \t character\nExample below measures uniques of custom event \"Valuable Tweaking\" over 3 days (2025-08-23, 2025-08-24, 2025-08-25) for all users.\nThe data points are 614, 1769, and 4132 for the 3 days respectively.\nIMPORTANT: The overall unique users is 5642 (NOT 614+1769+4132=6515), because users overlap across days.\ndata:\n\"\tExample chart name\"\n\"\tFormula\",\"\tUNIQUES(A)\"\n\"\tA:\",\"\t[Custom] 'Valuable Tweaking'\"\n\n\"\tSegment\",\"\t2025-08-23\",\"\t2025-08-24\",\"\t2025-08-25\"\n\"\tAll Non-Amplitude Users\",\"614\",\"1769\",\"4132\"\ndefinition: {\n    \"app\": \"APP_ID\",\n    \"params\": {\n        \"countGroup\": \"User\",\n        \"end\": 1756166399,\n        \"events\": [\n            {\n                \"event_type\": \"ce:'Valuable Tweaking'\",\n                \"filters\": [],\n                \"group_by\": []\n            }\n        ],\n        \"groupBy\": [],\n        \"interval\": 1,\n        \"metric\": \"uniques\",\n        \"segments\": [],\n        \"start\": 1755907200,\n    },\n    \"type\": \"eventsSegmentation\",\n}\n\nJSON Response Structure (when isCsvResponse is false):\n- Parse using the following structure:\n  - timeSeries: Array of arrays, each containing data points for a given time period with a \"value\" property\n  - overallSeries: Array of arrays, each containing the overall data point across the entire range under the \"value\" property.\n    IMPORTANT — interpretation depends on the metric:\n      * For \"uniques\" (count): this is the TRUE deduped unique count over the full date range. Use this.\n      * For \"pct_dau\" (ratio): this is a long-range aggregate ratio (deduped numerator\n        over range / deduped denominator over range). It does NOT match the per-interval values the\n        chart UI plots and is typically much smaller. Do NOT report it as the headline number — use\n        \"timeSeriesAverage\" instead.\n  - timeSeriesAverage: Present only for \"pct_dau\". Array of arrays, one per series, each\n    containing a single {value} that is the mean of \"timeSeries\" values for that series. Use this as the\n    headline ratio when the chart spans multiple intervals — it matches what users see in the chart UI.\n  - seriesMetadata: Array of objects containing metadata for each series\n  - xValuesForTimeSeries: Array of strings representing the x-axis values (dates) for the time series\n- Use the dataset definition to be able to parse referenced events, properties, and segments.\n\nExample below is a JSON response is for the same query as the CSV example above.\n{\n  \"timeSeries\": [[{\"value\": 614}, {\"value\": 1769}, {\"value\": 4132}]],\n  \"overallSeries\": [[{\"value\": 5642}]],\n  \"seriesMetadata\": [{\"segmentIndex\": 0, \"formulaIndex\": 0, \"formula\": \"UNIQUES(A)\"}],\n  \"xValuesForTimeSeries\": [\"2025-08-23T00:00:00\", \"2025-08-24T00:00:00\", \"2025-08-25T00:00:00\"]\n}\nNote: 614+1769+4132=6515, but overallSeries shows 5642. This is because unique users overlap across days. For \"uniques\", always use overallSeries for the total.\n\nExample below is a \"pct_dau\" query over 3 weeks (a ratio metric):\n{\n  \"timeSeries\": [[{\"value\": 0.1402}, {\"value\": 0.1421}, {\"value\": 0.1444}]],\n  \"overallSeries\": [[{\"value\": 0.0712}]],\n  \"timeSeriesAverage\": [[{\"value\": 0.1422}]],\n  \"seriesMetadata\": [{\"segmentIndex\": 0, \"formulaIndex\": 0, \"formula\": \"PCT_DAU(A)\"}],\n  \"xValuesForTimeSeries\": [\"2026-04-06T00:00:00\", \"2026-04-13T00:00:00\", \"2026-04-20T00:00:00\"]\n}\nNote: the chart UI shows ~14% per week. timeSeriesAverage (14.22%) matches that. overallSeries (7.12%) is the\ndeduped 3-week aggregate ratio and would HALVE the reported value if used as the headline — never report it\nas \"the number\" for \"pct_dau\". Always use timeSeriesAverage for \"pct_dau\".\n\nEvent Segmentation with Insights (anomaly detection / confidence intervals):\n- When params.insights.isOn is true, Event Segmentation charts queried via query_charts or query_dataset\n  return BOTH chartConfig (Highcharts) AND jsonResponse with joinable band data.\n- jsonResponse.seriesIntervals maps stringified seriesMetadata keys to { low, high, yhat } arrays\n  (parallel to xValuesForTimeSeries). Use seriesMetadata + xValuesForTimeSeries to join bands to series.\n- Metric Explorer charts with Insights return seriesIntervals inside each data[] entry instead.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project ID to query data from"
+          },
+          "definition": {
+            "type": "object",
+            "properties": {
+              "app": {
+                "type": "string",
+                "description": "Project ID (required)"
+              },
+              "type": {
+                "type": "string",
+                "description": "Query type (e.g., \"eventsSegmentation\", \"funnel\", \"retention\")"
+              },
+              "name": {
+                "type": "string",
+                "description": "Query name"
+              },
+              "params": {
+                "type": "object",
+                "description": "Query parameters",
+                "properties": {}
+              },
+              "version": {
+                "type": "number",
+                "default": 40,
+                "description": "API version (optional, defaults to 40)"
+              }
+            },
+            "required": [
+              "app",
+              "type",
+              "params"
+            ],
+            "description": "Chart definition to query. Validated inline — on failure the response includes chartTypeSchema (params, enums, example, coercion rules). Optional: call get_chart_definition_params first for the full schema.\n\nUse canonical chart types only:\n- \"eventsSegmentation\"\n- \"funnels\"\n- \"retention\"\n- \"sessions\"\n- \"revenueLtv\"\n- \"dataTableV2\"\n\nDo not use aliases like:\n- \"segmentation\"\n- \"event_segmentation\"\n- \"events\"\n- \"funnel\"\n\nTIME RANGE — three accepted shapes, mutually exclusive with each other:\n- \"range\" preset (e.g. \"Last 30 Days\", \"Last 12 Weeks\", \"This Month\", \"Yesterday\")\n- \"start\" + \"end\" for a bounded custom range\n- \"start\" alone for an open-ended \"since <date>\" range (renders as Amplitude's \"Since\" view)\n- Timestamps may be Unix seconds, ISO 8601 strings, or relative strings like \"now-7d\" / \"now\"\n- Do not combine \"range\" with \"start\"/\"end\". Do not provide \"end\" without \"start\"\n- Do not use invalid placeholders like \"Custom\", \"Daily\", or \"All Time\"\n\nVISUALIZATION TYPE (top-level \"vis\", optional):\n- Set \"vis\" when the user explicitly asks for a specific chart shape (e.g. \"as a bar chart\", \"show as a pie\", \"stacked bar by country\"). Otherwise omit and the system picks a sensible default.\n- Valid values for eventsSegmentation: \"line\" (default trend), \"area\", \"bar\" (vertical), \"column\" (horizontal), \"stackedbar\", \"pie\", \"kpi\" (single number).\n- Valid values for funnels: \"line\", \"bar\".\n- Valid values for sessions: \"line\", \"bar\", \"totalSessions\", \"average\".\n- \"vis\" goes at the TOP LEVEL of the definition, NOT inside \"params\".\n\nCOMMON GUARDRAILS:\n- \"dataTableV2\" requires \"params.table\"\n- \"sessions\" requires \"params.sessions\"\n- \"customerJourney\" has a maximum of 5 steps when using PATH_TREE or SINGLE_PATH visualization\n- event lists should use canonical event objects with \"event_type\", \"filters\", and \"group_by\"\n- include a descriptive top-level \"name\" whenever possible\n\nMINIMAL EXAMPLES:\n- eventsSegmentation (default line):\n  {\"type\":\"eventsSegmentation\",\"app\":\"123\",\"name\":\"Active Users Last 30 Days\",\"params\":{\"range\":\"Last 30 Days\",\"events\":[{\"event_type\":\"_active\",\"filters\":[],\"group_by\":[]}],\"metric\":\"uniques\",\"countGroup\":\"User\",\"groupBy\":[],\"interval\":1,\"segments\":[{\"conditions\":[]}]}}\n- eventsSegmentation as bar chart (user said \"show as a bar chart\"):\n  {\"type\":\"eventsSegmentation\",\"app\":\"123\",\"name\":\"Purchases by Country\",\"vis\":\"bar\",\"params\":{\"range\":\"Last 30 Days\",\"events\":[{\"event_type\":\"Purchase\",\"filters\":[],\"group_by\":[{\"type\":\"event\",\"value\":\"country\"}]}],\"metric\":\"totals\",\"countGroup\":\"User\",\"groupBy\":[],\"interval\":1,\"segments\":[{\"conditions\":[]}]}}\n- funnels:\n  {\"type\":\"funnels\",\"app\":\"123\",\"name\":\"Signup Funnel\",\"params\":{\"range\":\"Last 30 Days\",\"events\":[{\"event_type\":\"View Signup\",\"filters\":[],\"group_by\":[]},{\"event_type\":\"Complete Signup\",\"filters\":[],\"group_by\":[]}],\"countGroup\":\"User\",\"segments\":[{\"conditions\":[]}]}}\n- revenueLtv (cumulative revenue from users NEW in the selected date range — empty results usually mean no new users were acquired in the period, not broken revenue instrumentation):\n  {\"type\":\"revenueLtv\",\"app\":\"123\",\"name\":\"Revenue LTV - Total Revenue\",\"vis\":\"line\",\"params\":{\"range\":\"Last 90 Days\",\"metric\":\"2\",\"event\":{\"event_type\":\"_any_revenue_event\",\"filters\":[],\"group_by\":[]},\"revenueProperty\":\"$revenue\",\"groupBy\":[],\"countGroup\":\"User\",\"interval\":1,\"segments\":[{\"conditions\":[]}]}}"
+          },
+          "groupByLimit": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 10,
+            "description": "Maximum number of group by values to return (1-1000, defaults to 10)"
+          },
+          "excludeIncompleteDatapoints": {
+            "type": "boolean",
+            "default": false,
+            "description": "Optional flag to exclude incomplete data points from results. When true, the current time interval will be excluded from the results to avoid incomplete data points. Defaults to false."
+          },
+          "chartId": {
+            "type": "string",
+            "description": "Optional parent chart ID for modify/fork. When provided, the parent chart's params (segments, filters, countGroup, groupBy, etc.) are used as defaults — only params you explicitly provide will override. Typical modify flow: get_amplitude_charts include='typed' → edit `chart` → query_amplitude_data({ chart, chartId })."
+          },
+          "timeSeriesLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 6,
+            "description": "Maximum number of group-by values that include per-interval time-series rows in the CSV response. All group-by values always include their aggregate \"Total\" row. Groups beyond this limit only return their Total row, which dramatically reduces response size for charts with many group-by values over long date ranges. Set to 0 for totals-only. Defaults to 3."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "projectId",
+          "definition"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Analyzing dataset",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "query",
+          "analytics",
+          "dataset",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "query_charts",
+      "title": "Analyzing charts",
+      "description": "Query up to 3 charts concurrently given their IDs.\n\nRULES:\n- Users want to know references for analyses in order to validate the data.\n- ALWAYS REFERENCE CHARTS TO THE USER BY THEIR LINK WHEN QUERIED AND USED IN ANALYSES.\n\nWHEN TO USE:\n- You want to query multiple charts to get their data efficiently.\n- Maximum of 3 charts can be queried in a single request.\n\nPREREQUISITES (required):\n- You MUST have at least one concrete `chartIds` or `chartEditIds` entry before calling this tool. Do not call it speculatively.\n- If you do not already have any, resolve them FIRST via:\n  - `search` with `entityTypes: [\"CHART\"]` to find saved charts by name.\n  - `get_from_url` when the user has shared Amplitude chart URLs.\n  - `query_dataset` if the user wants an ad-hoc analysis rather than an existing chart.\n- If the user has not provided chart references and none of the above apply, STOP and ask the user which charts to query.\n\nINSTRUCTIONS:\n- Provide saved charts via `chartIds` and chart edits (links ending in `/chart/new/<edit_id>` or `/chart/<chart_id>/edit/<edit_id>`) via `chartEditIds`.\n- Chart edit IDs take precedence over chart IDs when both are available for a given chart.\n- Use this tool to query up to 3 charts + chart edits (combined total).\n- Results will include data for each successfully queried chart and errors for any failed charts.\n\n\n\nRESPONSE FORMAT:\nReturns {isCsvResponse: bool, csvResponse or jsonResponse, definition}. Only ONE response type present.\nCheck the isCsvResponse flag to determine which response format to parse\n\nCRITICAL — NON-ADDITIVE METRICS (uniques, pct_dau):\n- These metrics cannot be summed across intervals. The chart UI plots per-interval values, not a running total.\n- Additive metrics (totals, sums) CAN be summed across intervals.\n\nHow to read the JSON response, by metric type:\n\n1. COUNT metrics (\"uniques\"):\n   - Use \"overallSeries\" — it is the TRUE deduped unique count across the full date range.\n   - Do NOT sum \"timeSeries\" values — that overstates the count due to user overlap across intervals.\n\n2. RATIO metrics (\"pct_dau\" only):\n   - Use \"timeSeriesAverage\" (mean of per-interval values) — this matches what the chart UI displays.\n     For \"current\" reporting, also consider the most recent N intervals from \"timeSeries\".\n   - Do NOT use \"overallSeries\" for pct_dau over multi-interval ranges. For pct_dau, \"overallSeries\"\n     is a long-range aggregate (deduped numerator over the full range / deduped denominator over the\n     full range). Over many intervals the denominator dedupes a much larger pool than the numerator,\n     which compresses the ratio — typically reporting roughly half of the per-interval values the chart\n     shows. This is mathematically valid as a long-range aggregate but is NOT what users see in the chart.\n   - Do NOT sum \"timeSeries\" values — ratios cannot be summed.\n\nCSV Response Structure (when isCsvResponse is true):\n- Header rows: The top rows contain metadata including chart name, description, events, formulas, and other chart configuration details\n- Data header row: A single row containing column labels for the data points below (typically includes dates or time periods)\n- Data rows: Each row contains:\n  * Label columns: First few columns contain row labels identifying the data series\n  * Value columns: Numerical data organized under the corresponding date/time columns from the data header row\n- Parse by: Skip metadata rows, identify the data header row, then extract labels from first columns and values from remaining columns\n- Cells in the CSV response are delimited by commas and may be prepended with a \t character\nExample below measures uniques of custom event \"Valuable Tweaking\" over 3 days (2025-08-23, 2025-08-24, 2025-08-25) for all users.\nThe data points are 614, 1769, and 4132 for the 3 days respectively.\nIMPORTANT: The overall unique users is 5642 (NOT 614+1769+4132=6515), because users overlap across days.\ndata:\n\"\tExample chart name\"\n\"\tFormula\",\"\tUNIQUES(A)\"\n\"\tA:\",\"\t[Custom] 'Valuable Tweaking'\"\n\n\"\tSegment\",\"\t2025-08-23\",\"\t2025-08-24\",\"\t2025-08-25\"\n\"\tAll Non-Amplitude Users\",\"614\",\"1769\",\"4132\"\ndefinition: {\n    \"app\": \"APP_ID\",\n    \"params\": {\n        \"countGroup\": \"User\",\n        \"end\": 1756166399,\n        \"events\": [\n            {\n                \"event_type\": \"ce:'Valuable Tweaking'\",\n                \"filters\": [],\n                \"group_by\": []\n            }\n        ],\n        \"groupBy\": [],\n        \"interval\": 1,\n        \"metric\": \"uniques\",\n        \"segments\": [],\n        \"start\": 1755907200,\n    },\n    \"type\": \"eventsSegmentation\",\n}\n\nJSON Response Structure (when isCsvResponse is false):\n- Parse using the following structure:\n  - timeSeries: Array of arrays, each containing data points for a given time period with a \"value\" property\n  - overallSeries: Array of arrays, each containing the overall data point across the entire range under the \"value\" property.\n    IMPORTANT — interpretation depends on the metric:\n      * For \"uniques\" (count): this is the TRUE deduped unique count over the full date range. Use this.\n      * For \"pct_dau\" (ratio): this is a long-range aggregate ratio (deduped numerator\n        over range / deduped denominator over range). It does NOT match the per-interval values the\n        chart UI plots and is typically much smaller. Do NOT report it as the headline number — use\n        \"timeSeriesAverage\" instead.\n  - timeSeriesAverage: Present only for \"pct_dau\". Array of arrays, one per series, each\n    containing a single {value} that is the mean of \"timeSeries\" values for that series. Use this as the\n    headline ratio when the chart spans multiple intervals — it matches what users see in the chart UI.\n  - seriesMetadata: Array of objects containing metadata for each series\n  - xValuesForTimeSeries: Array of strings representing the x-axis values (dates) for the time series\n- Use the dataset definition to be able to parse referenced events, properties, and segments.\n\nExample below is a JSON response is for the same query as the CSV example above.\n{\n  \"timeSeries\": [[{\"value\": 614}, {\"value\": 1769}, {\"value\": 4132}]],\n  \"overallSeries\": [[{\"value\": 5642}]],\n  \"seriesMetadata\": [{\"segmentIndex\": 0, \"formulaIndex\": 0, \"formula\": \"UNIQUES(A)\"}],\n  \"xValuesForTimeSeries\": [\"2025-08-23T00:00:00\", \"2025-08-24T00:00:00\", \"2025-08-25T00:00:00\"]\n}\nNote: 614+1769+4132=6515, but overallSeries shows 5642. This is because unique users overlap across days. For \"uniques\", always use overallSeries for the total.\n\nExample below is a \"pct_dau\" query over 3 weeks (a ratio metric):\n{\n  \"timeSeries\": [[{\"value\": 0.1402}, {\"value\": 0.1421}, {\"value\": 0.1444}]],\n  \"overallSeries\": [[{\"value\": 0.0712}]],\n  \"timeSeriesAverage\": [[{\"value\": 0.1422}]],\n  \"seriesMetadata\": [{\"segmentIndex\": 0, \"formulaIndex\": 0, \"formula\": \"PCT_DAU(A)\"}],\n  \"xValuesForTimeSeries\": [\"2026-04-06T00:00:00\", \"2026-04-13T00:00:00\", \"2026-04-20T00:00:00\"]\n}\nNote: the chart UI shows ~14% per week. timeSeriesAverage (14.22%) matches that. overallSeries (7.12%) is the\ndeduped 3-week aggregate ratio and would HALVE the reported value if used as the headline — never report it\nas \"the number\" for \"pct_dau\". Always use timeSeriesAverage for \"pct_dau\".\n\nEvent Segmentation with Insights (anomaly detection / confidence intervals):\n- When params.insights.isOn is true, Event Segmentation charts queried via query_charts or query_dataset\n  return BOTH chartConfig (Highcharts) AND jsonResponse with joinable band data.\n- jsonResponse.seriesIntervals maps stringified seriesMetadata keys to { low, high, yhat } arrays\n  (parallel to xValuesForTimeSeries). Use seriesMetadata + xValuesForTimeSeries to join bands to series.\n- Metric Explorer charts with Insights return seriesIntervals inside each data[] entry instead.\n",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chartIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "description": "Array of saved chart IDs to query data for (max 3)"
+          },
+          "chartEditIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "description": "Array of chart edit IDs to query data for (max 3)"
+          },
+          "groupByLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 10,
+            "description": "Maximum number of group by values to return (1-1000, defaults to 10)"
+          },
+          "excludeIncompleteDatapoints": {
+            "type": "boolean",
+            "default": false,
+            "description": "Optional flag to exclude incomplete data points from results. When true, the current time interval will be excluded from the results to avoid incomplete data points. Defaults to false."
+          },
+          "timeSeriesLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 6,
+            "description": "Maximum number of group-by values that include per-interval time-series rows in the CSV response. All group-by values always include their aggregate \"Total\" row. Groups beyond this limit only return their Total row, which dramatically reduces response size for charts with many group-by values over long date ranges. Defaults to 6 to prevent excessively large responses, but we recommend setting to 0 (totals-only) unless you specifically need time-series breakdowns for trend analysis."
+          },
+          "vis": {
+            "type": "string",
+            "enum": [
+              "line",
+              "area",
+              "bar",
+              "pie",
+              "stackedbar"
+            ],
+            "description": "Override the eventsSegmentation visualization type (line, area, bar, pie, stackedbar). Used by the chart widget vis switcher."
+          },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "light",
+              "dark"
+            ],
+            "description": "Fetch only this theme of an eventsSegmentation Highcharts config. Used by the chart widget for active-theme-first rendering."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Analyzing charts",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "query",
+          "analytics",
+          "chart",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "query_experiment",
+      "title": "Analyzing experiment",
+      "description": "Query an experiment analysis.\n\nCRITICAL: Do NOT pass metricIds unless user explicitly requests specific metrics or requests analysis on secondary metrics. Omit metricIds for primary metric only (cleaner, focused results).\n\nRULES:\n- Users want to know references for analyses in order to validate the data.\n- ALWAYS REFERENCE EXPERIMENTS TO THE USER BY THEIR LINK WHEN QUERIED AND USED IN ANALYSES.\n\nWHEN TO USE:\n- You want to query a experiment for analysis.\n\nINSTRUCTIONS:\n- Use the search tool to find the ID of the experiment you want to query.\n- You may want to use the get_experiments tool to get more context about the experiment (i.e. state, variants, etc.)\n- Use this tool to query the experiment analysis.\n\n\nEXAMPLE:\ngroupBy: [{\"type\": \"user\", \"value\": \"device type\", \"group_type\": \"User\"}]",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^\\d+$",
+            "description": "ID of the experiment to query"
+          },
+          "metricIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "description": "ONLY provide if user explicitly requests specific metrics or all metrics. If omitted, returns primary/recommended metric only for cleaner, focused results. Default behavior is preferred."
+          },
+          "groupBy": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "event",
+                    "session",
+                    "group",
+                    "nova_props",
+                    "derived",
+                    "derivedV2",
+                    "lookup",
+                    "array_property_aggregation",
+                    "inline_derived",
+                    "parallel_semantic",
+                    "nth_time_hack",
+                    "day_time_prop",
+                    "user_state",
+                    "server_upload_delay",
+                    "catalog_event",
+                    "catalog_user",
+                    "user_property_value",
+                    "persistence",
+                    "field",
+                    "table_column"
+                  ],
+                  "description": "FilterPropTypes — property source. Same enum as groupBy.type, filter subprop_type, and segment prop_type."
+                },
+                "value": {
+                  "type": "string",
+                  "description": "Property name from project taxonomy"
+                },
+                "group_type": {
+                  "type": "string",
+                  "description": "Group context, e.g. \"User\" or an account-level group id"
+                }
+              },
+              "required": [
+                "type",
+                "value",
+                "group_type"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 1,
+            "description": "Group by user (optional) - Example: [{\"type\": \"user\", \"value\": \"device type\", \"group_type\": \"User\"}]"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group_type": {
+                  "type": "string",
+                  "description": "Group context, e.g. \"User\" or an account-level group id"
+                },
+                "subprop_key": {
+                  "type": "string",
+                  "description": "Property name from project taxonomy"
+                },
+                "subprop_op": {
+                  "type": "string",
+                  "enum": [
+                    "is",
+                    "is not",
+                    "contains",
+                    "does not contain",
+                    "less",
+                    "less or equal",
+                    "greater",
+                    "greater or equal",
+                    "set is",
+                    "set is not",
+                    "set contains",
+                    "set does not contain",
+                    "glob match",
+                    "glob does not match",
+                    "has prefix",
+                    "does not have prefix",
+                    "ends with",
+                    "version less than",
+                    "version less than or equal to",
+                    "version greater than",
+                    "version greater than or equal to",
+                    "css match",
+                    "autotrack css match"
+                  ],
+                  "description": "PropertyOperator — filter operator. One of: is, is not, contains, does not contain, less, less or equal, greater, greater or equal, set is, set is not, set contains, set does not contain, glob match, glob does not match, has prefix, does not have prefix, ends with, version less than, version less than or equal to, version greater than, version greater than or equal to, css match, autotrack css match."
+                },
+                "subprop_value": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Values to match"
+                },
+                "subprop_type": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "event",
+                    "session",
+                    "group",
+                    "nova_props",
+                    "derived",
+                    "derivedV2",
+                    "lookup",
+                    "array_property_aggregation",
+                    "inline_derived",
+                    "parallel_semantic",
+                    "nth_time_hack",
+                    "day_time_prop",
+                    "user_state",
+                    "server_upload_delay",
+                    "catalog_event",
+                    "catalog_user",
+                    "user_property_value",
+                    "persistence",
+                    "field",
+                    "table_column"
+                  ],
+                  "description": "FilterPropTypes — property source. Same enum as groupBy.type, filter subprop_type, and segment prop_type."
+                }
+              },
+              "required": [
+                "group_type",
+                "subprop_key",
+                "subprop_op",
+                "subprop_value",
+                "subprop_type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Filters to apply to the metric (optional)"
+          },
+          "groupByLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 10,
+            "description": "Maximum number of group by values to return (1-1000, defaults to 10)"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Analyzing experiment",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "query",
+          "analytics",
+          "experiment",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "title": "Searching for content",
+      "description": "Search for dashboards, charts, notebooks, experiments, and other content in Amplitude.\n\nINSTRUCTIONS:\n- Use this as your primary tool to discover and explore available analytics content before diving into specific analyses.\n- If you are not sure what to search for, use the default search query.\n- Do not specify appIds/projectIds in the input unless the user explicitly asks to search within a specific app/project.\n- When searching for taxonomy entities like events, properties, etc. use higher limits (e.g. 100-200) to get more results as there are more important entities to search through.\n- When searching for events, use the get_properties tool (propertyType=\"event\") to get event properties on an individual event.\n- To search Amplitude's official product documentation (SDK setup guides, API reference, help articles), include 'AMPLITUDE_DOCS' in entityTypes. This searches the public docs corpus — NOT your org's content — and returns doc pages with browsable URLs. Pair it with a natural-language query (e.g. \"how to track revenue in the browser SDK\").\n\nDO NOT USE FOR:\n- AI agent results, agent analyses, or agent runs → use 'get_agent_results' instead\n- Getting full dashboard definitions with chart details → use 'get_dashboard' with the IDs from search results\n- Running queries or analysis → use 'query_dataset' or 'query_charts'\n\nADDITIONAL INFORMATION:\n- Results are personalized to the user you are making the request on behalf of.\n- Results do not include the full object definition. You will need to use other tools to get the full object definition when needed.\n- Best practice is to query for a single entity type, unless the user's request is open ended.\n- The response includes an isOfficial flag in contentMeta to identify content that has been marked as official by the organization.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appIds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Array of app/project IDs to search within. If not provided, search will be for all apps the user has access to."
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of search query strings. If not provided or empty, search will return results based on relevance to the user. Multiple queries are executed in parallel and results are deduplicated using Reciprocal Rank Fusion (RRF)."
+          },
+          "entityTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "EVENT",
+                "EVENT_PROPERTY",
+                "USER_PROPERTY",
+                "GROUP_PROPERTY",
+                "DERIVED_PROPERTY",
+                "LOOKUP_PROPERTY",
+                "PERSISTED_PROPERTY",
+                "CUSTOM_EVENT",
+                "SAVED_SEGMENT",
+                "METRIC",
+                "CHART",
+                "DASHBOARD",
+                "NOTEBOOK",
+                "COHORT",
+                "SPACE",
+                "FLAG",
+                "EXPERIMENT",
+                "GUIDE",
+                "SURVEY",
+                "AMPLITUDE_DOCS"
+              ]
+            },
+            "description": "Types of entities to search for. Will be converted to camelCase internally for entityRef field access. 'AMPLITUDE_DOCS' is special: it searches Amplitude's public product documentation (via the docs search endpoint) instead of your org's content, and can be combined with org entity types in a single call."
+          },
+          "includeArchived": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to include archived entities"
+          },
+          "includeGenerated": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to include AI-generated entites"
+          },
+          "owners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter by owners (array of login IDs)"
+          },
+          "excludeOwners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter out content by specific owners (array of login IDs)"
+          },
+          "sortOrder": {
+            "type": "string",
+            "enum": [
+              "relevance",
+              "lastModified",
+              "viewCount",
+              "name"
+            ],
+            "description": "Sort order for results"
+          },
+          "isOfficial": {
+            "type": "boolean",
+            "description": "Filter by official content only"
+          },
+          "limitPerQuery": {
+            "type": "number",
+            "default": 50,
+            "description": "Maximum number of results to return per query. Results from multiple queries are deduplicated before being returned. We recommend starting with the default of 50, even if you are using multiple queries."
+          },
+          "sortDirection": {
+            "type": "string",
+            "enum": [
+              "ASC",
+              "DESC"
+            ],
+            "default": "DESC",
+            "description": "Sort direction for results"
+          },
+          "lastModifiedAfter": {
+            "type": "number",
+            "description": "Filter to entities modified after this epoch timestamp (in seconds). Useful for finding recently active content, e.g. charts modified in the last 7 days."
+          },
+          "lastViewedBefore": {
+            "type": "number",
+            "description": "Filter to entities last viewed before this epoch timestamp (in seconds). Useful for finding stale or unused content."
+          },
+          "semanticSearch": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to use semantic search in addition to keyword search"
+          },
+          "search_goal": {
+            "type": "string",
+            "description": "What you are looking for and what you plan to do with the results. Example: \"Find the main retention dashboard to answer a question about churn.\""
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Searching for content",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "search",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "score": {
+                  "type": "number",
+                  "description": "Relevance score for this search result (higher = more relevant)"
+                },
+                "entity": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Unique identifier for the entity"
+                    },
+                    "orgId": {
+                      "type": "string",
+                      "description": "Organization ID where this entity belongs"
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "Entity type (e.g., CHART, DASHBOARD, NOTEBOOK)"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Display name of the entity"
+                    },
+                    "description": {
+                      "type": "string",
+                      "description": "Description of the entity"
+                    },
+                    "definition": {
+                      "type": "string",
+                      "description": "JSON definition of the entity (contains the configuration/setup data)"
+                    },
+                    "entityRef": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        },
+                        {
+                          "type": "object",
+                          "properties": {}
+                        }
+                      ],
+                      "description": "Specific entity reference data"
+                    },
+                    "owners": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "List of owner user IDs"
+                    },
+                    "lastModified": {
+                      "type": "string",
+                      "description": "Last modified timestamp in ISO 8601 format"
+                    },
+                    "contentMeta": {
+                      "type": "object",
+                      "properties": {
+                        "location": {
+                          "type": "object",
+                          "properties": {
+                            "locationId": {
+                              "type": "string",
+                              "description": "Location identifier",
+                              "nullable": true
+                            },
+                            "shortcutIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Associated shortcut IDs"
+                            }
+                          },
+                          "required": [
+                            "shortcutIds"
+                          ],
+                          "additionalProperties": false,
+                          "description": "Optional Location information"
+                        },
+                        "isArchived": {
+                          "type": "boolean",
+                          "description": "Whether the content is archived"
+                        },
+                        "isGenerated": {
+                          "type": "boolean",
+                          "description": "Whether the content is AI-generated"
+                        },
+                        "isOfficial": {
+                          "type": "boolean",
+                          "description": "Whether the content is marked as official"
+                        },
+                        "isTemplate": {
+                          "type": "boolean",
+                          "description": "Whether the content is a template"
+                        },
+                        "chartCount": {
+                          "type": "number",
+                          "description": "Number of charts in the content"
+                        },
+                        "chartType": {
+                          "type": "string",
+                          "description": "Type of chart"
+                        },
+                        "appIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "description": "Associated application IDs"
+                        },
+                        "viewCount": {
+                          "type": "number",
+                          "description": "Number of times viewed"
+                        },
+                        "lastViewed": {
+                          "type": "string",
+                          "description": "Last viewed timestamp in ISO 8601 format"
+                        },
+                        "nudgeType": {
+                          "type": "string",
+                          "description": "Type of nudge/guide (for guide/survey entities)"
+                        }
+                      },
+                      "required": [
+                        "isArchived",
+                        "isOfficial",
+                        "isTemplate",
+                        "chartCount",
+                        "chartType",
+                        "appIds",
+                        "viewCount",
+                        "lastViewed",
+                        "nudgeType"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Optional metadata about the content"
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "Optional URL to access the entity"
+                    },
+                    "contentType": {
+                      "type": "string",
+                      "description": "AMPLITUDE_DOCS only: doc classification (e.g. \"sdk\", \"api\", \"guide\")."
+                    },
+                    "surfaceArea": {
+                      "type": "string",
+                      "description": "AMPLITUDE_DOCS only: product surface area (e.g. \"Analytics\", \"Admin\")."
+                    },
+                    "version": {
+                      "type": "string",
+                      "description": "AMPLITUDE_DOCS only: version label for versioned pages."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "orgId",
+                    "type",
+                    "description",
+                    "definition",
+                    "entityRef",
+                    "owners",
+                    "lastModified"
+                  ],
+                  "additionalProperties": false
+                },
+                "scoreComponents": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "description": "Optional breakdown of how the relevance score was calculated",
+                  "properties": {}
+                }
+              },
+              "required": [
+                "score",
+                "entity"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of search results"
+          },
+          "totalHits": {
+            "type": "number",
+            "description": "Total number of matching results"
+          }
+        },
+        "required": [
+          "results",
+          "totalHits"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_from_url",
+      "title": "Getting data from URL",
+      "description": "Retrieve objects from Amplitude URLs\n\nWHEN TO USE:\n- CRITICAL: Only use this tool for full Amplitude app URLs on supported hosts (app.amplitude.com, app.eu.amplitude.com, apps.stag2.amplitude.com, local.amplitude.com)\n- You have an Amplitude URL and want to get the full object definition\n- User shares a link to a dashboard, chart, notebook, experiment, etc.\n\nINSTRUCTIONS:\n- Provide the full Amplitude URL (e.g., https://app.amplitude.com/analytics/myorg/chart/456 or https://app.eu.amplitude.com/analytics/myorg/chart/456)\n- The tool will parse the URL, validate the organization, and return the full object\n- Works with charts, dashboards, notebooks, experiments, flags, cohorts, metrics, and opportunities\n- /chart/new/{id} URLs may refer to a chart draft or a temporary chart edit (from query tools); both are resolved automatically\n- Agent session URLs (/agents/session/{id}) are not resolvable here — use get_agent_results with the session_id instead",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Full Amplitude URL to retrieve the object from"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Getting data from URL",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "navigation",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_session_replays",
+      "title": "Searching session replays",
+      "description": "Search session replays for a project.\n\nREQUIRED FOLLOW-UP — render_amp_session_replay:\n- After this tool returns sessionReplayIds, you MUST call `render_amp_session_replay` in the SAME turn whenever the user's request implies viewing the replays. This includes nearly every conversational ask: \"show me\", \"let me see\", \"pull up\", \"find\", \"get me\", \"any sessions\", \"what's happening\", \"watch\", \"play\", \"view\", \"open\", or any phrasing where the user is looking at session replays as the deliverable.\n- Pass the returned sessionReplayIds (max 20) to `render_amp_session_replay` along with the same `projectId`. Do not stop after the search — a list of IDs alone is not the answer the user wants.\n- ONLY skip the render call when the user is plainly asking for raw data extraction (e.g. \"give me a CSV of replay IDs\", \"just count them\", \"export to JSON\"). When in doubt, render.\n\nWHEN TO USE:\n- Find session replays matching event / user-property / cohort filters.\n- Fetch replays for a specific Amplitude user (`userId`), or by replay ID (`sessionReplayIds`).\n- Sample recent sessions when the user wants a quick look (\"show me what's happening\", \"any sessions today?\") — call with no filters and the tool returns a random slice from the last 24 hours.\n\nINSTRUCTIONS:\n- Provide `projectId`. Add filters incrementally; each is ANDed.\n- Reference real event names — call `get_events` (or `get_custom_or_labeled_events` for labeled events) first if unsure.\n- `sessionReplayId` format is \"device_id/session_id\" — pass it directly to `get_session_replay_events` for the rrweb stream, or to `render_amp_session_replay` for the player UI.\n- `userId` and `sessionReplayIds` are mutually exclusive with each other and with all filter fields.\n\nEXAMPLES:\n- Replays for an Amplitude user yesterday:\n  { \"projectId\": \"12345\", \"userId\": \"98765\", \"since\": \"yesterday\" }\n- Users who viewed the pricing page 3+ times:\n  { \"projectId\": \"12345\", \"events\": [{ \"name\": \"Page Viewed\", \"minCount\": 3, \"withProperty\": { \"name\": \"page\", \"is\": \"pricing\" } }] }\n- Sessions where the Checkout event recorded an error:\n  { \"projectId\": \"12345\", \"events\": [{ \"name\": \"Checkout\", \"withProperty\": { \"name\": \"error_type\", \"exists\": true } }] }\n- Enterprise users who completed checkout:\n  { \"projectId\": \"12345\", \"userProperties\": [{ \"name\": \"gp:plan\", \"is\": \"enterprise2\" }], \"events\": [{ \"name\": \"Checkout Completed\" }] }\n- Replays from a cohort (pass the numeric ID; use get_cohorts to resolve a name):\n  { \"projectId\": \"12345\", \"cohorts\": [556677] }\n- Specific replays by ID:\n  { \"projectId\": \"12345\", \"sessionReplayIds\": [\"device-abc/111\", \"device-def/222\"] }\n- Quick sample from the last day:\n  { \"projectId\": \"12345\" }\n\nNOTES:\n- Defaults: 10 results, time window depends on intent (30 days for filtered queries, 24 hours otherwise).\n- Cohorts are filtered by numeric ID only; call get_cohorts to resolve a cohort name to its ID first.\n- If results are empty for a filtered query, do not retry with the same parameters — widen the window or relax filters.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Project ID (appId) to search within."
+          },
+          "since": {
+            "description": "Start of the search window. ISO 8601 (\"2025-01-15T00:00:00Z\"), Unix epoch ms or seconds, or a relative phrase (\"yesterday\", \"7 days ago\", \"last week\"). Defaults to 30 days ago for filtered queries; 24 hours ago for direct-ID lookups and the no-conditions sample.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "until": {
+            "description": "End of the search window. Same flavors as `since`. Defaults to now.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "on": {
+            "type": "string",
+            "description": "Single-day shorthand: \"YYYY-MM-DD\" or relative (\"yesterday\", \"today\"). Expands to a 24-hour window centered on that day. Mutually exclusive with `since`/`until`."
+          },
+          "userId": {
+            "type": "string",
+            "description": "Fetch sessions for one Amplitude user (the numeric `amplitude_id`). Mutually exclusive with `sessionReplayIds` and with filters."
+          },
+          "sessionReplayIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "Fetch specific replays by \"device_id/session_id\". Up to 100. Mutually exclusive with `userId` and filters."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Event name (e.g. \"Purchase\", \"Page Viewed\"). Use \"_all\" only when filtering on user properties without referencing a specific event — prefer userProperties[] for that."
+                },
+                "minCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Minimum times the user performed this event. Defaults to 1 (i.e. \"at least once\")."
+                },
+                "maxCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Maximum times the user performed this event."
+                },
+                "withProperty": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Property name. User properties commonly use the \"gp:\" prefix (e.g. \"gp:plan\", \"gp:email\"); event properties use plain names (e.g. \"page\", \"error_type\")."
+                    },
+                    "is": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ],
+                      "description": "Match if the property equals this value (or any of these)."
+                    },
+                    "isNot": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ],
+                      "description": "Match if the property does not equal this value (or any of these)."
+                    },
+                    "contains": {
+                      "type": "string",
+                      "description": "Match if the property value contains this substring."
+                    },
+                    "doesNotContain": {
+                      "type": "string",
+                      "description": "Match if the property value does not contain this substring."
+                    },
+                    "exists": {
+                      "type": "boolean",
+                      "description": "true → property is set; false → property is unset. Useful for finding sessions with errors: { name: \"error_type\", exists: true }."
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Filter to occurrences of this event whose event property matches."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Filter to sessions where the user performed these events. Each entry is ANDed within the same session by default (see `matchScope`)."
+          },
+          "userProperties": {
+            "type": "array",
+            "items": {},
+            "description": "Filter to sessions whose user matches these property conditions. Each entry is ANDed."
+          },
+          "cohorts": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "description": "Filter to users in these cohorts. Accepts numeric cohort IDs only — call get_cohorts to resolve a cohort name to its ID first."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Max sessions to return. Defaults to 10."
+          },
+          "randomize": {
+            "type": "boolean",
+            "description": "Shuffle results before returning. Use true for analysis sampling. Implied (with a 24-hour window) when no filters and no direct selectors are supplied."
+          },
+          "matchScope": {
+            "type": "string",
+            "enum": [
+              "session",
+              "user"
+            ],
+            "description": "How to interpret multiple `events`. \"session\" (default) returns only replays where every event occurred in the same session — what users typically mean by \"find sessions with X and Y\". \"user\" returns all replays of users who satisfied the filters somewhere in the time window, even if a given replay doesn't contain every event. Has no effect when `events` is empty."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Brief explanation of why you are calling this tool and what you expect to learn from the result."
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "annotations": {
+        "title": "Searching session replays",
+        "destructiveHint": false,
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "_meta": {
+        "amplitude/tags": [
+          "session-replay",
+          "analytics",
+          "user-behavior",
+          "default"
+        ],
+        "amplitude/accessLevels": [
+          "read"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Content block type (typically \"text\")"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Text content, usually a JSON-serialized object with the tool result"
+                },
+                "data": {
+                  "type": "string",
+                  "description": "Base64-encoded payload for binary content blocks"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type for binary content blocks"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Array of content blocks returned by the tool"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

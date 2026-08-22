@@ -1,0 +1,69 @@
+{
+  "addressMaterializations": [
+    {
+      "instruction": "0x10074679c",
+      "add": "0x1007467a0",
+      "pageRegister": 2,
+      "resultRegister": 2,
+      "distance": 1
+    },
+    {
+      "instruction": "0x1007467d4",
+      "add": "0x1007467d8",
+      "pageRegister": 1,
+      "resultRegister": 1,
+      "distance": 1
+    },
+    {
+      "instruction": "0x1009616cc",
+      "add": "0x1009616d0",
+      "pageRegister": 2,
+      "resultRegister": 2,
+      "distance": 1
+    },
+    {
+      "instruction": "0x1009618d4",
+      "add": "0x1009618d8",
+      "pageRegister": 1,
+      "resultRegister": 1,
+      "distance": 1
+    },
+    {
+      "instruction": "0x100965614",
+      "add": "0x100965618",
+      "pageRegister": 0,
+      "resultRegister": 0,
+      "distance": 1
+    },
+    {
+      "instruction": "0x100f42cd8",
+      "add": "0x100f42cdc",
+      "pageRegister": 2,
+      "resultRegister": 2,
+      "distance": 1
+    },
+    {
+      "instruction": "0x100f42d10",
+      "add": "0x100f42d14",
+      "pageRegister": 1,
+      "resultRegister": 1,
+      "distance": 1
+    },
+    {
+      "instruction": "0x101d55800",
+      "add": "0x101d55804",
+      "pageRegister": 2,
+      "resultRegister": 2,
+      "distance": 1
+    },
+    {
+      "instruction": "0x101d55838",
+      "add": "0x101d5583c",
+      "pageRegister": 1,
+      "resultRegister": 1,
+      "distance": 1
+    }
+  ],
+  "loadMaterializations": [],
+  "branchLinks": []
+}
