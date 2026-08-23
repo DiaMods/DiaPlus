@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import NaturalLanguage
 
 private struct BridgeRequest: Decodable {
     let action: String
@@ -8,6 +9,7 @@ private struct BridgeRequest: Decodable {
     let structured: Bool?
     let toolsJSON: String?
     let maximumResponseTokens: Int?
+    let texts: [String]?
 }
 
 private struct ToolSpec: Decodable {
@@ -217,6 +219,27 @@ private func usageValue(_ usage: LanguageModelSession.Usage) -> [String: Any] {
     ]
 }
 
+private func sentenceEmbeddings(_ texts: [String]) throws -> [String: Any] {
+    guard texts.count <= 512 else {
+        throw NSError(domain: "DiaCustomAppleModel", code: 7, userInfo: [
+            NSLocalizedDescriptionKey: "At most 512 texts can be embedded at once",
+        ])
+    }
+    guard let embedding = NLEmbedding.sentenceEmbedding(for: .english) else {
+        throw NSError(domain: "DiaCustomAppleModel", code: 8, userInfo: [
+            NSLocalizedDescriptionKey: "Apple sentence embeddings are unavailable",
+        ])
+    }
+    return [
+        "model": "apple-natural-language-en-v1",
+        "dimension": embedding.dimension,
+        "vectors": texts.map { text -> Any in
+            let bounded = String(text.prefix(20_000))
+            return embedding.vector(for: bounded) ?? NSNull()
+        },
+    ]
+}
+
 private func generate<Model: LanguageModel>(
     model: Model,
     request: BridgeRequest
@@ -288,6 +311,16 @@ private struct DiaCustomAppleModel {
                         "privateCloud": availabilityValue(privateCloud.availability),
                     ],
                 ])
+                return
+            }
+
+            if request.action == "embed" {
+                guard let texts = request.texts else {
+                    throw NSError(domain: "DiaCustomAppleModel", code: 9, userInfo: [
+                        NSLocalizedDescriptionKey: "texts are required for embedding",
+                    ])
+                }
+                try emit(["type": "result", "value": try sentenceEmbeddings(texts)])
                 return
             }
 

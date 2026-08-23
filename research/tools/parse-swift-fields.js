@@ -10,8 +10,44 @@ if (!binaryPath) {
 }
 
 const data = readFileSync(binaryPath);
-const sectionOffset = 0x60afaa0;
-const sectionEnd = sectionOffset + 0x11ef60;
+const machOMagic64 = 0xfeedfacf;
+
+function fixedName(offset, length = 16) {
+  const bytes = data.subarray(offset, offset + length);
+  const zero = bytes.indexOf(0);
+  return bytes.subarray(0, zero === -1 ? bytes.length : zero).toString("utf8");
+}
+
+function section(namedSection) {
+  if (data.readUInt32LE(0) !== machOMagic64) {
+    throw new Error("parse-swift-fields currently requires a thin little-endian 64-bit Mach-O");
+  }
+  const commandCount = data.readUInt32LE(16);
+  let commandOffset = 32;
+  for (let commandIndex = 0; commandIndex < commandCount; commandIndex += 1) {
+    const command = data.readUInt32LE(commandOffset);
+    const commandSize = data.readUInt32LE(commandOffset + 4);
+    if (commandSize < 8 || commandOffset + commandSize > data.length) break;
+    if (command === 0x19) {
+      const sectionCount = data.readUInt32LE(commandOffset + 64);
+      for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex += 1) {
+        const sectionOffset = commandOffset + 72 + sectionIndex * 80;
+        if (sectionOffset + 80 > commandOffset + commandSize) break;
+        if (fixedName(sectionOffset) !== namedSection) continue;
+        const fileOffset = data.readUInt32LE(sectionOffset + 48);
+        const size = Number(data.readBigUInt64LE(sectionOffset + 40));
+        if (fileOffset + size > data.length) throw new Error(`${namedSection} exceeds the file`);
+        return { fileOffset, size };
+      }
+    }
+    commandOffset += commandSize;
+  }
+  throw new Error(`${namedSection} was not found in ${binaryPath}`);
+}
+
+const swiftFields = section("__swift5_fieldmd");
+const sectionOffset = swiftFields.fileOffset;
+const sectionEnd = sectionOffset + swiftFields.size;
 const filterStart = process.env.START_HEX ? Number.parseInt(process.env.START_HEX, 16) : sectionOffset;
 const filterEnd = process.env.END_HEX ? Number.parseInt(process.env.END_HEX, 16) : sectionEnd;
 

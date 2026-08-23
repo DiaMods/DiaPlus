@@ -2,81 +2,122 @@
 
 ## Runtime flow
 
-1. Dia's native New Chat UI assembles its normal conversation, browser context, and currently available tool schemas.
-2. The guarded agent-handler patch directs that Anthropic-compatible request to **127.0.0.1:8765**.
-3. **ProviderManager** reads the persistent selection and augments the request with local-only tools.
-4. The selected adapter runs Codex, Apple Foundation Models, OpenAI Responses, or an OpenAI-compatible Chat Completions backend.
-5. Local memory calls execute inside the bridge. Native tool calls are streamed back to Dia with the original tool name, ID, and input schema.
-6. Dia executes browser/report tools and sends tool results through another turn. Final text and provider activity summaries render in Dia's existing UI.
+1. Dia's native New Chat harness creates its normal system context, conversation, browser context, skills, and eager/on-demand tool set.
+2. A guarded patch sends the harness's Anthropic-compatible model request to **127.0.0.1:8765** while leaving the harness itself intact.
+3. **ProviderManager** resolves the persistent model selection, removes Dia-service-only tools, adds local tools, and records tool coverage.
+4. The selected Codex, Apple, OpenAI Responses, or OpenAI-compatible Chat Completions adapter produces final text or typed tool calls.
+5. Local calls execute inside the bridge and their results are appended for another model decision. Native calls stream back with the original name, ID, and arguments.
+6. Dia executes native browser/file/skill/Report tools in its per-context harness and sends results through the next model turn. Reasoning summaries render in Dia's existing activity UI.
 
-The model never needs to automate Chromium directly. Dia retains tab context, tool execution, attachments, permission surfaces, and Reports-library ownership.
+The provider does not automate Chromium directly. Dia retains browser context, tab actions, attachments, sandboxed artifact creation, and Reports-library ownership.
 
 ## Provider boundary
 
-Provider definitions and selection live in **Bridge/.state/config.json**. A sanitized discovery catalog is written to **Bridge/.state/models.json** for the injected native picker. Both are owner-only files.
+Provider definitions and selection live in **Bridge/.state/config.json**. Secrets live separately in **Bridge/.state/credentials.json** or an explicitly configured environment variable. The sanitized picker catalog is **Bridge/.state/models.json**. These files are owner-only.
 
-Adapters share one result contract:
+Adapters return one shared result contract:
 
-- final text plus usage;
-- provider-authored reasoning summaries suitable for Dia's activity UI;
-- zero or more typed tool calls.
+- final text and optional usage;
+- provider-authored reasoning summaries;
+- zero or more typed calls using exact supplied tool names.
 
-Codex uses the installed SDK and live web access. Apple runs in a separate Swift helper so Foundation Models support does not depend on Dia's private ABI. OpenAI uses the Responses API. Ollama and custom servers use the OpenAI-compatible Chat Completions API. The network-policy module rejects provider URLs owned by Dia or The Browser Company.
+Codex runs as a decision engine in an empty read-only workspace. Its built-in command execution, file changes, MCP/apps, and web search are disabled; browser actions are expressed only through Dia Custom tools. Apple runs in a separate signed Swift helper using Foundation Models and NaturalLanguage. OpenAI uses the Responses API. Ollama and custom servers use OpenAI-compatible Chat Completions or Responses endpoints.
 
-The localhost settings API requires an unguessable token for mutations and deliberately sends no cross-origin headers. The native picker reads that token from the mode-0600 catalog. OpenAI credentials are placed in the per-login launchd environment and are never written into provider configuration.
+The localhost administration API uses an unguessable token, sends no permissive CORS headers, and never returns credentials. The settings page receives that token only from the loopback origin that serves it.
 
 ## Native model UI
 
-The runtime bootstrap first tries Dia's own hidden model-selector object. Build 85823 creates no object in the observed New Chat state, so Dia Custom also installs:
+The runtime bootstrap first asks Dia for its hidden selector. If the current build does not instantiate one, it provides:
 
-- an AppKit pop-up in BoostCommandBar.ToolbarView's standard content stack when that stable stack exists;
-- a View → Developer → AI Model submenu that works when toolbar internals change;
-- a Model Providers & Settings item that opens the localhost provider page.
+- an AppKit pop-up in the standard New Chat toolbar stack when that stack is discoverable;
+- View → Developer → AI Model as a layout-independent fallback;
+- Model Providers & Settings to open the loopback administration page.
 
-Catalog and HTTP boundaries are version-neutral. Only locating the optional inline toolbar stack is best-effort.
+Picker items come from the version-neutral model catalog. Toolbar discovery is best-effort so a future view-layout change cannot break chat routing.
 
-## Tool boundary
+## Tool routing
 
-Tools supplied by Dia are normalized but not reimplemented. A provider can call them, and the bridge sends native tool_use blocks back to the handler. This preserves the full set Dia exposes for the user's current capabilities.
+Eager tool schemas from Dia are normalized and passed through dynamically. Native ToolSearch reminders are also inventoried, but their schemas remain deferred until Dia's harness loads them. This preserves future native additions without pretending a deferred tool is already callable.
 
-Local memory is the intentional exception. The bridge injects memory_search and memory_query definitions, executes those calls against local SQLite, appends tool results to the in-flight conversation, and asks the same provider to continue. Local and native actions are kept in separate tool rounds.
+Routes currently fall into four groups:
 
-The memory store imports:
+- **native:** local browser/harness actions such as `open_tabs`, `read_tabs`, `close_tabs`, `calculate`, `Skill`, `Read`, `Write`, `Edit`, `Bash`, `ToolSearch`, and `upload_artifact`;
+- **local override:** public web search/fetch, memory, connector search/query, and imported people lookup;
+- **native on-demand:** schemas advertised by ToolSearch but not yet loaded for the turn;
+- **blocked:** Dia product knowledge or another observed tool intentionally excluded because it depends on Dia's service.
+
+The coverage store persists name, route, schema, schema hash, and first/last-seen timestamps. A local override with the same exact name replaces the native server-dependent definition.
+
+If a provider asks for local and native actions in separate rounds, local results are resolved immediately and the same provider continues. Native calls return to Dia. An identical native call that already failed in the current user request is stopped rather than entering an automatic retry loop.
+
+## Public web boundary
+
+The local web client searches DuckDuckGo's public HTML endpoint and fetches public HTTP(S) text directly. It enforces request/redirect limits, bounded response bodies, supported content types, DNS resolution, and private/reserved IP rejection on every hop. Dia and The Browser Company hosts are always rejected.
+
+This client does not receive Chromium cookies. Signed-in content already visible in the browser is available through Dia's native page/tab context; general cookie-backed service browsing needs a future local browser-session adapter.
+
+## Memory and connectors
+
+The SQLite memory store imports:
 
 - Chromium history from the isolated Dia Custom profile;
-- URL, title, and page text present in native tool results;
-- future user and assistant messages.
+- URL, title, and page text found in native tool results;
+- user and assistant chat turns;
+- user-imported connector records.
 
-It refreshes browser history every five minutes. It does not decrypt or repurpose Dia's account-backed databases.
+FTS5 supplies lexical retrieval. Apple's on-device sentence embedding supplies lazy semantic vectors, which are stored as Float32 blobs and combined with lexical results. Retention and count limits are applied after history refresh; administration routes support statistics, export, scoped deletion, and pruning.
+
+Connector imports are transactionally replaced by connector ID and use the same index with source isolation. Local `connector_query` enforces the connector entry type even when given explicit URIs. People records supply local versions of Dia's recent-person and lookup-person tools. No OAuth token or official-Dia database is used.
 
 ## Reports
 
-Dia's handler supplies the original artifact-generation/report prompts and sandboxed file tools. Models are told to use those supplied tools rather than the bridge filesystem. Upload remains the native upload_artifact tool, which is the path that registers a result in Dia's Reports library.
+Dia's original request already includes `artifact-generation`, `report-kit`, sandbox environment context, and native `Skill`, `Read`, `Write`, `Edit`, `Bash`, and `upload_artifact` schemas. Dia Custom preserves all of it. A provider therefore loads Dia's actual Report instructions, writes with native sandboxed tools under:
 
-Official responses include a proprietary tool-safety stream event before upload_artifact. Dia Custom now emits the matching local event with the exact tool-use ID and still notifies Dia's native CHECK controller, while the handler resolves its permission locally. This is implemented and protocol-tested headlessly; final native Reports-library ingestion requires one unlocked build-85823 run.
+~~~text
+User Data/Default/AgentServer/contexts/<context UUID>/work/artifacts/<report folder>
+~~~
+
+and then calls native `upload_artifact`.
+
+Official Dia validates `site_root` against a registry associated with the official profile. That registry cannot recognize a separately bundled clone even when the path is correct. The native Report patch semantically locates only this duplicate registry-error branch and sends it to the existing success continuation. Folder validation and native ingestion remain unchanged.
+
+Before that patched branch is reachable, the bridge independently requires:
+
+- a UUID matching the exact `<agent-context>` in the active model request;
+- the fixed `work/artifacts/<safe folder>` structure;
+- real directories and regular entry files with no path escape or symlink;
+- at most 1,000 files and 50 MiB;
+- at most 8 MiB of inspectable HTML/CSS/JS/JSON/SVG/XML;
+- only resolvable public, non-Dia outbound HTTP(S) URLs.
+
+The bridge then emits Dia's proprietary `tool_safety_check_result` with the same tool-use ID and approved outbound URL list. Dia's native permission controller is notified, while the patched handler resolves the unavailable proprietary Watchtower decision locally.
 
 ## Network boundary
 
-Website traffic is not sandboxed. Endpoint strings for Dia AI, model registry, tool cache, telemetry, and crash upload are redirected to localhost. The injected NSURLSession task hook independently cancels root and subdomain requests for Dia and The Browser Company, plus known Segment, LaunchDarkly, updater, staging-model, and Dia telemetry hosts. Logs mark each resumed task as ALLOW or BLOCKED.
+The browser is not globally offline. User navigation, public web tools, and selected providers need network access. Dia Custom instead uses overlapping destination controls:
 
-The custom Sparkle feed points at an empty localhost appcast and all automatic update preferences are disabled. The original Dia app retains normal updates.
+- known AI, registry, tool-cache, telemetry, and crash endpoints are rewritten to loopback;
+- the injected NSURLSession resume hook cancels Dia/TBC suffixes and known Segment, LaunchDarkly, Datadog, Sentry, updater, and staging hosts;
+- Chromium host-resolver rules fail Dia/TBC/internal names before browser navigation;
+- provider and artifact URL validation rejects Dia/TBC/internal destinations;
+- product-knowledge tools are not exposed to providers.
 
-No account token is copied into the clone. Codex/OpenAI inference reaches OpenAI, Apple Private Cloud reaches Apple, Ollama remains local, and normal browsing reaches sites selected by the user.
+The runtime network log strips paths for external browsing origins. The custom Sparkle feed is an empty loopback appcast and automatic update preferences are disabled. Official Dia retains normal updates.
+
+## Sandboxes
+
+The project deliberately keeps separate trust boundaries:
+
+- Chromium runs without `--no-sandbox` by default.
+- Dia's agent handler keeps its native Seatbelt profile; only the gateway port is corrected to **8765** so the model request can reach the local bridge.
+- Codex receives a sanitized environment, a read-only empty working directory, no network access for its built-in actions, and an abort if it attempts a command, file change, MCP call, or built-in web search.
+
+The public web client and selected remote providers run in the bridge because those are the explicit network capabilities the user requested. Reports remain in Dia's agent sandbox.
 
 ## Isolation and upgrades
 
-The clone has:
+The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL/document registration. No account token is copied from official Dia.
 
-- bundle ID **local.rttm.dia**;
-- a separate application profile and Chromium user-data directory;
-- a separate Keychain service label;
-- no URL/document-handler registration;
-- no automatic updater.
+Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report validator and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. The anonymous account/capability patch still has a small audited table for builds 85660 and 85823. **./dia-custom update** clones official Dia into a temporary bundle, applies and verifies every patch, signs it, and swaps only after success. Unknown layouts leave the existing clone untouched.
 
-Most integration points are string/signature scanned or runtime-discovered. The anonymous-account and capability patch still has a small audited ARM64 layout table for builds 85660 and 85823. **./dia-custom update** clones the official app into a temporary bundle, applies every guard, signs it, and swaps it only after success. Unknown bytes or builds stop the process and leave the existing clone intact.
-
-Provider configuration, model selection, bridge sessions, and memory are outside the app bundle, so supported rebuilds preserve them.
-
-## Future account connectors
-
-Model identity and service identity are deliberately separate. A later connector layer can add user-authorized OAuth accounts and index service content into the same local memory store without giving Dia's AI service control of inference. Native account-backed tools remain capability-gated today; this project does not synthesize a Dia account or extract credentials from the real app.
+Bridge configuration, credentials, model choice, memory, connector data, sessions, and coverage live outside the app bundle and survive supported rebuilds.

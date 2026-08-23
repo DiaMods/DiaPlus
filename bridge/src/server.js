@@ -10,14 +10,21 @@ import {
 } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import {
+  authorizeNativeToolCalls,
+  currentAgentContextID,
+  nativeToolSafetyEvents,
+} from "./artifact-safety.js";
 import { ProviderManager } from "./provider-manager.js";
 import {
   captureDirectory,
   sessionPath,
   stateDirectory,
   toolCacheDirectory,
+  profileDirectory,
 } from "./paths.js";
 import { renderSettingsPage } from "./settings-page.js";
+import { isAllowedLoopbackHostHeader } from "./network-policy.js";
 
 const host = "127.0.0.1";
 const port = Number.parseInt(process.env.DIA_CUSTOM_BRIDGE_PORT ?? "8765", 10);
@@ -50,6 +57,16 @@ function jsonResponse(response, statusCode, value) {
     "cache-control": "no-store",
   });
   response.end(JSON.stringify(value));
+}
+
+function jsonDownloadResponse(response, fileName, value) {
+  response.writeHead(200, {
+    "content-type": "application/json; charset=utf-8",
+    "content-disposition": `attachment; filename="${fileName}"`,
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+  });
+  response.end(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 async function loadLocalSessions() {
@@ -225,25 +242,6 @@ function anthropicToolEvents(toolCalls, startIndex = 0) {
   });
 }
 
-function nativeToolSafetyEvents(toolCalls) {
-  return toolCalls.flatMap((toolCall) => {
-    if (!toolCall.name.endsWith("upload_artifact") ||
-        typeof toolCall.input?.site_root !== "string") {
-      return [];
-    }
-    return [{
-      event: "tool_safety_check_result",
-      data: {
-        type: "tool_safety_check_result",
-        tool_id: toolCall.id,
-        tool_type: "upload_artifact",
-        allowed_artifact_urls: [],
-        client_can_bypass: true,
-      },
-    }];
-  });
-}
-
 function writeAnthropicEvent(response, event, data) {
   response.write(`event: ${event}\n`);
   response.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -313,6 +311,7 @@ function responseContextLabelsResponse() {
 
 async function streamProviderAsAnthropic(response, payload) {
   const { key: model } = await providerManager.selectedProvider();
+  const contextID = currentAgentContextID(payload, profileDirectory);
   const messageId = `msg_dia_custom_${randomBytes(12).toString("hex")}`;
   const thinkingIndex = 0;
   const outputIndex = 1;
@@ -365,13 +364,36 @@ async function streamProviderAsAnthropic(response, payload) {
     };
   }
 
+  if (result.kind === "tool_use" && result.toolCalls.length > 0) {
+    const authorization = await authorizeNativeToolCalls(
+      result.toolCalls,
+      profileDirectory,
+      { contextID, requireContext: true },
+    );
+    if (authorization.blocked.length > 0) {
+      const blocked = authorization.blocked.at(-1);
+      result = {
+        ...result,
+        kind: "final",
+        toolCalls: [],
+        text: `Dia Custom blocked ${blocked.call.name}: ${blocked.reason}.`,
+      };
+    } else {
+      result.toolCalls = authorization.allowed;
+    }
+  }
+
   for (const item of anthropicThinkingStopEvents(thinkingIndex)) {
     writeAnthropicEvent(response, item.event, item.data);
   }
 
   const isToolUse = result.kind === "tool_use" && result.toolCalls.length > 0;
   if (isToolUse) {
-    for (const item of nativeToolSafetyEvents(result.toolCalls)) {
+    for (const item of await nativeToolSafetyEvents(
+      result.toolCalls,
+      profileDirectory,
+      { contextID },
+    )) {
       writeAnthropicEvent(response, item.event, item.data);
     }
   }
@@ -590,7 +612,11 @@ function htmlResponse(response, content) {
   response.end(content);
 }
 
-const server = createServer(async (request, response) => {
+async function handleRequest(request, response) {
+  if (!isAllowedLoopbackHostHeader(request.headers.host, port)) {
+    jsonResponse(response, 421, { error: "loopback_host_required" });
+    return;
+  }
   const requestURL = new URL(request.url ?? "/", `http://${host}:${port}`);
   if (request.method === "GET" && request.url === "/health") {
     const { key: selectedModel } = await providerManager.selectedProvider();
@@ -623,6 +649,148 @@ const server = createServer(async (request, response) => {
   if (request.method === "GET" && requestURL.pathname === "/api/config") {
     await providerManager.configStore.load();
     jsonResponse(response, 200, providerManager.configStore.publicValue());
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/api/credentials") {
+    if (!await hasAdminToken(request)) {
+      jsonResponse(response, 403, { error: "invalid local administration token" });
+      return;
+    }
+    const config = await providerManager.configStore.load();
+    jsonResponse(response, 200, await providerManager.credentialStore.status(config.providers));
+    return;
+  }
+
+  if (["PUT", "DELETE"].includes(request.method) &&
+      requestURL.pathname.startsWith("/api/credentials/")) {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const providerID = decodeURIComponent(requestURL.pathname.slice("/api/credentials/".length));
+      const config = await providerManager.configStore.load();
+      const provider = config.providers.find((candidate) => candidate.id === providerID);
+      if (!provider || provider.type !== "openai-compatible") {
+        throw new Error("credentials can only be set for a configured OpenAI-compatible provider");
+      }
+      if (request.method === "PUT") {
+        const payload = JSON.parse((await readBody(request)).toString("utf8"));
+        await providerManager.credentialStore.set(providerID, payload.secret);
+      } else {
+        await providerManager.credentialStore.delete(providerID);
+      }
+      await providerManager.refreshCatalog({ force: true });
+      jsonResponse(response, 200, { ok: true });
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/api/memory") {
+    if (!await hasAdminToken(request)) {
+      jsonResponse(response, 403, { error: "invalid local administration token" });
+      return;
+    }
+    jsonResponse(response, 200, await providerManager.memoryStore.stats());
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/api/memory/export") {
+    if (!await hasAdminToken(request)) {
+      jsonResponse(response, 403, { error: "invalid local administration token" });
+      return;
+    }
+    const date = new Date().toISOString().slice(0, 10);
+    jsonDownloadResponse(
+      response,
+      `dia-custom-memory-${date}.json`,
+      await providerManager.memoryStore.exportEntries(),
+    );
+    return;
+  }
+
+  if (request.method === "DELETE" && requestURL.pathname === "/api/memory") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const payload = JSON.parse((await readBody(request)).toString("utf8") || "{}");
+      jsonResponse(response, 200, await providerManager.memoryStore.deleteEntries(payload));
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && requestURL.pathname === "/api/memory/prune") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const config = await providerManager.configStore.load();
+      jsonResponse(response, 200, await providerManager.memoryStore.prune(config.localMemory));
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/api/connectors") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      jsonResponse(response, 200, { connectors: await providerManager.memoryStore.connectors() });
+    } catch (error) {
+      jsonResponse(response, 500, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/api/tools") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      jsonResponse(response, 200, await providerManager.toolCoverageStore.publicValue());
+    } catch (error) {
+      jsonResponse(response, 500, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && requestURL.pathname === "/api/connectors/import") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      jsonResponse(response, 200, await providerManager.memoryStore.importConnector(payload));
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "DELETE" && requestURL.pathname.startsWith("/api/connectors/")) {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const id = decodeURIComponent(requestURL.pathname.slice("/api/connectors/".length));
+      jsonResponse(response, 200, await providerManager.memoryStore.deleteConnector(id));
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
     return;
   }
 
@@ -767,6 +935,18 @@ const server = createServer(async (request, response) => {
     response.writeHead(400, { "content-type": "application/json" });
     response.end(JSON.stringify({ error: String(error?.message ?? error) }));
   }
+}
+
+const server = createServer((request, response) => {
+  handleRequest(request, response).catch((error) => {
+    const message = String(error?.message ?? error);
+    process.stderr.write(`Dia Custom local HTTP error: ${message}\n`);
+    if (!response.headersSent) {
+      jsonResponse(response, 500, { error: message });
+    } else if (!response.writableEnded) {
+      response.end();
+    }
+  });
 });
 
 await loadLocalSessions();

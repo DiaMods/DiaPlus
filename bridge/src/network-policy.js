@@ -3,6 +3,8 @@ const forbiddenHostSuffixes = [
   ".diabrowser.com",
   ".thebrowser.company",
   ".thebrowser.com",
+  ".browserinternal.com",
+  ".browserinternalstaging.com",
 ];
 
 const forbiddenHosts = new Set([
@@ -10,12 +12,24 @@ const forbiddenHosts = new Set([
   "diabrowser.com",
   "thebrowser.company",
   "thebrowser.com",
+  "browserinternal.com",
+  "browserinternalstaging.com",
 ]);
 
 export function isDiaHost(hostname) {
   const normalized = hostname.toLowerCase().replace(/\.$/, "");
   return forbiddenHosts.has(normalized) ||
     forbiddenHostSuffixes.some((suffix) => normalized.endsWith(suffix));
+}
+
+export function isAllowedLoopbackHostHeader(value, port = 8765) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return new Set([
+    `127.0.0.1:${port}`,
+    `localhost:${port}`,
+    `[::1]:${port}`,
+  ]).has(normalized);
 }
 
 export function assertAllowedProviderURL(rawURL) {
@@ -35,4 +49,3 @@ export function joinProviderURL(baseURL, path) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return assertAllowedProviderURL(`${normalizedBase}${normalizedPath}`).toString();
 }
-

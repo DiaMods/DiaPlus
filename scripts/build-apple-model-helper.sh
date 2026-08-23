@@ -28,6 +28,7 @@ DEVELOPER_DIR="$developer_dir" xcrun swiftc \
   -O \
   -target arm64-apple-macosx27.0 \
   -framework FoundationModels \
+  -framework NaturalLanguage \
   "$source_file" \
   -o "$output_file"
 

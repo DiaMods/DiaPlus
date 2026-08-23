@@ -1,12 +1,25 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { normalizeAnthropicTools, appendToolResults } from "./chat-shape.js";
+import {
+  normalizeAnthropicTools,
+  appendToolResults,
+  deferredAnthropicTools,
+  isDiaOwnedProductKnowledgeTool,
+  removeRepeatedFailedToolCalls,
+} from "./chat-shape.js";
 import { ConfigStore } from "./config.js";
+import { CredentialStore } from "./credentials.js";
 import { LocalToolRegistry } from "./local-tools/index.js";
 import { MemoryStore } from "./local-tools/memory.js";
 import { assertAllowedProviderURL } from "./network-policy.js";
 import { modelCatalogPath } from "./paths.js";
-import { appleProviderStatus, runAppleProvider } from "./providers/apple.js";
+import { ToolCoverageStore } from "./tool-coverage.js";
+import {
+  appleProviderStatus,
+  appleSentenceEmbeddings,
+  runAppleProvider,
+} from "./providers/apple.js";
 import { runCodexProvider } from "./providers/codex.js";
 import { runOpenAICompatibleProvider } from "./providers/openai-compatible.js";
 
@@ -24,7 +37,7 @@ function splitModelKey(key) {
 
 async function atomicWriteJSON(path, value) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const temporaryPath = `${path}.tmp-${process.pid}`;
+  const temporaryPath = `${path}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
   await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await rename(temporaryPath, path);
 }
@@ -43,13 +56,10 @@ function modelRecord(provider, model, status = {}) {
   };
 }
 
-function discoveryHeaders(provider) {
+function discoveryHeaders(provider, apiKey) {
   const headers = { accept: "application/json" };
-  if (provider.apiKeyEnv) {
-    const key = process.env[provider.apiKeyEnv];
-    if (!key) throw new Error(`${provider.label} needs ${provider.apiKeyEnv}`);
-    headers.authorization = `Bearer ${key}`;
-  }
+  if (provider.apiKeyEnv && !apiKey) throw new Error(`${provider.label} needs a credential`);
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
   return headers;
 }
 
@@ -66,17 +76,23 @@ function normalizeDiscoveredModels(provider, payload) {
 export class ProviderManager {
   constructor({
     configStore = new ConfigStore(),
-    memoryStore = new MemoryStore(),
+    credentialStore = new CredentialStore(),
+    memoryStore = null,
     fetchImplementation = fetch,
     appleStatusImplementation = appleProviderStatus,
     catalogPath = modelCatalogPath,
+    toolCoverageStore = new ToolCoverageStore(),
   } = {}) {
     this.configStore = configStore;
-    this.memoryStore = memoryStore;
-    this.localTools = new LocalToolRegistry(memoryStore, configStore);
+    this.credentialStore = credentialStore;
+    this.memoryStore = memoryStore ?? new MemoryStore(undefined, undefined, {
+      embedder: async (texts) => appleSentenceEmbeddings(texts),
+    });
+    this.localTools = new LocalToolRegistry(this.memoryStore, configStore);
     this.fetch = fetchImplementation;
     this.appleStatus = appleStatusImplementation;
     this.catalogPath = catalogPath;
+    this.toolCoverageStore = toolCoverageStore;
     this.catalogValue = null;
     this.catalogPromise = null;
     this.catalogUpdatedAt = 0;
@@ -88,7 +104,7 @@ export class ProviderManager {
     const config = await this.configStore.load();
     await this.memoryStore.open();
     if (config.localMemory.enabled && config.localMemory.importBrowserHistory) {
-      this.historyImportPromise = this.memoryStore.importBrowserHistory()
+      this.historyImportPromise = this.refreshLocalMemory(config)
         .then((count) => {
           if (count > 0) process.stdout.write(`Imported ${count} local browsing history entries\n`);
           return count;
@@ -97,15 +113,22 @@ export class ProviderManager {
           process.stderr.write(`Local memory import failed: ${String(error?.message ?? error)}\n`);
           return 0;
         });
-      this.historyRefreshTimer = setInterval(() => {
-        this.memoryStore.importBrowserHistory().catch((error) => {
-          process.stderr.write(`Local history refresh failed: ${String(error?.message ?? error)}\n`);
-        });
-      }, historyRefreshMilliseconds);
-      this.historyRefreshTimer.unref();
     }
+    this.historyRefreshTimer = setInterval(() => {
+      this.configStore.load().then((current) => this.refreshLocalMemory(current)).catch((error) => {
+        process.stderr.write(`Local history refresh failed: ${String(error?.message ?? error)}\n`);
+      });
+    }, historyRefreshMilliseconds);
+    this.historyRefreshTimer.unref();
     await this.refreshCatalog({ force: true });
     return this;
+  }
+
+  async refreshLocalMemory(config) {
+    if (!config.localMemory.enabled || !config.localMemory.importBrowserHistory) return 0;
+    const count = await this.memoryStore.importBrowserHistory();
+    await this.memoryStore.prune(config.localMemory);
+    return count;
   }
 
   async discoverOpenAICompatible(provider) {
@@ -113,8 +136,9 @@ export class ProviderManager {
     if (!provider.discoveryURL) return configured;
     try {
       const url = assertAllowedProviderURL(provider.discoveryURL);
+      const apiKey = await this.credentialStore.get(provider);
       const response = await this.fetch(url, {
-        headers: discoveryHeaders(provider),
+        headers: discoveryHeaders(provider, apiKey),
         signal: AbortSignal.timeout(4_000),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -156,6 +180,7 @@ export class ProviderManager {
     if (this.catalogPromise) return this.catalogPromise;
     this.catalogPromise = (async () => {
       const config = await this.configStore.load();
+      const credentialStatus = await this.credentialStore.status(config.providers);
       const hasApple = config.providers.some((provider) =>
         provider.enabled && provider.type === "apple-foundation-models");
       const appleStatus = hasApple ? await this.appleStatus() : null;
@@ -173,6 +198,8 @@ export class ProviderManager {
           type: provider.type,
           enabled: provider.enabled,
           modelCount: models.filter((model) => model.providerID === provider.id).length,
+          credentialConfigured: credentialStatus[provider.id]?.configured ?? false,
+          credentialSource: credentialStatus[provider.id]?.source ?? null,
         })),
         // The file is mode 0600 and consumed by the injected native picker.
         // Mutating HTTP routes still require this unguessable local token.
@@ -228,8 +255,20 @@ export class ProviderManager {
 
   async run(payload, { onReasoning } = {}) {
     const { config, provider, model, key } = await this.selectedProvider();
-    const nativeTools = normalizeAnthropicTools(payload);
+    const observedNativeTools = normalizeAnthropicTools(payload, { includeBlocked: true });
+    const observedForCoverage = new Map(
+      deferredAnthropicTools(payload).map((tool) => [tool.name, tool]),
+    );
+    for (const tool of observedNativeTools) observedForCoverage.set(tool.name, tool);
+    const nativeTools = observedNativeTools.filter((tool) =>
+      !isDiaOwnedProductKnowledgeTool(tool.name));
     const tools = await this.localTools.definitions(nativeTools);
+    await this.toolCoverageStore.record([...observedForCoverage.values()], tools).catch((error) => {
+      process.stderr.write(`Tool coverage write failed: ${String(error?.message ?? error)}\n`);
+    });
+    const apiKey = provider.type === "openai-compatible"
+      ? await this.credentialStore.get(provider)
+      : null;
     let currentPayload = payload;
     let result;
 
@@ -238,9 +277,31 @@ export class ProviderManager {
         payload: currentPayload,
         tools,
         model,
+        apiKey,
         onReasoning,
       });
       result.model = key;
+      if (result.kind === "tool_use") {
+        const { allowed, blocked } = removeRepeatedFailedToolCalls(
+          currentPayload,
+          result.toolCalls,
+        );
+        if (blocked.length > 0 && onReasoning) {
+          await onReasoning(
+            `Stopped ${blocked.map(({ call }) => call.name).join(", ")} after its previous error.`,
+          );
+        }
+        result.toolCalls = allowed;
+        if (allowed.length === 0 && blocked.length > 0) {
+          const last = blocked.at(-1).failure;
+          result = {
+            ...result,
+            kind: "final",
+            toolCalls: [],
+            text: `${last.name} failed and was not retried: ${last.result}`,
+          };
+        }
+      }
       const localCalls = result.kind === "tool_use"
         ? result.toolCalls.filter((call) => this.localTools.isLocal(call.name))
         : [];

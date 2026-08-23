@@ -56,12 +56,36 @@ if [[ -d "$app" ]]; then
   [[ -f "$app/Contents/Frameworks/DiaCustomBootstrap.dylib" ]] && pass "runtime bootstrap is embedded" || fail "runtime bootstrap is missing"
   [[ -x "$app/Contents/Helpers/DiaCustomAppleModel" ]] && pass "Apple Foundation Models helper is embedded" || warn "Apple Foundation Models helper is unavailable"
   if /usr/bin/grep -a -q "http://localhost:8765/ai-service-local-v1" "$app/Contents/MacOS/Dia"; then pass "AI endpoint is local"; else fail "local AI endpoint patch is missing"; fi
+  if /usr/bin/grep -a -q 'GATEWAY_PORT=8765' "$app/Contents/Resources/agent-server-resources/dist/handler"; then
+    pass "native per-context agent sandbox is enabled for the local bridge"
+  else
+    fail "agent sandbox gateway patch is missing"
+  fi
+  if node "$project_dir/src/patches/patch-report-upload.js" --check "$app" 2>/dev/null | /usr/bin/grep -q "already patched"; then
+    pass "native Reports-library path is patched with the local safety gate"
+  else
+    fail "native Report upload patch is missing or incompatible"
+  fi
   if /usr/bin/codesign --verify --deep --strict "$app" >/dev/null 2>&1; then pass "custom app signature verifies"; else fail "custom app signature does not verify"; fi
 else
   fail "Dia Custom is missing at $app"
 fi
 
 [[ -d "$profile" ]] && pass "isolated profile exists" || warn "profile will be created on first launch"
+bridge_state="$profile/Bridge/.state"
+if [[ -d "$bridge_state" ]]; then
+  state_mode="$(/usr/bin/stat -f '%Lp' "$bridge_state" 2>/dev/null)"
+  [[ "$state_mode" == "700" ]] && pass "local bridge state directory is owner-only" || \
+    fail "local bridge state directory permissions are $state_mode, expected 700"
+  sensitive_permissions_ok=true
+  for state_file in config.json credentials.json memory.sqlite3 memory.sqlite3-shm memory.sqlite3-wal models.json sessions.json tool-coverage.json; do
+    state_path="$bridge_state/$state_file"
+    [[ ! -e "$state_path" ]] || [[ "$(/usr/bin/stat -f '%Lp' "$state_path" 2>/dev/null)" == "600" ]] || \
+      sensitive_permissions_ok=false
+  done
+  [[ "$sensitive_permissions_ok" == true ]] && pass "provider, session, catalog, and memory files are owner-only" || \
+    fail "one or more sensitive bridge-state files are not mode 600"
+fi
 if bridge_health="$(/usr/bin/curl --silent --fail --max-time 1 http://127.0.0.1:8765/health 2>/dev/null)"; then
   selected_model="$(print -r -- "$bridge_health" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(JSON.parse(s).selectedModel||"unknown"))')"
   pass "local AI bridge is healthy ($selected_model)"
@@ -75,12 +99,26 @@ else
   warn "local AI bridge is not running"
 fi
 
+if running_command="$(/bin/ps -axo command= | /usr/bin/grep -F "$app/Contents/MacOS/Dia" | /usr/bin/grep -v grep | /usr/bin/head -1)" && [[ -n "$running_command" ]]; then
+  if [[ " $running_command " == *" --no-sandbox "* ]]; then
+    warn "running browser predates sandbox hardening; restart Dia Custom"
+  else
+    pass "Chromium process sandbox is enabled"
+  fi
+  if [[ "$running_command" == *host-resolver-rules=* &&
+        "$running_command" == *diabrowser.engineering* ]]; then
+    pass "Chromium navigation also blocks Dia-owned hostnames"
+  else
+    warn "running browser predates the Chromium Dia-host DNS block; restart Dia Custom"
+  fi
+fi
+
 if [[ -f "$profile/Diagnostics/network-requests.txt" ]] && \
-    /usr/bin/grep -E 'ALLOW[[:space:]]+https?://([^/]*\.)?(diabrowser\.engineering|diabrowser\.com|thebrowser\.company|thebrowser\.com)' \
+    /usr/bin/grep -E 'ALLOW[[:space:]]+https?://([^/]*\.)?(diabrowser\.engineering|diabrowser\.com|thebrowser\.company|thebrowser\.com|browserinternal\.com|browserinternalstaging\.com|api\.segment\.io|cdn-settings\.segment\.com|clientstream\.launchdarkly\.com|mobile\.launchdarkly\.com|browser-intake[^/]*datadoghq[^/]*|o298668\.ingest\.us\.sentry\.io)' \
       "$profile/Diagnostics/network-requests.txt" >/dev/null 2>&1; then
-  fail "network diagnostics show an allowed request to a Dia host"
+  fail "network diagnostics show an allowed request to a Dia-owned service host"
 else
-  pass "no Dia-host request was allowed in the current network log"
+  pass "no Dia-owned service request was allowed in the current network log"
 fi
 
 if (( failures > 0 )); then

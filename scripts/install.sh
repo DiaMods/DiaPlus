@@ -24,12 +24,13 @@ info="$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :SUScheduledCheckInterval 0" "$info"
 /usr/libexec/PlistBuddy -c "Set :SUFeedURL http://127.0.0.1:8765/updates-disabled.xml" "$info"
 
-bootstrap="$($script_dir/build-bootstrap.sh)"
+bootstrap="$($script_dir/build-bootstrap.sh "$app")"
 node "$project_dir/src/patches/patch-keychain-label.js" "$app"
 node "$project_dir/src/patches/patch-endpoint.js" "$app"
 node "$project_dir/src/patches/patch-no-account.js" "$app"
 node "$project_dir/src/patches/embed-bootstrap.js" "$app" "$bootstrap"
 node "$project_dir/src/patches/patch-agent-handler.js" "$app"
+node "$project_dir/src/patches/patch-report-upload.js" "$app"
 
 # Apple Foundation Models are optional at runtime, but when the current SDK is
 # installed we embed a small signed helper in the clone. Keeping this outside

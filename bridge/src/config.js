@@ -75,6 +75,14 @@ export function defaultConfig() {
       enabled: true,
       importBrowserHistory: true,
       captureChats: true,
+      retentionDays: 0,
+      maxEntries: 100_000,
+    },
+    localWeb: {
+      enabled: true,
+    },
+    localConnectors: {
+      enabled: true,
     },
     adminToken: randomBytes(24).toString("base64url"),
   };
@@ -170,6 +178,18 @@ export function validateConfig(input, previous = null) {
       enabled: input.localMemory?.enabled !== false,
       importBrowserHistory: input.localMemory?.importBrowserHistory !== false,
       captureChats: input.localMemory?.captureChats !== false,
+      retentionDays: Number.isInteger(input.localMemory?.retentionDays)
+        ? Math.max(0, Math.min(3_650, input.localMemory.retentionDays))
+        : 0,
+      maxEntries: Number.isInteger(input.localMemory?.maxEntries)
+        ? Math.max(1_000, Math.min(1_000_000, input.localMemory.maxEntries))
+        : 100_000,
+    },
+    localWeb: {
+      enabled: input.localWeb?.enabled !== false,
+    },
+    localConnectors: {
+      enabled: input.localConnectors?.enabled !== false,
     },
     adminToken: typeof previous?.adminToken === "string"
       ? previous.adminToken
@@ -181,7 +201,7 @@ export function validateConfig(input, previous = null) {
 
 async function atomicWriteJSON(path, value) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const temporaryPath = `${path}.tmp-${process.pid}`;
+  const temporaryPath = `${path}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
   await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
     mode: 0o600,
   });
@@ -235,4 +255,3 @@ export class ConfigStore {
     return publicConfig;
   }
 }
-

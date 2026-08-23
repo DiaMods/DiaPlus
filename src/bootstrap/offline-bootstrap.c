@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "prompt-tools-offsets.h"
 
 extern BOOL dia_custom_swift_invoke_window_presenter_action(
     const void *applicationController,
@@ -19,12 +20,6 @@ extern void dia_custom_call_platform_window_prompt_tools_presenter(
     const void *implementation,
     const void *platformWindow,
     const void *promptToolsController);
-
-// These offsets belong to Dia build 85660, the build cloned by this project.
-// Keeping them here (rather than rewriting call sites in the app executable)
-// makes the experiment fail closed on a future build with different code.
-static const uintptr_t DIA_CUSTOM_PROMPT_TOOLS_INIT_OFFSET = 0x047d15c4;
-static const uintptr_t DIA_CUSTOM_PROMPT_TOOLS_PRESENT_OFFSET = 0x050fb604;
 
 static const void *dia_custom_main_image_address(uintptr_t unslidOffset) {
     const struct mach_header *header = _dyld_get_image_header(0);
@@ -105,7 +100,13 @@ static BOOL dia_custom_should_block_request_url(NSURL *url) {
         @"thebrowser.com",
         @"model-server.browserinternalstaging.com",
         @"browser-intake-datadoghq.com",
+        @"browser-intake-ap1-datadoghq.com",
+        @"browser-intake-datadoghq.eu",
+        @"browser-intake-us3-datadoghq.com",
+        @"browser-intake-us5-datadoghq.com",
+        @"o298668.ingest.us.sentry.io",
         @"releases.diabrowser.com",
+        @"incoming.browserinternal.com",
     ];
     if ([blockedHosts containsObject:host]) {
         return YES;
@@ -114,6 +115,7 @@ static BOOL dia_custom_should_block_request_url(NSURL *url) {
            [host hasSuffix:@".diabrowser.com"] ||
            [host hasSuffix:@".thebrowser.company"] ||
            [host hasSuffix:@".thebrowser.com"] ||
+           [host hasSuffix:@".browserinternal.com"] ||
            [host hasSuffix:@".browserinternalstaging.com"];
 }
 
@@ -312,7 +314,8 @@ static id dia_custom_create_prompt_tools_controller(NSWindow *platformWindow) {
 
     NSString *build = [[NSBundle mainBundle]
         objectForInfoDictionaryKey:@"CFBundleVersion"];
-    if (![build isEqualToString:@"85660"] || platformWindow == nil) {
+    if (![build isEqualToString:@DIA_CUSTOM_PROMPT_TOOLS_BUILD] ||
+        platformWindow == nil) {
         dia_custom_log_prompt_tools_stage(@"unsupported-build-or-window", nil);
         return nil;
     }
@@ -389,22 +392,6 @@ static BOOL dia_custom_present_prompt_tools(void) {
     [NSApp activateIgnoringOtherApps:YES];
     dia_custom_log_prompt_tools_stage(@"presented", existingWindowController);
     return existingWindowController != nil;
-}
-
-static NSView *dia_custom_find_view_named(NSView *root, NSString *classFragment) {
-    if (root == nil) {
-        return nil;
-    }
-    if ([NSStringFromClass([root class]) containsString:classFragment]) {
-        return root;
-    }
-    for (NSView *child in [root subviews]) {
-        NSView *match = dia_custom_find_view_named(child, classFragment);
-        if (match != nil) {
-            return match;
-        }
-    }
-    return nil;
 }
 
 static void dia_custom_collect_views_named(NSView *root,
@@ -501,7 +488,6 @@ static NSString *dia_custom_model_title(NSDictionary *model) {
 }
 
 static NSMenu *dia_custom_model_menu;
-static NSMutableArray<NSPopUpButton *> *dia_custom_model_popups;
 
 static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
     NSDictionary *catalog = dia_custom_model_catalog();
@@ -535,6 +521,42 @@ static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
         if ([key isEqualToString:selected]) {
             [popup selectItem:item];
         }
+    }
+}
+
+static void dia_custom_refresh_model_popups_in_view(NSView *view) {
+    if (view == nil) {
+        return;
+    }
+    if ([view isKindOfClass:[NSPopUpButton class]] &&
+        [[[view identifier] description] isEqualToString:@"DiaCustomModelPicker"]) {
+        dia_custom_populate_model_popup((NSPopUpButton *)view);
+    }
+    for (NSView *child in [view subviews]) {
+        dia_custom_refresh_model_popups_in_view(child);
+    }
+}
+
+static NSPopUpButton *dia_custom_find_model_popup_in_view(NSView *view) {
+    if (view == nil) {
+        return nil;
+    }
+    if ([view isKindOfClass:[NSPopUpButton class]] &&
+        [[[view identifier] description] isEqualToString:@"DiaCustomModelPicker"]) {
+        return (NSPopUpButton *)view;
+    }
+    for (NSView *child in [view subviews]) {
+        NSPopUpButton *match = dia_custom_find_model_popup_in_view(child);
+        if (match != nil) {
+            return match;
+        }
+    }
+    return nil;
+}
+
+static void dia_custom_refresh_model_popups(void) {
+    for (NSWindow *window in [NSApp windows]) {
+        dia_custom_refresh_model_popups_in_view([window contentView]);
     }
 }
 
@@ -582,9 +604,7 @@ static void dia_custom_rebuild_model_menu(id target, SEL action) {
         [loading setEnabled:NO];
         [dia_custom_model_menu addItem:loading];
     }
-    for (NSPopUpButton *popup in [dia_custom_model_popups copy]) {
-        dia_custom_populate_model_popup(popup);
-    }
+    dia_custom_refresh_model_popups();
 }
 
 static NSStackView *dia_custom_toolbar_standard_stack(id toolbar) {
@@ -609,9 +629,6 @@ static NSStackView *dia_custom_toolbar_standard_stack(id toolbar) {
 static void dia_custom_install_custom_model_picker(id target, SEL action) {
     if (target == nil) {
         return;
-    }
-    if (dia_custom_model_popups == nil) {
-        dia_custom_model_popups = [NSMutableArray array];
     }
     for (NSWindow *window in [NSApp windows]) {
         NSMutableArray *toolbars = [NSMutableArray array];
@@ -646,7 +663,6 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
             [popup.widthAnchor constraintLessThanOrEqualToConstant:230].active = YES;
             dia_custom_populate_model_popup(popup);
             [stack addArrangedSubview:popup];
-            [dia_custom_model_popups addObject:popup];
             dia_custom_log_status(@"model-picker-installed");
         }
     }
@@ -813,7 +829,8 @@ static void dia_custom_schedule_model_picker_attempts(id target,
     } else {
         dia_custom_install_custom_model_picker(self,
             @selector(selectCustomModel:));
-        NSPopUpButton *popup = [dia_custom_model_popups firstObject];
+        NSPopUpButton *popup = dia_custom_find_model_popup_in_view(
+            [dia_custom_platform_window() contentView]);
         if (popup != nil) {
             [popup performClick:nil];
         } else if (![NSApp sendAction:selector to:nil from:sender]) {

@@ -3,15 +3,10 @@ import { contentAsText, systemAsText } from "../chat-shape.js";
 import { joinProviderURL } from "../network-policy.js";
 import { parseServerSentEvents } from "./sse.js";
 
-function providerHeaders(provider) {
+function providerHeaders(provider, apiKey) {
   const headers = { "content-type": "application/json" };
-  if (provider.apiKeyEnv) {
-    const apiKey = process.env[provider.apiKeyEnv];
-    if (!apiKey) {
-      throw new Error(`${provider.label} needs the ${provider.apiKeyEnv} environment variable`);
-    }
-    headers.authorization = `Bearer ${apiKey}`;
-  }
+  if (provider.apiKeyEnv && !apiKey) throw new Error(`${provider.label} needs an API credential`);
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`;
   return headers;
 }
 
@@ -125,7 +120,7 @@ async function checkedFetch(url, options) {
   return response;
 }
 
-async function runChatCompletions({ provider, payload, tools, model, onReasoning }) {
+async function runChatCompletions({ provider, payload, tools, model, apiKey, onReasoning }) {
   const body = {
     model,
     messages: anthropicMessagesToChat(payload),
@@ -136,7 +131,7 @@ async function runChatCompletions({ provider, payload, tools, model, onReasoning
   };
   const response = await checkedFetch(joinProviderURL(provider.baseURL, "/chat/completions"), {
     method: "POST",
-    headers: providerHeaders(provider),
+    headers: providerHeaders(provider, apiKey),
     body: JSON.stringify(body),
   });
 
@@ -181,7 +176,7 @@ async function runChatCompletions({ provider, payload, tools, model, onReasoning
     : { kind: "final", toolCalls: [], text, usage, model };
 }
 
-async function runResponses({ provider, payload, tools, model, onReasoning }) {
+async function runResponses({ provider, payload, tools, model, apiKey, onReasoning }) {
   const body = {
     model,
     instructions: systemAsText(payload?.system) || undefined,
@@ -193,7 +188,7 @@ async function runResponses({ provider, payload, tools, model, onReasoning }) {
   };
   const response = await checkedFetch(joinProviderURL(provider.baseURL, "/responses"), {
     method: "POST",
-    headers: providerHeaders(provider),
+    headers: providerHeaders(provider, apiKey),
     body: JSON.stringify(body),
   });
 
@@ -261,4 +256,3 @@ export async function runOpenAICompatibleProvider(options) {
     ? runResponses(options)
     : runChatCompletions(options);
 }
-

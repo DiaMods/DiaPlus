@@ -39,6 +39,13 @@ export async function appleProviderStatus() {
   }
 }
 
+export async function appleSentenceEmbeddings(texts) {
+  if (!Array.isArray(texts) || texts.some((text) => typeof text !== "string")) {
+    throw new Error("Apple sentence embeddings require an array of strings");
+  }
+  return runHelper({ action: "embed", texts });
+}
+
 export async function runAppleProvider({ provider, payload, tools, model, onReasoning }) {
   if (onReasoning) {
     await onReasoning(provider.mode === "on-device"

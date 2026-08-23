@@ -30,6 +30,7 @@ runtime_log="$diagnostics_dir/runtime-classes.txt"
 network_log="$diagnostics_dir/network-requests.txt"
 apple_model_helper="$app/Contents/Helpers/DiaCustomAppleModel"
 model_catalog="$bridge_state_dir/models.json"
+tool_coverage="$bridge_state_dir/tool-coverage.json"
 provider_config="$bridge_state_dir/config.json"
 memory_database="$bridge_state_dir/memory.sqlite3"
 
@@ -42,6 +43,7 @@ if [[ ! -f "$embedded_bootstrap" ]]; then
 fi
 
 mkdir -p "$diagnostics_dir" "$bridge_state_dir"
+/bin/chmod 700 "$diagnostics_dir" "$bridge_state_dir"
 
 # launchd cannot reliably read projects in macOS-protected Documents folders.
 # Deploy the runnable bridge into this app's private profile; retain local state.
@@ -60,9 +62,12 @@ if [[ ! -d "$bridge_dir/node_modules/@openai/codex-sdk" || "$lock_checksum" != "
   fi
   (cd "$bridge_dir" && "$npm_bin" ci --omit=dev)
   print -r -- "$lock_checksum" > "$bridge_lock_marker"
+  /bin/chmod 600 "$bridge_lock_marker"
 fi
+[[ ! -f "$bridge_lock_marker" ]] || /bin/chmod 600 "$bridge_lock_marker"
 
 : > "$network_log"
+/bin/chmod 600 "$network_log"
 
 # Complete the local anonymous setup and explicitly select New Chat flags.
 /usr/bin/defaults write local.rttm.dia onboardingForceCompleteFlowEnabled -bool false
@@ -101,12 +106,14 @@ fi
 /bin/launchctl remove "$bridge_label" >/dev/null 2>&1 || true
 sleep 0.1
 : > "$bridge_log"
+/bin/chmod 600 "$bridge_log"
 bridge_environment=(
   "DIA_CUSTOM_CAPTURE_DIR=$diagnostics_dir/Captures"
   "DIA_CUSTOM_DEBUG_PORT=$debug_port"
   "DIA_CUSTOM_PROFILE=$profile"
   "DIA_CUSTOM_CONFIG_PATH=$provider_config"
   "DIA_CUSTOM_MODEL_CATALOG_PATH=$model_catalog"
+  "DIA_CUSTOM_TOOL_COVERAGE_PATH=$tool_coverage"
   "DIA_CUSTOM_MEMORY_PATH=$memory_database"
 )
 [[ ! -x "$apple_model_helper" ]] || bridge_environment+=("DIA_CUSTOM_APPLE_MODEL_HELPER=$apple_model_helper")
@@ -131,6 +138,7 @@ if [[ "$bridge_ready" != true ]]; then
   exit 1
 fi
 /usr/sbin/lsof -nP -t -iTCP:8765 -sTCP:LISTEN > "$bridge_pid_file"
+/bin/chmod 600 "$bridge_pid_file"
 
 if [[ "$bridge_only" == true ]]; then
   print "Dia Custom bridge is ready at http://127.0.0.1:8765"
@@ -145,10 +153,14 @@ launch_args=(
   --disable-background-networking
   --disable-component-update
   --disable-sync
+  '--host-resolver-rules=MAP diabrowser.engineering ~NOTFOUND, MAP *.diabrowser.engineering ~NOTFOUND, MAP diabrowser.com ~NOTFOUND, MAP *.diabrowser.com ~NOTFOUND, MAP thebrowser.company ~NOTFOUND, MAP *.thebrowser.company ~NOTFOUND, MAP thebrowser.com ~NOTFOUND, MAP *.thebrowser.com ~NOTFOUND, MAP browserinternal.com ~NOTFOUND, MAP *.browserinternal.com ~NOTFOUND, MAP browserinternalstaging.com ~NOTFOUND, MAP *.browserinternalstaging.com ~NOTFOUND, MAP api.segment.io ~NOTFOUND, MAP cdn-settings.segment.com ~NOTFOUND, MAP clientstream.launchdarkly.com ~NOTFOUND, MAP mobile.launchdarkly.com ~NOTFOUND, MAP browser-intake-datadoghq.com ~NOTFOUND, MAP browser-intake-ap1-datadoghq.com ~NOTFOUND, MAP browser-intake-datadoghq.eu ~NOTFOUND, MAP browser-intake-us3-datadoghq.com ~NOTFOUND, MAP browser-intake-us5-datadoghq.com ~NOTFOUND, MAP o298668.ingest.us.sentry.io ~NOTFOUND, EXCLUDE localhost'
   --remote-debugging-port="$debug_port"
   --use-mock-keychain
-  --no-sandbox
 )
+if [[ "${DIA_CUSTOM_DISABLE_BROWSER_SANDBOX:-0}" == "1" ]]; then
+  print -u2 "Warning: Chromium sandbox disabled for this diagnostic launch."
+  launch_args+=(--no-sandbox)
+fi
 launch_env=(
   --env "DIA_CUSTOM_RUNTIME_LOG=$runtime_log"
   --env "DIA_CUSTOM_NETWORK_LOG=$network_log"

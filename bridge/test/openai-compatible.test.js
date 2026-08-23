@@ -57,7 +57,6 @@ test("OpenAI-compatible chat completions stream reasoning and native tool calls"
 test("OpenAI Responses API stream maps output and reasoning summaries", async () => {
   const originalFetch = globalThis.fetch;
   const reasoning = [];
-  process.env.DIA_CUSTOM_TEST_OPENAI_KEY = "test-key";
   globalThis.fetch = async (url, options) => {
     assert.equal(String(url), "https://api.openai.com/v1/responses");
     assert.equal(options.headers.authorization, "Bearer test-key");
@@ -70,6 +69,7 @@ test("OpenAI Responses API stream maps output and reasoning summaries", async ()
   try {
     const result = await runOpenAICompatibleProvider({
       provider: { api: "responses", baseURL: "https://api.openai.com/v1", label: "OpenAI", apiKeyEnv: "DIA_CUSTOM_TEST_OPENAI_KEY" },
+      apiKey: "test-key",
       payload,
       tools: [],
       model: "gpt-test",
@@ -81,7 +81,6 @@ test("OpenAI Responses API stream maps output and reasoning summaries", async ()
     assert.deepEqual(reasoning, ["Checking context."]);
   } finally {
     globalThis.fetch = originalFetch;
-    delete process.env.DIA_CUSTOM_TEST_OPENAI_KEY;
   }
 });
 

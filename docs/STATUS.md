@@ -1,55 +1,50 @@
 # Status
 
-Last audited against Dia 1.46.0, build 85823. Build 85660 remains in the guarded rollback table.
+Last audited against Dia 1.46.0, build 85823, on 2026-08-23. Build 85660 remains in the guarded patch table.
 
-## Verified headlessly on this Mac
+## Verified on this Mac
 
-- The installed clone is separately signed, uses **local.rttm.dia**, and keeps an isolated profile and Keychain label.
-- The deployed bridge starts independently of the UI and defaults to **codex:gpt-5.6-luna**.
-- Luna streamed final text and a typed native tool call through the complete deployed bridge.
-- Apple Foundation Models compiled with Xcode 27. On-device and Private Cloud Compute both report available. On-device text and structured tool generation passed through the deployed bridge.
-- OpenAI Responses and OpenAI-compatible Chat Completions adapters pass fixture tests for text, reasoning summaries, usage, and function calls.
-- Ollama discovery, provider selection, blocked-Dia URL validation, catalog persistence, and local administration-token checks pass.
-- Local memory imports profile history, indexes native page results and chats, executes a memory tool round locally, and returns the result to the selected model. Its directory, database, WAL, config, and catalog are owner-only.
-- The native AppKit bootstrap and Apple helper compile; the complete app signature verifies.
-- A locked-session runtime smoke test installed the Developer menu and inserted the AppKit model picker into Dia's live chat toolbar stack without crashing.
-- The handler preserves Dia's native permission notification and the bridge emits a tool_safety_check_result whose ID exactly matches upload_artifact.
-- The runtime network log recorded Dia telemetry and feature-flag attempts as BLOCKED; no Dia-owned destination was allowed.
-- Automatic updates are disabled only in the clone. A guarded rebuild from the official app preserves bridge state.
-- Nine automated Node tests plus patch-layout, shell-syntax, JavaScript-syntax, Swift, Objective-C, and signing checks pass.
+- The separately signed clone uses **local.rttm.dia**, an isolated profile, an isolated Keychain label, and does not alter official Dia.
+- Anonymous local setup survives relaunch without a Dia account. The Account pane's stub identity is a local dependency object, not a Dia sync account.
+- Native New Chat reaches **codex:gpt-5.6-luna** through the deployed bridge. A complete Luna text stream, reasoning stream, and typed native tool call passed end to end.
+- Codex Luna/Terra/Sol, Apple on-device/PCC, OpenAI Responses, Ollama, and custom OpenAI-compatible provider adapters are implemented. Apple availability and generation passed locally; OpenAI/Ollama protocol behavior passes fixtures.
+- The model catalog, Developer menu, and best-effort native toolbar picker are installed. The current build's hidden Prompt Tools constructor/presenter are discovered by guarded instruction shape instead of stale fixed offsets. Provider keys are stored separately with mode 0600 and are never returned by the settings API or exposed to the Codex subprocess.
+- Native tool schemas are passed through dynamically. ToolSearch-loaded tools work without a fixed allowlist; the persistent inventory distinguishes native, local override, on-demand, and blocked routes.
+- Local replacements cover public web search/fetch, imported people lookup, and memory. Dia product-knowledge tools are suppressed so they cannot restore a Dia-service dependency.
+- Local memory imports isolated-profile history and native page results, captures chat turns, performs hybrid FTS/on-device semantic search, and supports retention, export, and deletion.
+- Local connector imports, search/query tools, people lookup, and settings UI work with owner-controlled JSON exports.
+- Dia's real artifact/report skills and sandboxed file tools reach the selected provider. Report calls are bound to the active context and gated for path traversal, symlinks, size, file count, and outbound URLs.
+- The native build-85823 uploader's duplicate official-profile registry check is patched. The native tool-safety event carries the exact upload tool ID, and the patched branch targets Dia's unchanged Reports-library continuation.
+- Chromium and Dia's per-agent filesystem sandboxes remain enabled. The Codex decision subprocess is additionally confined to an empty read-only workspace with its own action/network facilities disabled.
+- Normal browsing and chosen providers remain available. Runtime logs show Segment/LaunchDarkly/Dia telemetry attempts blocked or redirected locally, with no allowed Dia-owned host in the current run.
+- Automatic updates are disabled only for the clone. Rebuild-from-official-Dia is transactional and preserves the bridge state.
+- The native app and helper signatures verify. The automated suite covers Node behavior, native patch layouts, Mach-O field parsing, shell/JavaScript syntax, Swift/Objective-C compilation, and signing.
 
-Run **./dia-custom test** to repeat the headless suite and **./dia-custom doctor** to inspect the installed runtime.
+Run **./dia-custom test** for the full suite and **./dia-custom doctor** for the installed runtime.
 
-## Previously verified in an unlocked Dia Custom UI
+## Previously verified in an unlocked UI
 
-- New Chat reaches Luna without a Dia AI/account request.
-- Dia exposed 11 native tools in the observed anonymous session: calculate, close_tabs, fetch_dia_product_knowledge, fetch_web_content, list_recent_people, lookup_person, open_tabs, read_tabs, search_dia_product_knowledge, search_web, and upload_artifact.
-- Native open_tabs and read_tabs tool round trips worked.
-- Dia's activity/thinking surface displayed provider reasoning summaries.
-- The new-chat feature flags and anonymous onboarding path worked without repeated setup after the account fixes.
+- New Chat renders Luna responses without a Dia AI/account request.
+- Native `open_tabs` and `read_tabs` tool round trips worked.
+- Dia's activity surface rendered local-provider thinking summaries.
+- New Chat flags and anonymous onboarding stopped the repeated-setup crash cycle.
 
-Every tool schema Dia includes in a turn is passed to the selected provider. The bridge does not maintain a fixed allowlist of those schemas.
+## One unlocked UI verification remains
 
-## Needs the next unlocked UI check
+The Mac was locked for the latest native Report and picker work, so two visible outcomes are deliberately not claimed yet:
 
-1. Visually confirm the injected toolbar selector and View → Developer → AI Model fallback are usable.
-2. Select Apple and Luna from the native menu and confirm the title/checkmark refresh.
-3. Ask for a Report and confirm the new local safety handoff lets native upload_artifact ingest it and register it in Dia's Reports library.
-4. Exercise close_tabs, tab mentions, web search/fetch, attachments, and multi-tool turns in the real UI.
+1. Click the injected toolbar picker and View → Developer → AI Model entries, switch between Luna and Apple, and open Prompt Tools & Model Routing once.
+2. Ask for a new Report and confirm the patched native `upload_artifact` result appears in Dia's Reports library.
 
-The Mac was locked during this implementation, so these are explicitly not claimed as visual/native-ingestion verifications.
+The Report's official prompt, native sandbox creation, strict local authorization, safety event, and uploader branch are all verified independently. This final step tests the AppKit/Reports database presentation after native ingestion.
 
-## Remaining engineering
+## Remaining product work
 
-- Account/service connectors: add explicit OAuth connections and local indexing for Gmail, Calendar, Slack, Notion, Drive, and similar services. Native account tools remain capability-gated; no real-Dia credentials are reused.
-- Memory quality: add semantic embeddings, retention controls, delete/export UI, and an opt-in importer if Dia exposes a supported export format.
-- Reports: after the unlocked ingestion check, add a regression fixture for the exact native tool-safety event shape.
-- Provider UX: add forms above the existing JSON editor for custom endpoints and model aliases.
-- Streaming latency: Codex and Apple structured decisions complete before final text/tool blocks stream; OpenAI/Ollama stream text and reasoning incrementally inside their adapters, but the bridge currently buffers the provider result before emitting Dia output blocks.
-- Upgrade audit: add a layout for each future Dia build only after guarded instruction and host checks pass.
+- **Live account connectors:** implement explicit user-authorized OAuth adapters and incremental sync for Gmail, Calendar, Slack, Notion, Drive, and similar services. Today's connector layer indexes exports only; it does not reuse the real Dia app's account or credentials.
+- **Authenticated browser fetch:** the public fetch override has no access to Chromium cookies. Signed-in page content should continue through native tab-reading context until a cookie-safe local browser-session adapter exists.
+- **Future Dia builds:** endpoint, handler, Report, Prompt Tools, and UI integration points are signature/runtime discovered. The anonymous account gate still contains a small build-specific ARM64 table, so unknown builds intentionally fail closed pending audit.
+- **Incremental final-text streaming:** reasoning is displayed while providers run, but the bridge buffers a provider's final decision before emitting the final Dia text/tool block. This is required for Codex/Apple structured decisions today and can be optimized independently for OpenAI-compatible streams.
 
-## Account and Advanced Chat boundary
+## Account boundary
 
-The Account tab intentionally reflects the anonymous local dependency. It is not a sync account. Advanced Chat's account/app connection button cannot become a real connector merely by enabling a feature flag.
-
-Future sync should be opt-in and independent of model routing: OAuth/service content enters a connector layer and local memory, while inference continues through the user's selected provider. This avoids restoring a hidden dependency on Dia's AI servers.
+The Account and Advanced Chat panes cannot become real sync merely by changing feature flags. Model identity and service identity remain separate: future OAuth content belongs in the local connector/memory layer, while inference continues through the selected user-controlled provider. No official-Dia account token is copied, decrypted, or synthesized.
