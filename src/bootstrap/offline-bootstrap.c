@@ -488,12 +488,45 @@ static NSString *dia_custom_model_title(NSDictionary *model) {
 }
 
 static NSString *dia_custom_model_picker_title(NSDictionary *model) {
+    NSString *providerID = [model[@"providerID"] isKindOfClass:[NSString class]]
+        ? model[@"providerID"] : nil;
+    if ([providerID isEqualToString:@"apple-on-device"]) {
+        return @"Apple On-Device";
+    }
+    if ([providerID isEqualToString:@"apple-private-cloud"]) {
+        return @"Apple Cloud";
+    }
     NSString *label = [model[@"label"] isKindOfClass:[NSString class]]
         ? model[@"label"] : model[@"key"];
     return label ?: @"Model";
 }
 
 static NSMenu *dia_custom_model_menu;
+
+static void dia_custom_set_model_popup_display_title(NSPopUpButton *popup,
+                                                       NSString *title) {
+    if (popup == nil) {
+        return;
+    }
+    if ([popup respondsToSelector:@selector(setUsesItemFromMenu:)]) {
+        [popup setUsesItemFromMenu:NO];
+    }
+    NSPopUpButtonCell *cell = [popup cell];
+    if ([cell isKindOfClass:[NSPopUpButtonCell class]]) {
+        // With usesItemFromMenu disabled, setTitle: attempts to select a menu
+        // item with that title. Our compact label is intentionally different
+        // from the full menu title, so give the cell the static display item
+        // that AppKit documents for this mode instead.
+        NSMenuItem *displayItem = [[NSMenuItem alloc]
+            initWithTitle:title ?: @"Model" action:nil keyEquivalent:@""];
+        [cell setMenuItem:displayItem];
+        [cell setNeedsSizing:YES];
+        [cell setNeedsDisplay:YES];
+    } else {
+        [popup setTitle:title ?: @"Model"];
+    }
+    [popup setNeedsDisplay:YES];
+}
 
 static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
     NSDictionary *catalog = dia_custom_model_catalog();
@@ -503,6 +536,7 @@ static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
     [popup removeAllItems];
     if ([models count] == 0) {
         [popup addItemWithTitle:@"Models loading…"];
+        dia_custom_set_model_popup_display_title(popup, @"Models loading…");
         [popup setEnabled:NO];
         return;
     }
@@ -533,7 +567,8 @@ static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
     // Preserve the full provider/model names in the menu while keeping the
     // control itself narrow enough for Dia's command-bar toolbar.
     if (selectedModel != nil) {
-        [popup setTitle:dia_custom_model_picker_title(selectedModel)];
+        dia_custom_set_model_popup_display_title(
+            popup, dia_custom_model_picker_title(selectedModel));
     }
 }
 
@@ -669,6 +704,7 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
                 // scheduled attempt so "Models loading…" can become enabled.
                 [installedPopup setTarget:target];
                 [installedPopup setAction:action];
+                [installedPopup setAutoenablesItems:NO];
                 dia_custom_populate_model_popup(installedPopup);
                 continue;
             }
@@ -677,6 +713,7 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
                    pullsDown:NO];
             [popup setIdentifier:@"DiaCustomModelPicker"];
             [popup setControlSize:NSControlSizeSmall];
+            [popup setAutoenablesItems:NO];
             if ([popup respondsToSelector:@selector(setUsesItemFromMenu:)]) {
                 [popup setUsesItemFromMenu:NO];
             }
