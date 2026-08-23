@@ -479,6 +479,37 @@ static NSArray<NSDictionary *> *dia_custom_catalog_models(NSDictionary *catalog)
     return [models isKindOfClass:[NSArray class]] ? models : @[];
 }
 
+static BOOL dia_custom_model_popup_needs_refresh(NSPopUpButton *popup) {
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSArray<NSDictionary *> *models = dia_custom_catalog_models(catalog);
+    NSString *selected = [catalog[@"selectedModel"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectedModel"] : nil;
+    NSMutableArray<NSDictionary *> *validModels = [NSMutableArray array];
+    for (NSDictionary *model in models) {
+        if ([model[@"key"] isKindOfClass:[NSString class]]) {
+            [validModels addObject:model];
+        }
+    }
+    if ([validModels count] == 0) {
+        return [popup numberOfItems] != 1 || [popup isEnabled];
+    }
+    if ([popup numberOfItems] != [validModels count]) {
+        return YES;
+    }
+    for (NSUInteger index = 0; index < [validModels count]; ++index) {
+        NSDictionary *model = validModels[index];
+        NSMenuItem *item = [popup itemAtIndex:index];
+        BOOL available = ![model[@"available"] respondsToSelector:@selector(boolValue)] ||
+            [model[@"available"] boolValue];
+        if (![[item representedObject] isEqual:model[@"key"]] ||
+            [item isEnabled] != available) {
+            return YES;
+        }
+    }
+    return selected != nil &&
+        ![[[popup selectedItem] representedObject] isEqual:selected];
+}
+
 static NSString *dia_custom_model_title(NSDictionary *model) {
     NSString *provider = [model[@"providerLabel"] isKindOfClass:[NSString class]]
         ? model[@"providerLabel"] : @"Model";
@@ -674,6 +705,98 @@ static NSStackView *dia_custom_toolbar_standard_stack(id toolbar) {
     return nil;
 }
 
+static BOOL dia_custom_view_text_contains(NSView *view, NSString *needle) {
+    if (view == nil || needle == nil) {
+        return NO;
+    }
+    NSMutableArray<NSString *> *values = [NSMutableArray arrayWithObject:
+        NSStringFromClass([view class]) ?: @""];
+    if ([view identifier] != nil) {
+        [values addObject:[[view identifier] description]];
+    }
+    if ([view toolTip] != nil) {
+        [values addObject:[view toolTip]];
+    }
+    @try {
+        NSString *identifier = [view accessibilityIdentifier];
+        NSString *label = [view accessibilityLabel];
+        if (identifier != nil) [values addObject:identifier];
+        if (label != nil) [values addObject:label];
+    } @catch (__unused NSException *exception) {
+    }
+    NSString *summary = [[values componentsJoinedByString:@" "] lowercaseString];
+    return [summary containsString:[needle lowercaseString]];
+}
+
+static BOOL dia_custom_view_tree_is_microphone(NSView *view) {
+    if (dia_custom_view_text_contains(view, @"microphone") ||
+        dia_custom_view_text_contains(view, @"voice") ||
+        dia_custom_view_text_contains(view, @"dictation")) {
+        return YES;
+    }
+    for (NSView *child in [view subviews]) {
+        if (dia_custom_view_tree_is_microphone(child)) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+static BOOL dia_custom_toolbar_is_on_new_tab(id toolbar) {
+    for (NSView *view = toolbar; view != nil; view = [view superview]) {
+        if (dia_custom_view_text_contains(view, @"newtab") ||
+            dia_custom_view_text_contains(view, @"new tab")) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+static NSUInteger dia_custom_model_picker_index(id toolbar,
+                                                 NSStackView *stack,
+                                                 NSPopUpButton *popup) {
+    if (!dia_custom_toolbar_is_on_new_tab(toolbar)) {
+        return 0;
+    }
+    NSMutableArray<NSView *> *nativeViews = [NSMutableArray array];
+    for (NSView *view in [stack arrangedSubviews]) {
+        if (view != popup) {
+            [nativeViews addObject:view];
+        }
+    }
+    for (NSUInteger index = 0; index < [nativeViews count]; ++index) {
+        if (dia_custom_view_tree_is_microphone(nativeViews[index])) {
+            return index;
+        }
+    }
+    // Dia's new-tab toolbar ends with microphone and send. Keep the requested
+    // placement stable if a build exposes neither control's accessibility
+    // label by inserting before that final pair.
+    return [nativeViews count] >= 2 ? [nativeViews count] - 2 : 0;
+}
+
+static void dia_custom_position_model_picker(id toolbar,
+                                             NSStackView *stack,
+                                             NSPopUpButton *popup) {
+    NSArray<NSView *> *arranged = [stack arrangedSubviews];
+    NSUInteger currentIndex = [arranged indexOfObjectIdenticalTo:popup];
+    NSUInteger targetIndex = dia_custom_model_picker_index(toolbar, stack, popup);
+    if (currentIndex == targetIndex) {
+        return;
+    }
+    if (currentIndex != NSNotFound) {
+        [popup retain];
+        [stack removeArrangedSubview:popup];
+        [popup removeFromSuperview];
+        [stack insertArrangedSubview:popup atIndex:
+            MIN(targetIndex, [[stack arrangedSubviews] count])];
+        [popup release];
+    } else {
+        [stack insertArrangedSubview:popup atIndex:
+            MIN(targetIndex, [[stack arrangedSubviews] count])];
+    }
+}
+
 static void dia_custom_install_custom_model_picker(id target, SEL action) {
     if (target == nil) {
         return;
@@ -705,7 +828,12 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
                 [installedPopup setTarget:target];
                 [installedPopup setAction:action];
                 [installedPopup setAutoenablesItems:NO];
-                dia_custom_populate_model_popup(installedPopup);
+                if (dia_custom_model_popup_needs_refresh(installedPopup)) {
+                    dia_custom_populate_model_popup(installedPopup);
+                }
+                dia_custom_position_model_picker(toolbar, stack, installedPopup);
+                [installedPopup setHidden:NO];
+                [installedPopup setAlphaValue:1.0];
                 continue;
             }
             NSPopUpButton *popup = [[NSPopUpButton alloc]
@@ -729,7 +857,7 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
             // Reserve the final geometry without showing an intermediate
             // offscreen frame while New Chat animates its command bar.
             [popup setAlphaValue:0.0];
-            [stack insertArrangedSubview:popup atIndex:0];
+            dia_custom_position_model_picker(toolbar, stack, popup);
             for (NSView *ancestor = stack; ancestor != nil;
                  ancestor = [ancestor superview]) {
                 [ancestor setNeedsUpdateConstraints:YES];
@@ -743,6 +871,20 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
             dia_custom_log_status(@"model-picker-installed");
         }
     }
+}
+
+static BOOL dia_custom_model_picker_refresh_pending = NO;
+
+static void dia_custom_request_model_picker_refresh(id target, SEL action) {
+    if (target == nil || dia_custom_model_picker_refresh_pending) {
+        return;
+    }
+    dia_custom_model_picker_refresh_pending = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 150 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        dia_custom_model_picker_refresh_pending = NO;
+        dia_custom_install_custom_model_picker(target, action);
+    });
 }
 
 static void dia_custom_schedule_model_picker_attempts(id target,
@@ -764,6 +906,7 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 - (void)selectCustomModel:(id)sender;
 - (void)openModelSettings:(id)sender;
 - (void)windowBecameKey:(NSNotification *)notification;
+- (void)windowDidUpdate:(NSNotification *)notification;
 - (void)openBrowserDeveloperTools:(id)sender;
 - (void)openAgentServerDashboard:(id)sender;
 - (void)openLogLevels:(id)sender;
@@ -857,6 +1000,11 @@ static void dia_custom_schedule_model_picker_attempts(id target,
         dia_custom_install_custom_model_picker(self,
             @selector(selectCustomModel:));
     });
+}
+
+- (void)windowDidUpdate:(NSNotification *)notification {
+    dia_custom_request_model_picker_refresh(self,
+        @selector(selectCustomModel:));
 }
 
 - (void)openPromptTools:(id)sender {
@@ -1016,6 +1164,11 @@ static void dia_custom_install_developer_menu(void) {
             addObserver:dia_custom_developer_menu_controller
                selector:@selector(windowBecameKey:)
                    name:NSWindowDidBecomeKeyNotification
+                 object:nil];
+        [[NSNotificationCenter defaultCenter]
+            addObserver:dia_custom_developer_menu_controller
+               selector:@selector(windowDidUpdate:)
+                   name:NSWindowDidUpdateNotification
                  object:nil];
         dia_custom_log_status(@"developer-menu-installed");
 

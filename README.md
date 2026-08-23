@@ -18,7 +18,7 @@ The default is **gpt-5.6-luna** through the existing Codex login. The native cha
 ./dia-custom launch
 ~~~
 
-Choose a model from View → Developer → AI Model. Dia Custom also inserts a compact picker into the chat toolbar when the current Dia layout exposes its standard toolbar stack. Provider, credential, memory, connector, and tool settings are available at:
+Choose a model from View → Developer → AI Model. Dia Custom also inserts a compact picker into the chat toolbar: it remains before the attachment button in side chat and sits immediately before the microphone on New Tab. Provider, credential, memory, connector, and tool settings are available at:
 
 ~~~sh
 ./dia-custom settings
@@ -60,6 +60,8 @@ Local memory is an owner-only SQLite database containing:
 - records explicitly imported from account exports.
 
 Search combines FTS with Apple's on-device sentence embeddings when available. The settings page includes counts, JSON export, retention pruning, and deletion controls.
+
+Dia's native **Settings → Memory** pane controls Dia's account-backed cloud feature—the pane itself says activity is summarized on Dia's servers. It intentionally remains disabled in this server-free build and is not the status of Dia Custom's local index. Use **./dia-custom settings** to inspect and control local memory.
 
 Connector JSON may be an array or `{ "records": [...] }`. Records can contain `id`, `title`/`name`/`subject`, `content`/`text`/`body`, `url`, `updatedAt`, `metadata`, and `kind: "person"`. Imports are local snapshots, not live account sync. OAuth adapters for services such as Gmail, Calendar, Slack, Notion, and Drive remain future work.
 
