@@ -5,7 +5,11 @@ import {
   buildExactToolGuide,
   deferredAnthropicTools,
   normalizeAnthropicTools,
+  reportWorkflowRequiresTool,
+  reportWorkflowState,
   removeRepeatedFailedToolCalls,
+  toolDecisionSchemaForPayload,
+  withReportWorkflowPolicy,
 } from "../src/chat-shape.js";
 
 const reportTools = [
@@ -100,4 +104,124 @@ test("blocks an identical failed tool call until a new user request", () => {
     content: [{ type: "text", text: "<user-message>Retry it now</user-message>" }],
   });
   assert.equal(removeRepeatedFailedToolCalls(failedPayload, repeated).blocked.length, 0);
+});
+
+test("tracks the native Report workflow through skills, Write, upload failure, and retry", () => {
+  const payload = {
+    messages: [{
+      role: "user",
+      content: [{ type: "text", text: "<user-message>Create a report about Saturn</user-message>" }],
+    }],
+  };
+  assert.deepEqual(reportWorkflowState(payload).missingSkills, [
+    "artifact-generation",
+    "report-kit",
+  ]);
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [
+        { type: "tool_use", id: "skill-a", name: "Skill", input: { skill: "artifact-generation" } },
+        { type: "tool_use", id: "skill-r", name: "Skill", input: { skill: "report-kit" } },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: "skill-a", content: "Launching skill" },
+        { type: "tool_result", tool_use_id: "skill-r", content: "Launching skill" },
+      ],
+    },
+  );
+  assert.equal(reportWorkflowState(payload).stage, "create_report");
+  assert.deepEqual(toolDecisionSchemaForPayload(payload).properties.kind.enum, ["tool_use"]);
+  assert.match(
+    JSON.stringify(withReportWorkflowPolicy(payload, reportWorkflowState(payload))),
+    /status update.*invalid/i,
+  );
+
+  const reportPath = "/tmp/context/work/artifacts/saturn/index.html";
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{ type: "tool_use", id: "write", name: "Write", input: { file_path: reportPath } }],
+    },
+    {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "write", content: "File created successfully" }],
+    },
+  );
+  assert.deepEqual(reportWorkflowState(payload).uploadInput, {
+    site_root: "/tmp/context/work/artifacts/saturn",
+    relative_path: "index.html",
+  });
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "upload-1",
+        name: "mcp__dia-tools__upload_artifact",
+        input: reportWorkflowState(payload).uploadInput,
+      }],
+    },
+    {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        tool_use_id: "upload-1",
+        content: '{"result":"Failed to save file: notAvailable"}',
+      }],
+    },
+  );
+  assert.equal(reportWorkflowState(payload).stage, "failed");
+  payload.messages.push({
+    role: "user",
+    content: [{ type: "text", text: "<user-message>Try again</user-message>" }],
+  });
+  assert.equal(reportWorkflowState(payload).stage, "upload_report");
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "upload-2",
+        name: "mcp__dia-tools__upload_artifact",
+        input: reportWorkflowState(payload).uploadInput,
+      }],
+    },
+    {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "upload-2", content: '{"result":"report-123"}' }],
+    },
+  );
+  assert.equal(reportWorkflowState(payload).stage, "complete");
+});
+
+test("does not hijack a report question or an unrelated later request", () => {
+  assert.equal(reportWorkflowState({
+    messages: [{ role: "user", content: "How do I make a report?" }],
+  }).active, false);
+  assert.equal(reportWorkflowState({
+    messages: [
+      { role: "user", content: "Create a report about Saturn" },
+      { role: "assistant", content: "I will do that." },
+      { role: "user", content: "What time is it?" },
+    ],
+  }).active, false);
+});
+
+test("does not enforce a chat Report inside background metadata requests", () => {
+  const payload = {
+    messages: [{ role: "user", content: "Create a report about Saturn" }],
+  };
+  const metadataTools = [{ name: "mcp__dia-tools__memory_search" }];
+  assert.equal(reportWorkflowRequiresTool(payload, metadataTools), false);
+  assert.deepEqual(
+    toolDecisionSchemaForPayload(payload, metadataTools).properties.kind.enum,
+    ["final", "tool_use"],
+  );
 });

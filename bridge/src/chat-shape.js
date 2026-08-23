@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { basename, dirname } from "node:path";
 
 const diaOwnedProductKnowledgeTools = new Set([
   "fetch_dia_product_knowledge",
@@ -153,6 +154,203 @@ function toolResultFailed(content) {
   return /(?:\berror\b|\bfailed\b|\bfailure\b|\bdenied\b|\bnot allowed\b|\bnot within an allowed\b|\bunavailable\b|\btimed out\b|\binvalid\b)/i.test(text);
 }
 
+function humanMessageText(message) {
+  if (message?.role !== "user") return "";
+  const text = contentAsText(message.content);
+  const tagged = [...text.matchAll(/<user-message>([\s\S]*?)<\/user-message>/gi)]
+    .map((match) => match[1].trim())
+    .filter(Boolean);
+  if (tagged.length > 0) return tagged.join("\n");
+  if (Array.isArray(message.content) &&
+      message.content.some((block) => block?.type === "tool_result")) {
+    return "";
+  }
+  if (
+    /<dia-custom-report-policy>/i.test(text) ||
+    /<agent-context>/i.test(text) ||
+    /<system-reminder>/i.test(text) ||
+    /^\s*Base directory for this skill:/i.test(text) ||
+    /^\s*\[Your previous response had no visible output\./i.test(text)
+  ) {
+    return "";
+  }
+  return text.trim();
+}
+
+function requestsReport(text) {
+  if (!text) return false;
+  if (/\b(?:how (?:do|can|would|to)|explain|why)\b[\s\S]{0,40}\b(?:make|create|generate|write)\b[\s\S]{0,30}\b(?:report|brief|memo)\b/i.test(text)) {
+    return false;
+  }
+  return (
+    /\b(?:create|make|write|build|generate|prepare|produce|draft|compile|design|need|want|give me|put together)\b[\s\S]{0,100}\b(?:report|brief|memo)\b/i.test(text) ||
+    /\b(?:report|brief|memo)\b[\s\S]{0,70}\b(?:about|on|covering|summarizing|for)\b/i.test(text)
+  );
+}
+
+function continuesReportRequest(text) {
+  return /^(?:please\s+)?(?:go ahead|continue|proceed|retry|try again|do it|yes|yeah|yep|finish(?: it)?|complete(?: it)?|keep going)\b/i.test(text.trim());
+}
+
+function isUploadTool(name) {
+  return name === "upload_artifact" || name?.endsWith("__upload_artifact");
+}
+
+function isSuccessfulReportIndexPath(value) {
+  return typeof value === "string" &&
+    value.includes("/work/artifacts/") &&
+    basename(value).toLowerCase() === "index.html";
+}
+
+/**
+ * Locate an unfinished user-requested Report in the native Anthropic
+ * transcript. Dia represents tool results as user messages too, so only
+ * <user-message> blocks (or simple unwrapped test/provider messages) count as
+ * human requests.
+ */
+export function reportWorkflowState(payload) {
+  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+  const humanRequests = messages.flatMap((message, index) => {
+    const text = humanMessageText(message);
+    return text ? [{ index, text }] : [];
+  });
+  let reportRequest = null;
+  for (const request of humanRequests) {
+    if (requestsReport(request.text)) reportRequest = request;
+  }
+  if (!reportRequest) return { active: false, stage: "inactive" };
+
+  const laterRequests = humanRequests.filter(({ index }) => index > reportRequest.index);
+  if (laterRequests.some(({ text }) => !continuesReportRequest(text))) {
+    return { active: false, stage: "inactive" };
+  }
+
+  const callsByID = new Map();
+  const resultsByID = new Map();
+  for (let index = reportRequest.index + 1; index < messages.length; index += 1) {
+    const message = messages[index];
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (message.role === "assistant" && block?.type === "tool_use" && block.id) {
+        callsByID.set(block.id, { ...block, messageIndex: index });
+      } else if (message.role === "user" && block?.type === "tool_result") {
+        resultsByID.set(block.tool_use_id, {
+          content: block.content,
+          failed: toolResultFailed(block.content),
+          messageIndex: index,
+        });
+      }
+    }
+  }
+
+  const skills = new Set();
+  const successfulWrites = [];
+  const uploads = [];
+  for (const call of callsByID.values()) {
+    const result = resultsByID.get(call.id);
+    if (call.name === "Skill" && typeof call.input?.skill === "string" && result && !result.failed) {
+      skills.add(call.input.skill);
+    }
+    if (call.name === "Write" && result && !result.failed &&
+        isSuccessfulReportIndexPath(call.input?.file_path)) {
+      successfulWrites.push({
+        filePath: call.input.file_path,
+        messageIndex: result.messageIndex,
+      });
+    }
+    if (isUploadTool(call.name) && result) {
+      uploads.push({
+        name: call.name,
+        input: call.input ?? {},
+        failed: result.failed,
+        messageIndex: result.messageIndex,
+      });
+    }
+  }
+
+  const base = {
+    active: true,
+    requestIndex: reportRequest.index,
+    requestText: reportRequest.text,
+    skills: {
+      artifactGeneration: skills.has("artifact-generation"),
+      reportKit: skills.has("report-kit"),
+    },
+  };
+  if (uploads.some((upload) => !upload.failed)) {
+    return { ...base, active: false, completed: true, stage: "complete" };
+  }
+
+  const lastFailedUpload = uploads.filter((upload) => upload.failed).at(-1);
+  const retriedByUser = lastFailedUpload &&
+    humanRequests.some(({ index }) => index > lastFailedUpload.messageIndex);
+  if (lastFailedUpload && !retriedByUser) {
+    return { ...base, stage: "failed", failedUpload: lastFailedUpload };
+  }
+
+  const missingSkills = [];
+  if (!base.skills.artifactGeneration) missingSkills.push("artifact-generation");
+  if (!base.skills.reportKit) missingSkills.push("report-kit");
+  if (missingSkills.length > 0) {
+    return { ...base, stage: "load_skills", missingSkills };
+  }
+
+  const reportFile = successfulWrites.at(-1);
+  if (!reportFile) return { ...base, stage: "create_report" };
+  return {
+    ...base,
+    stage: "upload_report",
+    reportFile,
+    uploadInput: {
+      site_root: dirname(reportFile.filePath),
+      relative_path: basename(reportFile.filePath),
+    },
+    ...(lastFailedUpload ? { failedUpload: lastFailedUpload } : {}),
+  };
+}
+
+export function reportWorkflowRequiresTool(payload, tools = null) {
+  const state = reportWorkflowState(payload);
+  if (!state.active || ["failed", "complete", "inactive"].includes(state.stage)) {
+    return false;
+  }
+  // Background supertab/title/icon requests can contain the chat transcript,
+  // including its original "create a report" sentence, but they do not expose
+  // Dia's native report tools. Never turn those metadata requests into a report
+  // workflow or they can loop through unrelated local tools.
+  if (!Array.isArray(tools)) return true;
+  const names = new Set(tools
+    .filter((tool) => tool?.source === "native")
+    .map((tool) => tool.name));
+  if (state.stage === "load_skills") return names.has("Skill");
+  if (state.stage === "create_report") return names.has("Write");
+  if (state.stage === "upload_report") {
+    return [...names].some((name) => isUploadTool(name));
+  }
+  return false;
+}
+
+export function withReportWorkflowPolicy(payload, state, attempt = 0) {
+  if (!state?.active) return payload;
+  const directions = state.stage === "create_report"
+    ? "Return the next exact tool call now. Research with an available tool if needed; otherwise call Write to create a complete index.html under the current context's work/artifacts directory."
+    : state.stage === "upload_report"
+      ? `Call the available upload_artifact tool now with ${JSON.stringify(state.uploadInput)}.`
+      : `Call Skill for each missing report skill now: ${(state.missingSkills ?? []).join(", ")}.`;
+  return {
+    ...payload,
+    messages: [
+      ...(Array.isArray(payload?.messages) ? payload.messages : []),
+      {
+        role: "user",
+        content: [{
+          type: "text",
+          text: `<dia-custom-report-policy>\nA Report is still in progress (stage: ${state.stage}; enforcement attempt: ${attempt + 1}). A status update, promise, apology, or final answer is invalid until the native upload succeeds or returns an error. ${directions}\n</dia-custom-report-policy>`,
+        }],
+      },
+    ],
+  };
+}
+
 export function failedToolCallsSinceLastUserRequest(payload) {
   const messages = Array.isArray(payload?.messages) ? payload.messages : [];
   let requestStart = -1;
@@ -244,6 +442,21 @@ export const toolDecisionSchema = {
   required: ["kind", "text", "tool_calls"],
   additionalProperties: false,
 };
+
+export function toolDecisionSchemaForPayload(payload, tools = null) {
+  if (!reportWorkflowRequiresTool(payload, tools)) return toolDecisionSchema;
+  return {
+    ...toolDecisionSchema,
+    properties: {
+      ...toolDecisionSchema.properties,
+      kind: { type: "string", enum: ["tool_use"] },
+      tool_calls: {
+        ...toolDecisionSchema.properties.tool_calls,
+        minItems: 1,
+      },
+    },
+  };
+}
 
 export function parseStructuredDecision(value, tools, model, usage = null) {
   const availableNames = new Set(tools.map((tool) => tool.name));

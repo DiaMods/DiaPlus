@@ -653,14 +653,23 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
             if (stack == nil) {
                 continue;
             }
-            BOOL alreadyInstalled = NO;
+            NSPopUpButton *installedPopup = nil;
             for (NSView *view in [stack arrangedSubviews]) {
                 if ([[view identifier] isEqualToString:@"DiaCustomModelPicker"]) {
-                    alreadyInstalled = YES;
+                    if ([view isKindOfClass:[NSPopUpButton class]]) {
+                        installedPopup = (NSPopUpButton *)view;
+                    }
                     break;
                 }
             }
-            if (alreadyInstalled) {
+            if (installedPopup != nil) {
+                // The picker is often installed before the bridge finishes its
+                // first model-catalog refresh. Keep the existing view (and its
+                // stable command-bar geometry), but repopulate it on each
+                // scheduled attempt so "Models loading…" can become enabled.
+                [installedPopup setTarget:target];
+                [installedPopup setAction:action];
+                dia_custom_populate_model_popup(installedPopup);
                 continue;
             }
             NSPopUpButton *popup = [[NSPopUpButton alloc]

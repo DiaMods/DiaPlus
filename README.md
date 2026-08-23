@@ -67,9 +67,11 @@ Connector JSON may be an array or `{ "records": [...] }`. Records can contain `i
 
 Report requests retain Dia's original **artifact-generation** and **report-kit** prompts and its native `Skill`, `Read`, `Write`, `Edit`, `Bash`, and `upload_artifact` tools. Files are therefore created inside Dia's real per-context agent sandbox, not in the bridge or an unrelated temporary directory.
 
+The bridge treats Report creation as a staged native workflow: it loads the two required skills, prevents a model from ending on a “gathering information” status message, requires the sandboxed `Write`, and then submits the resulting `index.html` to Dia's uploader. This policy is enabled only when the native Report tools are present, keeping artifact title/icon/summary requests independent.
+
 Anonymous Dia profiles normally skip construction of the native Artifacts controller, and the uploader also performs a duplicate official-profile registry check that cannot recognize a separately bundled profile. The clone structurally selects Dia's own controller-setup continuation and bypasses only that duplicate registry rejection. Before allowing an upload, the bridge still requires the exact active context's `work/artifacts/<folder>` shape, a regular `index.html`, no symlinks, bounded files and bytes, and safe public outbound URLs. It then emits Dia's expected tool-safety event and hands the same call to the native Reports-library path.
 
-The binary layouts, live Artifacts controller, context safety gate, and complete stream handoff are tested. The final visible registration in Dia's Reports library still needs one unlocked-UI run on build 85823; it is not represented as a separate local-file export.
+The binary layouts, live Artifacts controller, context safety gate, complete stream handoff, and visible native Report presentation are tested on build 85823. A generated Report is registered through Dia's artifact database and opens at Dia's sandboxed `chrome-untrusted://…dia-artifacts/` URL; it is not represented as a separate local-file export.
 
 ## Network and sandbox boundary
 

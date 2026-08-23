@@ -1,6 +1,10 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
-import { buildDecisionPrompt, parseStructuredDecision } from "../chat-shape.js";
+import {
+  buildDecisionPrompt,
+  parseStructuredDecision,
+  reportWorkflowRequiresTool,
+} from "../chat-shape.js";
 import { appleModelHelperPath } from "../paths.js";
 
 async function runHelper(request) {
@@ -97,6 +101,7 @@ export async function runAppleProvider({ provider, payload, tools, model, onReas
     mode: provider.mode,
     prompt: structured ? buildDecisionPrompt(payload, tools) : buildDecisionPrompt(payload, []),
     structured,
+    requireTool: structured && reportWorkflowRequiresTool(payload, tools),
     toolsJSON: structured ? JSON.stringify(tools) : null,
     maximumResponseTokens: payload?.max_tokens ?? null,
   });

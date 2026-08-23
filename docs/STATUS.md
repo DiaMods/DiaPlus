@@ -8,12 +8,12 @@ Last audited against Dia 1.46.0, build 85823, on 2026-08-23. Build 85660 remains
 - Anonymous local setup survives relaunch without a Dia account. The Account pane's stub identity is a local dependency object, not a Dia sync account.
 - Native New Chat reaches **codex:gpt-5.6-luna** through the deployed bridge. A complete Luna text stream, reasoning stream, and typed native tool call passed end to end.
 - Codex Luna/Terra/Sol, Apple Foundation Models, OpenAI Responses, Ollama, and custom OpenAI-compatible provider adapters are implemented. Apple on-device structured generation with Dia tool schemas passes on this Mac. Private Cloud Compute is detected but marked unavailable with a specific explanation because an ad-hoc personal build cannot obtain Apple's managed `com.apple.developer.private-cloud-compute` entitlement; it no longer fails as a generic helper exit. OpenAI/Ollama protocol behavior passes fixtures.
-- The model catalog, Developer menu, and best-effort native toolbar picker are installed. The toolbar control now uses a compact fixed geometry, is inserted before the action buttons, and remains transparent until the command bar completes layout so it does not flash offscreen. The current build's hidden Prompt Tools constructor/presenter are discovered by guarded instruction shape instead of stale fixed offsets. Provider keys are stored separately with mode 0600 and are never returned by the settings API or exposed to the Codex subprocess.
+- The model catalog, Developer menu, and native toolbar picker are installed. The toolbar control refreshes in place after the bridge catalog becomes available, is clickable, uses compact fixed geometry, and stays transparent until the command bar completes layout so it does not flash offscreen. The current build's hidden Prompt Tools constructor/presenter are discovered by guarded instruction shape instead of stale fixed offsets. Provider keys are stored separately with mode 0600 and are never returned by the settings API or exposed to the Codex subprocess.
 - Native tool schemas are passed through dynamically. ToolSearch-loaded tools work without a fixed allowlist; the persistent inventory distinguishes native, local override, on-demand, and blocked routes.
 - Local replacements cover public web search/fetch, imported people lookup, and memory. Dia product-knowledge tools are suppressed so they cannot restore a Dia-service dependency.
 - Local memory imports isolated-profile history and native page results, captures chat turns, performs hybrid FTS/on-device semantic search, and supports retention, export, and deletion.
 - Local connector imports, search/query tools, people lookup, and settings UI work with owner-controlled JSON exports.
-- Dia's real artifact/report skills and sandboxed file tools reach the selected provider. Report calls are bound to the active context and gated for path traversal, symlinks, size, file count, and outbound URLs.
+- Dia's real artifact/report skills and sandboxed file tools reach the selected provider. The bridge deterministically loads `artifact-generation` and `report-kit`, rejects premature status/failure finals, and hands a successful native `Write` result to `upload_artifact`. Enforcement is scoped to native chat requests with Report tools, so background title/icon/summary jobs cannot inherit and loop on it. Report calls are bound to the active context and gated for path traversal, symlinks, size, file count, and outbound URLs.
 - The anonymous-profile gate that skipped Dia's Artifacts controller and the uploader's duplicate official-profile registry check are both structurally patched. Live reflection confirms `ArtifactsDataController` plus its persistence controller initialize through Dia's original setup path. The native tool-safety event carries the exact upload tool ID, and the patched branch targets Dia's unchanged Reports-library continuation.
 - Chromium and Dia's per-agent filesystem sandboxes remain enabled. The Codex decision subprocess is additionally confined to an empty read-only workspace with its own action/network facilities disabled.
 - Normal browsing and chosen providers remain available. Runtime logs show Segment/LaunchDarkly/Dia telemetry attempts blocked or redirected locally, with no allowed Dia-owned host in the current run.
@@ -28,15 +28,8 @@ Run **./dia-custom test** for the full suite and **./dia-custom doctor** for the
 - Native `open_tabs` and `read_tabs` tool round trips worked.
 - Dia's activity surface rendered local-provider thinking summaries.
 - New Chat flags and anonymous onboarding stopped the repeated-setup crash cycle.
-
-## One unlocked UI verification remains
-
-The Mac was locked for the latest native Report and picker work, so two visible outcomes are deliberately not claimed yet:
-
-1. Click the injected toolbar picker and View → Developer → AI Model entries, switch between Luna and Apple, and open Prompt Tools & Model Routing once.
-2. Ask for a new Report and confirm the patched native `upload_artifact` result appears in Dia's Reports library.
-
-The Report's official prompt, native sandbox creation, strict local authorization, initialized native persistence controller, safety event, and uploader branch are all verified independently. This final step tests the visible AppKit/Reports presentation after native ingestion.
+- The injected toolbar picker refreshed from “Models loading…” to Luna and opened a clickable five-model menu.
+- A fresh Luna request loaded both native Report skills, wrote `work/artifacts/saturn_report/index.html`, called native `upload_artifact`, updated `agent_artifacts.db-wal`, and opened the finished Report through Dia's `chrome-untrusted://…dia-artifacts/site/index.html` presentation.
 
 ## Remaining product work
 

@@ -7,6 +7,7 @@ private struct BridgeRequest: Decodable {
     let mode: String?
     let prompt: String?
     let structured: Bool?
+    let requireTool: Bool?
     let toolsJSON: String?
     let maximumResponseTokens: Int?
     let texts: [String]?
@@ -16,7 +17,7 @@ private struct ToolSpec: Decodable {
     let name: String
 }
 
-private func decisionSchema(toolsJSON: String) throws -> GenerationSchema {
+private func decisionSchema(toolsJSON: String, requireTool: Bool) throws -> GenerationSchema {
     let data = Data(toolsJSON.utf8)
     let tools = try JSONDecoder().decode([ToolSpec].self, from: data)
     guard !tools.isEmpty else {
@@ -56,7 +57,7 @@ private func decisionSchema(toolsJSON: String) throws -> GenerationSchema {
                 description: "Use final for an answer or tool_use when a tool must run",
                 schema: DynamicGenerationSchema(
                     name: "DecisionKind",
-                    anyOf: ["final", "tool_use"]
+                    anyOf: requireTool ? ["tool_use"] : ["final", "tool_use"]
                 )
             ),
             .init(
@@ -67,7 +68,10 @@ private func decisionSchema(toolsJSON: String) throws -> GenerationSchema {
             .init(
                 name: "tool_calls",
                 description: "Tool calls when kind is tool_use; otherwise an empty array",
-                schema: DynamicGenerationSchema(arrayOf: toolCall, minimumElements: 0)
+                schema: DynamicGenerationSchema(
+                    arrayOf: toolCall,
+                    minimumElements: requireTool ? 1 : 0
+                )
             ),
         ]
     )
@@ -154,7 +158,10 @@ private func generate<Model: LanguageModel>(
         }
         let response = try await session.respond(
             to: prompt,
-            schema: decisionSchema(toolsJSON: toolsJSON),
+            schema: decisionSchema(
+                toolsJSON: toolsJSON,
+                requireTool: request.requireTool == true
+            ),
             options: options
         )
         var value = try JSONSerialization.jsonObject(
@@ -207,6 +214,7 @@ private struct DiaCustomAppleModel {
                     mode: request.mode,
                     prompt: "Reply with OK.",
                     structured: false,
+                    requireTool: false,
                     toolsJSON: nil,
                     maximumResponseTokens: 8,
                     texts: nil

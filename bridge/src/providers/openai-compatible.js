@@ -1,5 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { contentAsText, systemAsText } from "../chat-shape.js";
+import {
+  contentAsText,
+  reportWorkflowRequiresTool,
+  systemAsText,
+} from "../chat-shape.js";
 import { joinProviderURL } from "../network-policy.js";
 import { parseServerSentEvents } from "./sse.js";
 
@@ -125,7 +129,9 @@ async function runChatCompletions({ provider, payload, tools, model, apiKey, onR
     model,
     messages: anthropicMessagesToChat(payload),
     tools: tools.length > 0 ? toolDefinitions(tools, "chat") : undefined,
-    tool_choice: tools.length > 0 ? "auto" : undefined,
+    tool_choice: tools.length > 0
+      ? reportWorkflowRequiresTool(payload, tools) ? "required" : "auto"
+      : undefined,
     stream: true,
     stream_options: { include_usage: true },
   };
@@ -182,7 +188,9 @@ async function runResponses({ provider, payload, tools, model, apiKey, onReasoni
     instructions: systemAsText(payload?.system) || undefined,
     input: anthropicMessagesToResponses(payload),
     tools: tools.length > 0 ? toolDefinitions(tools, "responses") : undefined,
-    tool_choice: tools.length > 0 ? "auto" : undefined,
+    tool_choice: tools.length > 0
+      ? reportWorkflowRequiresTool(payload, tools) ? "required" : "auto"
+      : undefined,
     stream: true,
     store: false,
   };

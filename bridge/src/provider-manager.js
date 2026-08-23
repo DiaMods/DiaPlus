@@ -6,7 +6,10 @@ import {
   appendToolResults,
   deferredAnthropicTools,
   isDiaOwnedProductKnowledgeTool,
+  reportWorkflowRequiresTool,
+  reportWorkflowState,
   removeRepeatedFailedToolCalls,
+  withReportWorkflowPolicy,
 } from "./chat-shape.js";
 import { ConfigStore } from "./config.js";
 import { CredentialStore } from "./credentials.js";
@@ -25,7 +28,43 @@ import { runOpenAICompatibleProvider } from "./providers/openai-compatible.js";
 
 const catalogLifetimeMilliseconds = 60_000;
 const maximumLocalToolRounds = 6;
+const maximumReportDecisionRetries = 2;
 const historyRefreshMilliseconds = 5 * 60_000;
+
+function nativeReportDecision(state, tools, model) {
+  if (!state?.active) return null;
+  if (state.stage === "load_skills") {
+    const skillTool = tools.find((tool) => tool.name === "Skill" && tool.source === "native");
+    if (!skillTool) return null;
+    return {
+      kind: "tool_use",
+      text: "",
+      toolCalls: state.missingSkills.map((skill) => ({
+        id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+        name: skillTool.name,
+        input: { skill },
+      })),
+      model,
+    };
+  }
+  if (state.stage === "upload_report") {
+    const uploadTool = tools.find((tool) =>
+      tool.source === "native" &&
+      (tool.name === "upload_artifact" || tool.name.endsWith("__upload_artifact")));
+    if (!uploadTool) return null;
+    return {
+      kind: "tool_use",
+      text: "",
+      toolCalls: [{
+        id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+        name: uploadTool.name,
+        input: state.uploadInput,
+      }],
+      model,
+    };
+  }
+  return null;
+}
 
 function splitModelKey(key) {
   const separator = typeof key === "string" ? key.indexOf(":") : -1;
@@ -271,10 +310,26 @@ export class ProviderManager {
       : null;
     let currentPayload = payload;
     let result;
+    let localToolRounds = 0;
+    let reportDecisionRetries = 0;
 
-    for (let round = 0; round <= maximumLocalToolRounds; round += 1) {
+    while (true) {
+      const reportState = reportWorkflowState(currentPayload);
+      const nativeReportResult = nativeReportDecision(reportState, tools, key);
+      if (nativeReportResult) {
+        result = nativeReportResult;
+        if (onReasoning) {
+          await onReasoning(reportState.stage === "load_skills"
+            ? "Loading Dia's native report design tools..."
+            : "Adding the finished report to Dia's Reports library...");
+        }
+        break;
+      }
+      const providerPayload = reportWorkflowRequiresTool(currentPayload, tools)
+        ? withReportWorkflowPolicy(currentPayload, reportState, reportDecisionRetries)
+        : currentPayload;
       result = await this.runProvider(provider, {
-        payload: currentPayload,
+        payload: providerPayload,
         tools,
         model,
         apiKey,
@@ -305,10 +360,25 @@ export class ProviderManager {
       const localCalls = result.kind === "tool_use"
         ? result.toolCalls.filter((call) => this.localTools.isLocal(call.name))
         : [];
-      if (localCalls.length === 0) break;
-      if (round === maximumLocalToolRounds) {
+      if (localCalls.length === 0) {
+        if (
+          result.kind === "final" &&
+          reportWorkflowRequiresTool(currentPayload, tools) &&
+          reportDecisionRetries < maximumReportDecisionRetries
+        ) {
+          reportDecisionRetries += 1;
+          if (onReasoning) {
+            await onReasoning("Continuing the native report workflow before answering...");
+          }
+          continue;
+        }
+        break;
+      }
+      if (localToolRounds === maximumLocalToolRounds) {
         throw new Error("local tool round limit reached");
       }
+      localToolRounds += 1;
+      reportDecisionRetries = 0;
       if (onReasoning) await onReasoning(`Running ${localCalls.map((call) => call.name).join(", ")} locally...`);
       const localResults = await Promise.all(localCalls.map(async (call) => {
         try {

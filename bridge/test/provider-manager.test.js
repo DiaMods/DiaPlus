@@ -79,3 +79,121 @@ test("provider catalog discovers Ollama and routes local memory before native to
   assert.equal(coverage.blocked, 1);
   memory.database.close();
 });
+
+test("Report requests deterministically load skills, reject premature finals, and upload", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-report-manager-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const current = await config.load();
+  await config.update({
+    ...current,
+    localMemory: { enabled: false, importBrowserHistory: false, captureChats: false },
+    localWeb: { enabled: false },
+    localConnectors: { enabled: false },
+  });
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+
+  const payload = {
+    messages: [{
+      role: "user",
+      content: [{ type: "text", text: "<user-message>Create a report about Saturn</user-message>" }],
+    }],
+    tools: [
+      { name: "Skill", input_schema: { type: "object", properties: { skill: { type: "string" } } } },
+      { name: "Write", input_schema: { type: "object", properties: { file_path: { type: "string" } } } },
+      {
+        name: "mcp__dia-tools__upload_artifact",
+        input_schema: { type: "object", properties: { site_root: { type: "string" } } },
+      },
+    ],
+  };
+
+  let providerCalls = 0;
+  manager.runProvider = async (_provider, { payload: providerPayload }) => {
+    providerCalls += 1;
+    assert.match(JSON.stringify(providerPayload), /dia-custom-report-policy/);
+    if (providerCalls === 1) {
+      return { kind: "final", text: "I'm gathering information.", toolCalls: [], model: "gpt-5.6-luna" };
+    }
+    return {
+      kind: "tool_use",
+      text: "",
+      toolCalls: [{
+        id: "write-report",
+        name: "Write",
+        input: { file_path: "/tmp/context/work/artifacts/saturn/index.html", content: "<html></html>" },
+      }],
+      model: "gpt-5.6-luna",
+    };
+  };
+
+  const skillTurn = await manager.run(payload);
+  assert.equal(providerCalls, 0);
+  assert.deepEqual(skillTurn.result.toolCalls.map((call) => call.input.skill), [
+    "artifact-generation",
+    "report-kit",
+  ]);
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: skillTurn.result.toolCalls.map((call) => ({
+        type: "tool_use",
+        id: call.id,
+        name: call.name,
+        input: call.input,
+      })),
+    },
+    {
+      role: "user",
+      content: skillTurn.result.toolCalls.map((call) => ({
+        type: "tool_result",
+        tool_use_id: call.id,
+        content: "Launching skill",
+      })),
+    },
+  );
+
+  const writeTurn = await manager.run(payload);
+  assert.equal(providerCalls, 2);
+  assert.equal(writeTurn.result.toolCalls[0].name, "Write");
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: writeTurn.result.toolCalls.map((call) => ({
+        type: "tool_use",
+        id: call.id,
+        name: call.name,
+        input: call.input,
+      })),
+    },
+    {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        tool_use_id: writeTurn.result.toolCalls[0].id,
+        content: "File created successfully",
+      }],
+    },
+  );
+
+  const uploadTurn = await manager.run(payload);
+  assert.equal(providerCalls, 2);
+  assert.equal(uploadTurn.result.toolCalls[0].name, "mcp__dia-tools__upload_artifact");
+  assert.deepEqual(uploadTurn.result.toolCalls[0].input, {
+    site_root: "/tmp/context/work/artifacts/saturn",
+    relative_path: "index.html",
+  });
+  memory.database.close();
+});

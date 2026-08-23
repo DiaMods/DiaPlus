@@ -3,7 +3,8 @@ import { mkdir } from "node:fs/promises";
 import {
   buildDecisionPrompt,
   parseStructuredDecision,
-  toolDecisionSchema,
+  reportWorkflowRequiresTool,
+  toolDecisionSchemaForPayload,
 } from "../chat-shape.js";
 import { decisionWorkspacePath } from "../paths.js";
 
@@ -16,11 +17,15 @@ const codex = new Codex({
   ].flatMap((name) => process.env[name] === undefined ? [] : [[name, process.env[name]]])),
 });
 
-function reasoningEffort(payload, model) {
+function reasoningEffort(payload, model, tools) {
   const requested = payload?.reasoning_effort;
   if (["minimal", "low", "medium", "high", "xhigh", "max", "ultra"].includes(requested)) {
     return requested;
   }
+  // A Report requires choosing and sequencing several native tools. Luna is
+  // still the selected model, but medium effort avoids turning that workflow
+  // into a premature status sentence.
+  if (reportWorkflowRequiresTool(payload, tools)) return "medium";
   if (model.includes("luna")) return "low";
   if (model.includes("sol")) return "high";
   return "medium";
@@ -33,7 +38,7 @@ export async function runCodexProvider({ payload, tools, model, onReasoning }) {
     sandboxMode: "read-only",
     workingDirectory: decisionWorkspacePath,
     skipGitRepoCheck: true,
-    modelReasoningEffort: reasoningEffort(payload, model),
+    modelReasoningEffort: reasoningEffort(payload, model, tools),
     webSearchMode: "disabled",
     networkAccessEnabled: false,
     approvalPolicy: "never",
@@ -42,7 +47,7 @@ export async function runCodexProvider({ payload, tools, model, onReasoning }) {
   const { events } = await thread.runStreamed(
     buildDecisionPrompt(payload, tools),
     {
-      ...(tools.length > 0 ? { outputSchema: toolDecisionSchema } : {}),
+      ...(tools.length > 0 ? { outputSchema: toolDecisionSchemaForPayload(payload, tools) } : {}),
       signal: abort.signal,
     },
   );
