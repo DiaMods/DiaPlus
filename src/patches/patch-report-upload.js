@@ -128,13 +128,15 @@ if (matches.length !== 1) {
 const match = matches[0];
 if (match.patched) {
   process.stdout.write(checkOnly
-    ? "Dia native Report validator layout is compatible and already patched.\n"
-    : "Dia Custom native Report upload patch is already applied.\n");
+    ? `Dia native Report validator at file offset 0x${match.offset.toString(16)} is compatible and already patched.\n`
+    : `Dia Custom native Report upload patch at file offset 0x${match.offset.toString(16)} is already applied.\n`);
   process.exit(0);
 }
 
 if (checkOnly) {
-  process.stdout.write("Dia native Report validator layout is compatible.\n");
+  process.stdout.write(
+    `Dia native Report validator at file offset 0x${match.offset.toString(16)} is compatible.\n`,
+  );
   process.exit(0);
 }
 

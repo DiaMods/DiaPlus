@@ -5,7 +5,8 @@ Dia Custom keeps Dia's native browser and New Chat UI while routing AI through p
 The default is **gpt-5.6-luna** through the existing Codex login. The native chat can also use:
 
 - Codex Luna, Terra, or Sol;
-- Apple Foundation Models on-device or through Private Cloud Compute;
+- Apple Foundation Models on-device;
+- Apple Private Cloud Compute when the helper has Apple's managed PCC entitlement;
 - Ollama models discovered at **127.0.0.1:11434**;
 - OpenAI's Responses API;
 - custom OpenAI-compatible Responses or Chat Completions endpoints.
@@ -66,9 +67,9 @@ Connector JSON may be an array or `{ "records": [...] }`. Records can contain `i
 
 Report requests retain Dia's original **artifact-generation** and **report-kit** prompts and its native `Skill`, `Read`, `Write`, `Edit`, `Bash`, and `upload_artifact` tools. Files are therefore created inside Dia's real per-context agent sandbox, not in the bridge or an unrelated temporary directory.
 
-The clone patches the native uploader's duplicate official-profile registry check, which cannot recognize a separately bundled profile. Before allowing that call, the bridge requires the exact active context's `work/artifacts/<folder>` shape, a regular `index.html`, no symlinks, bounded files and bytes, and safe public outbound URLs. It then emits Dia's expected tool-safety event and hands the same call to the native Reports-library path.
+Anonymous Dia profiles normally skip construction of the native Artifacts controller, and the uploader also performs a duplicate official-profile registry check that cannot recognize a separately bundled profile. The clone structurally selects Dia's own controller-setup continuation and bypasses only that duplicate registry rejection. Before allowing an upload, the bridge still requires the exact active context's `work/artifacts/<folder>` shape, a regular `index.html`, no symlinks, bounded files and bytes, and safe public outbound URLs. It then emits Dia's expected tool-safety event and hands the same call to the native Reports-library path.
 
-The binary layout, context safety gate, and complete stream handoff are tested. The final visible registration in Dia's Reports library still needs one unlocked-UI run on build 85823; it is not represented as a separate local-file export.
+The binary layouts, live Artifacts controller, context safety gate, and complete stream handoff are tested. The final visible registration in Dia's Reports library still needs one unlocked-UI run on build 85823; it is not represented as a separate local-file export.
 
 ## Network and sandbox boundary
 

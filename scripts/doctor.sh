@@ -66,6 +66,11 @@ if [[ -d "$app" ]]; then
   else
     fail "native Report upload patch is missing or incompatible"
   fi
+  if node "$project_dir/src/patches/patch-report-controller.js" --check "$app" 2>/dev/null | /usr/bin/grep -q "already patched"; then
+    pass "native Reports controller is enabled for the anonymous profile"
+  else
+    fail "native Reports controller patch is missing or incompatible"
+  fi
   if /usr/bin/codesign --verify --deep --strict "$app" >/dev/null 2>&1; then pass "custom app signature verifies"; else fail "custom app signature does not verify"; fi
 else
   fail "Dia Custom is missing at $app"

@@ -88,6 +88,9 @@ fi
   "apps-pref-pane-redesign-enabled=true" \
   "auto-enable-clia-from-onboarding-enabled=true" \
   "clia-in-app-upsell-enabled=true" \
+  "clia-report-enabled=true" \
+  "clia-artifact-in-chat-presentation-enabled=true" \
+  "clia-artifact-tab-preview-enabled=true" \
   "external-qa-access-for-developer-menu-enabled=true" \
   "enable-llm-debugger=true"
 

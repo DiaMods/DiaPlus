@@ -30,6 +30,7 @@ node "$project_dir/src/patches/patch-endpoint.js" "$app"
 node "$project_dir/src/patches/patch-no-account.js" "$app"
 node "$project_dir/src/patches/embed-bootstrap.js" "$app" "$bootstrap"
 node "$project_dir/src/patches/patch-agent-handler.js" "$app"
+node "$project_dir/src/patches/patch-report-controller.js" "$app"
 node "$project_dir/src/patches/patch-report-upload.js" "$app"
 
 # Apple Foundation Models are optional at runtime, but when the current SDK is

@@ -6,6 +6,7 @@ project_dir="${script_dir:h}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
 
 node "$project_dir/src/patches/patch-no-account.js" --check "$source_app"
+node "$project_dir/src/patches/patch-report-controller.js" --check "$source_app"
 node "$project_dir/src/patches/patch-report-upload.js" --check "$source_app"
 source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$source_app/Contents/Info.plist")"
 node "$project_dir/research/tools/discover-prompt-tools.js" \

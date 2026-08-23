@@ -19,23 +19,62 @@ async function runHelper(request) {
     child.on("error", reject);
     child.on("close", resolve);
   });
+  const lines = [];
+  for (const line of stdout.split("\n").filter(Boolean)) {
+    try {
+      lines.push(JSON.parse(line));
+    } catch {
+      // Preserve the helper's stderr/exit diagnostic below if a process was
+      // terminated before it could finish a JSON line.
+    }
+  }
+  const error = lines.find((line) => line.type === "error");
+  if (error) throw new Error(error.message);
   if (exitCode !== 0) {
     throw new Error(stderr.trim() || `Apple model helper exited with ${exitCode}`);
   }
-  const lines = stdout.split("\n").filter(Boolean).map((line) => JSON.parse(line));
-  const error = lines.find((line) => line.type === "error");
-  if (error) throw new Error(error.message);
   return lines.findLast((line) => line.type === "result")?.value;
 }
 
+let cachedAppleStatus = null;
+let cachedAppleStatusAt = 0;
+const appleStatusCacheMilliseconds = 5 * 60 * 1_000;
+
+function privateCloudReason(error) {
+  const message = String(error?.message ?? error);
+  if (/missing entitlement|ModelManagerError Code=1046/i.test(message)) {
+    return "Apple Private Cloud Compute requires Apple's managed com.apple.developer.private-cloud-compute entitlement; this Dia Custom build does not have it.";
+  }
+  return `Apple Private Cloud Compute could not complete a test request: ${message}`;
+}
+
 export async function appleProviderStatus() {
+  const now = Date.now();
+  if (cachedAppleStatus && now - cachedAppleStatusAt < appleStatusCacheMilliseconds) {
+    return cachedAppleStatus;
+  }
   try {
-    return await runHelper({ action: "status" });
+    const status = await runHelper({ action: "status" });
+    if (status?.privateCloud?.available) {
+      try {
+        await runHelper({ action: "probe", mode: "private-cloud" });
+      } catch (error) {
+        status.privateCloud = {
+          available: false,
+          reason: privateCloudReason(error),
+        };
+      }
+    }
+    cachedAppleStatus = status;
+    cachedAppleStatusAt = now;
+    return status;
   } catch (error) {
-    return {
+    cachedAppleStatus = {
       onDevice: { available: false, reason: String(error?.message ?? error) },
       privateCloud: { available: false, reason: String(error?.message ?? error) },
     };
+    cachedAppleStatusAt = now;
+    return cachedAppleStatus;
   }
 }
 

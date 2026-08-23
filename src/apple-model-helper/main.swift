@@ -14,114 +14,6 @@ private struct BridgeRequest: Decodable {
 
 private struct ToolSpec: Decodable {
     let name: String
-    let description: String
-    let input_schema: JSONValue
-}
-
-private indirect enum JSONValue: Decodable {
-    case object([String: JSONValue])
-    case array([JSONValue])
-    case string(String)
-    case number(Double)
-    case bool(Bool)
-    case null
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if container.decodeNil() { self = .null; return }
-        if let value = try? container.decode(Bool.self) { self = .bool(value); return }
-        if let value = try? container.decode(Double.self) { self = .number(value); return }
-        if let value = try? container.decode(String.self) { self = .string(value); return }
-        if let value = try? container.decode([JSONValue].self) { self = .array(value); return }
-        self = .object(try container.decode([String: JSONValue].self))
-    }
-
-    var objectValue: [String: JSONValue]? {
-        if case .object(let value) = self { return value }
-        return nil
-    }
-
-    var arrayValue: [JSONValue]? {
-        if case .array(let value) = self { return value }
-        return nil
-    }
-
-    var stringValue: String? {
-        if case .string(let value) = self { return value }
-        return nil
-    }
-}
-
-private func schemaName(_ raw: String) -> String {
-    let scalars = raw.unicodeScalars.map { scalar -> Character in
-        CharacterSet.alphanumerics.contains(scalar) ? Character(String(scalar)) : "_"
-    }
-    let value = String(scalars.prefix(48))
-    return value.first?.isNumber == true ? "Schema_\(value)" : value
-}
-
-private func schemaDescription(_ object: [String: JSONValue]) -> String? {
-    object["description"]?.stringValue
-}
-
-private func schemaType(_ object: [String: JSONValue]) -> String? {
-    if let direct = object["type"]?.stringValue { return direct }
-    if let choices = object["type"]?.arrayValue {
-        return choices.compactMap(\.stringValue).first(where: { $0 != "null" })
-    }
-    return object["properties"] == nil ? nil : "object"
-}
-
-private func dynamicSchema(
-    from json: JSONValue,
-    name: String,
-    description fallbackDescription: String? = nil
-) -> DynamicGenerationSchema {
-    guard let object = json.objectValue else {
-        return DynamicGenerationSchema(type: String.self)
-    }
-    let description = schemaDescription(object) ?? fallbackDescription
-    if let values = object["enum"]?.arrayValue?.compactMap(\.stringValue), !values.isEmpty {
-        return DynamicGenerationSchema(name: name, description: description, anyOf: values)
-    }
-
-    switch schemaType(object) {
-    case "object":
-        let properties = object["properties"]?.objectValue ?? [:]
-        let required = Set(object["required"]?.arrayValue?.compactMap(\.stringValue) ?? [])
-        return DynamicGenerationSchema(
-            name: name,
-            description: description,
-            properties: properties.keys.sorted().map { key in
-                DynamicGenerationSchema.Property(
-                    name: key,
-                    description: properties[key]?.objectValue.flatMap(schemaDescription),
-                    schema: dynamicSchema(
-                        from: properties[key]!,
-                        name: "\(name)_\(schemaName(key))"
-                    ),
-                    isOptional: !required.contains(key)
-                )
-            }
-        )
-    case "array":
-        return DynamicGenerationSchema(
-            arrayOf: dynamicSchema(
-                from: object["items"] ?? .object(["type": .string("string")]),
-                name: "\(name)_Item"
-            ),
-            minimumElements: 0,
-            maximumElements: nil
-        )
-    case "integer":
-        return DynamicGenerationSchema(type: Int.self)
-    case "number":
-        return DynamicGenerationSchema(type: Double.self)
-    case "boolean":
-        return DynamicGenerationSchema(type: Bool.self)
-    default:
-        return DynamicGenerationSchema(type: String.self)
-    }
 }
 
 private func decisionSchema(toolsJSON: String) throws -> GenerationSchema {
@@ -133,32 +25,29 @@ private func decisionSchema(toolsJSON: String) throws -> GenerationSchema {
         ])
     }
 
-    let variants = tools.map { tool -> DynamicGenerationSchema in
-        let suffix = schemaName(tool.name)
-        return DynamicGenerationSchema(
-            name: "ToolCall_\(suffix)",
-            description: tool.description,
-            properties: [
-                .init(
-                    name: "name",
-                    schema: DynamicGenerationSchema(
-                        name: "ToolName_\(suffix)",
-                        anyOf: [tool.name]
-                    )
-                ),
-                .init(
-                    name: "input",
-                    schema: dynamicSchema(
-                        from: tool.input_schema,
-                        name: "ToolInput_\(suffix)"
-                    )
-                ),
-            ]
-        )
-    }
-    let toolCall = variants.count == 1
-        ? variants[0]
-        : DynamicGenerationSchema(name: "ToolCall", anyOf: variants)
+    // Dia can expose dozens of deeply nested JSON schemas. Translating every
+    // one into a Foundation Models union exceeds the on-device model's dynamic
+    // schema limits before generation starts. The decision prompt already
+    // contains the complete schemas, so constrain only the tool name here and
+    // carry its input as JSON text. The bridge parses that object, checks the
+    // exact tool name, and returns it through Dia's original native harness.
+    let toolCall = DynamicGenerationSchema(
+        name: "ToolCall",
+        properties: [
+            .init(
+                name: "name",
+                schema: DynamicGenerationSchema(
+                    name: "ToolName",
+                    anyOf: tools.map(\.name)
+                )
+            ),
+            .init(
+                name: "arguments_json",
+                description: "A JSON object containing the tool arguments",
+                schema: DynamicGenerationSchema(type: String.self)
+            ),
+        ]
+    )
     let root = DynamicGenerationSchema(
         name: "ModelDecision",
         properties: [
@@ -271,18 +160,6 @@ private func generate<Model: LanguageModel>(
         var value = try JSONSerialization.jsonObject(
             with: Data(response.content.jsonString.utf8)
         ) as? [String: Any] ?? [:]
-        if let calls = value["tool_calls"] as? [[String: Any]] {
-            value["tool_calls"] = calls.map { call in
-                var output = call
-                if let input = call["input"],
-                   let data = try? JSONSerialization.data(withJSONObject: input),
-                   let string = String(data: data, encoding: .utf8) {
-                    output["arguments_json"] = string
-                }
-                output.removeValue(forKey: "input")
-                return output
-            }
-        }
         value["usage"] = usageValue(response.usage)
         return value
     }
@@ -321,6 +198,36 @@ private struct DiaCustomAppleModel {
                     ])
                 }
                 try emit(["type": "result", "value": try sentenceEmbeddings(texts)])
+                return
+            }
+
+            if request.action == "probe" {
+                let probeRequest = BridgeRequest(
+                    action: "generate",
+                    mode: request.mode,
+                    prompt: "Reply with OK.",
+                    structured: false,
+                    toolsJSON: nil,
+                    maximumResponseTokens: 8,
+                    texts: nil
+                )
+                switch request.mode {
+                case "on-device":
+                    _ = try await generate(
+                        model: SystemLanguageModel.default,
+                        request: probeRequest
+                    )
+                case "private-cloud":
+                    _ = try await generate(
+                        model: PrivateCloudComputeLanguageModel(),
+                        request: probeRequest
+                    )
+                default:
+                    throw NSError(domain: "DiaCustomAppleModel", code: 4, userInfo: [
+                        NSLocalizedDescriptionKey: "Unsupported Apple model mode",
+                    ])
+                }
+                try emit(["type": "result", "value": ["available": true]])
                 return
             }
 

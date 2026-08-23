@@ -21,7 +21,7 @@ Adapters return one shared result contract:
 - provider-authored reasoning summaries;
 - zero or more typed calls using exact supplied tool names.
 
-Codex runs as a decision engine in an empty read-only workspace. Its built-in command execution, file changes, MCP/apps, and web search are disabled; browser actions are expressed only through Dia Custom tools. Apple runs in a separate signed Swift helper using Foundation Models and NaturalLanguage. OpenAI uses the Responses API. Ollama and custom servers use OpenAI-compatible Chat Completions or Responses endpoints.
+Codex runs as a decision engine in an empty read-only workspace. Its built-in command execution, file changes, MCP/apps, and web search are disabled; browser actions are expressed only through Dia Custom tools. Apple runs in a separate signed Swift helper using Foundation Models and NaturalLanguage. Its compact structured schema carries the selected native tool name plus JSON arguments while the complete Dia schemas stay in the decision prompt and native harness. On-device generation works without a network service; Private Cloud Compute additionally requires Apple's managed entitlement and is advertised as unavailable when the helper lacks it. OpenAI uses the Responses API. Ollama and custom servers use OpenAI-compatible Chat Completions or Responses endpoints.
 
 The localhost administration API uses an unguessable token, sends no permissive CORS headers, and never returns credentials. The settings page receives that token only from the loopback origin that serves it.
 
@@ -79,7 +79,9 @@ User Data/Default/AgentServer/contexts/<context UUID>/work/artifacts/<report fol
 
 and then calls native `upload_artifact`.
 
-Official Dia validates `site_root` against a registry associated with the official profile. That registry cannot recognize a separately bundled clone even when the path is correct. The native Report patch semantically locates only this duplicate registry-error branch and sends it to the existing success continuation. Folder validation and native ingestion remain unchanged.
+Official Dia normally tears down its Artifacts controller when the profile lacks a server-derived account capability, even though all local persistence dependencies exist. A structural patch selects Dia's original async setup continuation for the anonymous clone.
+
+Dia also validates `site_root` against a registry associated with the official profile. That registry cannot recognize a separately bundled clone even when the path is correct. The second native Report patch semantically locates only this duplicate registry-error branch and sends it to the existing success continuation. Folder validation and native ingestion remain unchanged.
 
 Before that patched branch is reachable, the bridge independently requires:
 
@@ -118,6 +120,6 @@ The public web client and selected remote providers run in the bridge because th
 
 The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL/document registration. No account token is copied from official Dia.
 
-Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report validator and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. The anonymous account/capability patch still has a small audited table for builds 85660 and 85823. **./dia-custom update** clones official Dia into a temporary bundle, applies and verifies every patch, signs it, and swaps only after success. Unknown layouts leave the existing clone untouched.
+Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report controller gate and its setup target, Report validator, and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. The anonymous account/capability patch still has a small audited table for builds 85660 and 85823. **./dia-custom update** clones official Dia into a temporary bundle, applies and verifies every patch, signs it, and swaps only after success. Unknown layouts leave the existing clone untouched.
 
 Bridge configuration, credentials, model choice, memory, connector data, sessions, and coverage live outside the app bundle and survive supported rebuilds.

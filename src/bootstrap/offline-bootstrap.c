@@ -487,6 +487,12 @@ static NSString *dia_custom_model_title(NSDictionary *model) {
     return [NSString stringWithFormat:@"%@ · %@", provider, label ?: @"Unknown"];
 }
 
+static NSString *dia_custom_model_picker_title(NSDictionary *model) {
+    NSString *label = [model[@"label"] isKindOfClass:[NSString class]]
+        ? model[@"label"] : model[@"key"];
+    return label ?: @"Model";
+}
+
 static NSMenu *dia_custom_model_menu;
 
 static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
@@ -501,6 +507,7 @@ static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
         return;
     }
     [popup setEnabled:YES];
+    NSDictionary *selectedModel = nil;
     for (NSDictionary *model in models) {
         NSString *key = [model[@"key"] isKindOfClass:[NSString class]]
             ? model[@"key"] : nil;
@@ -520,7 +527,13 @@ static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
         }
         if ([key isEqualToString:selected]) {
             [popup selectItem:item];
+            selectedModel = model;
         }
+    }
+    // Preserve the full provider/model names in the menu while keeping the
+    // control itself narrow enough for Dia's command-bar toolbar.
+    if (selectedModel != nil) {
+        [popup setTitle:dia_custom_model_picker_title(selectedModel)];
     }
 }
 
@@ -651,18 +664,36 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
                 continue;
             }
             NSPopUpButton *popup = [[NSPopUpButton alloc]
-                initWithFrame:NSMakeRect(0, 0, 190, 28)
+                initWithFrame:NSMakeRect(0, 0, 132, 26)
                    pullsDown:NO];
             [popup setIdentifier:@"DiaCustomModelPicker"];
             [popup setControlSize:NSControlSizeSmall];
+            if ([popup respondsToSelector:@selector(setUsesItemFromMenu:)]) {
+                [popup setUsesItemFromMenu:NO];
+            }
             [popup setTarget:target];
             [popup setAction:action];
             [popup setToolTip:@"Choose the model for Dia Custom chat"];
-            [popup setContentHuggingPriority:NSLayoutPriorityDefaultHigh
+            [popup setContentHuggingPriority:NSLayoutPriorityRequired
                               forOrientation:NSLayoutConstraintOrientationHorizontal];
-            [popup.widthAnchor constraintLessThanOrEqualToConstant:230].active = YES;
+            [popup setContentCompressionResistancePriority:NSLayoutPriorityRequired
+                                           forOrientation:NSLayoutConstraintOrientationHorizontal];
+            [popup.widthAnchor constraintEqualToConstant:132].active = YES;
             dia_custom_populate_model_popup(popup);
-            [stack addArrangedSubview:popup];
+            // Reserve the final geometry without showing an intermediate
+            // offscreen frame while New Chat animates its command bar.
+            [popup setAlphaValue:0.0];
+            [stack insertArrangedSubview:popup atIndex:0];
+            for (NSView *ancestor = stack; ancestor != nil;
+                 ancestor = [ancestor superview]) {
+                [ancestor setNeedsUpdateConstraints:YES];
+                [ancestor setNeedsLayout:YES];
+            }
+            [[window contentView] layoutSubtreeIfNeeded];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[window contentView] layoutSubtreeIfNeeded];
+                [popup setAlphaValue:1.0];
+            });
             dia_custom_log_status(@"model-picker-installed");
         }
     }
@@ -876,7 +907,6 @@ static void dia_custom_install_developer_menu(void) {
 
         dia_custom_developer_menu_controller =
             [[DiaCustomDeveloperMenuController alloc] init];
-        id nativeModelPickerButton = dia_custom_enable_native_model_picker();
         [developerMenu addItem:[NSMenuItem separatorItem]];
 
         dia_custom_model_menu = [[NSMenu alloc] initWithTitle:@"AI Model"];
