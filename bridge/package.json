@@ -1,12 +1,16 @@
 {
   "name": "dia-custom-bridge",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "start": "node src/server.js",
     "capture": "DIA_CUSTOM_CAPTURE=1 node src/server.js",
-    "check": "node --check src/server.js"
+    "check": "find src test -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "test": "node --test"
   },
   "dependencies": {
     "@openai/codex-sdk": "latest"

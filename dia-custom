@@ -9,15 +9,30 @@ case "$command" in
   build) exec "$project_dir/scripts/build.sh" "$@" ;;
   install) exec "$project_dir/scripts/install.sh" "$@" ;;
   launch) exec "$project_dir/scripts/launch.sh" "$@" ;;
+  bridge) exec "$project_dir/scripts/launch.sh" --bridge-only "$@" ;;
   doctor) exec "$project_dir/scripts/doctor.sh" "$@" ;;
+  test) exec "$project_dir/scripts/test.sh" "$@" ;;
+  update) exec "$project_dir/scripts/build.sh" --replace "$@" ;;
+  models)
+    exec /usr/bin/curl --silent --show-error --fail \
+      http://127.0.0.1:8765/api/models
+    ;;
+  settings) exec /usr/bin/open http://127.0.0.1:8765/settings ;;
+  openai-key) exec "$project_dir/scripts/openai-key.sh" "$@" ;;
   status) exec /usr/bin/sed -n '1,240p' "$project_dir/docs/STATUS.md" ;;
   help|-h|--help)
     print 'Dia Custom'
     print ''
     print '  ./dia-custom launch             Start the local bridge and browser'
+    print '  ./dia-custom bridge             Start only the local bridge'
     print '  ./dia-custom doctor             Check the installed clone'
+    print '  ./dia-custom test               Run headless source and provider tests'
+    print '  ./dia-custom models             Print the live provider catalog'
+    print '  ./dia-custom settings           Open local model settings'
+    print '  ./dia-custom openai-key         Configure OpenAI API access privately'
     print '  ./dia-custom install            Refresh patches in an existing clone'
     print '  ./dia-custom build [--replace]  Create a clone from /Applications/Dia.app'
+    print '  ./dia-custom update             Rebuild from the latest audited Dia app'
     print '  ./dia-custom status             Show implemented and remaining work'
     ;;
   *)

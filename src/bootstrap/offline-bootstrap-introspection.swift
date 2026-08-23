@@ -1,45 +1,5 @@
 import Foundation
 
-private func describe(_ value: Any,
-                      label: String,
-                      depth: Int,
-                      forceExpand: Bool = false,
-                      into lines: inout [String]) {
-    let mirror = Mirror(reflecting: value)
-    let typeName = String(reflecting: Swift.type(of: value))
-    let simpleValue = mirror.children.isEmpty
-        ? " value=\(String(reflecting: value))"
-        : ""
-    lines.append(String(repeating: "  ", count: depth) + "\(label): \(typeName) style=\(String(describing: mirror.displayStyle))\(simpleValue)")
-
-    guard depth < (forceExpand ? 10 : 4) else { return }
-    for (index, child) in mirror.children.enumerated() {
-        let childLabel = child.label ?? "[\(index)]"
-        let normalizedLabel = (label + "." + childLabel).lowercased()
-        let childForcesExpansion = forceExpand
-            || normalizedLabel.contains("presenter")
-            || normalizedLabel.contains("prompttools")
-            || normalizedLabel.contains("menuitemsbyaction")
-        let shouldExpand = depth == 0
-            || childForcesExpansion
-            || mirror.displayStyle == .dictionary
-            || mirror.displayStyle == .tuple
-        let childType = String(reflecting: Swift.type(of: child.value))
-        let childMirror = Mirror(reflecting: child.value)
-        let childValue = childMirror.children.isEmpty
-            ? " value=\(String(reflecting: child.value))"
-            : ""
-        lines.append(String(repeating: "  ", count: depth + 1) + "\(childLabel): \(childType)\(childValue)")
-        if shouldExpand {
-            describe(child.value,
-                     label: childLabel,
-                     depth: depth + 2,
-                     forceExpand: childForcesExpansion,
-                     into: &lines)
-        }
-    }
-}
-
 private func reflectedField(in value: Any,
                             containerTypeName: String,
                             fieldName: String,
@@ -125,28 +85,4 @@ public func diaCustomSwiftInvokeWindowPresenterAction(
     }
     appendActionProbe("\(fieldName): closure cast failed")
     return false
-}
-
-@_cdecl("dia_custom_swift_log_object")
-public func diaCustomSwiftLogObject(_ rawObject: UnsafeRawPointer?,
-                                    _ rawLabel: UnsafePointer<CChar>?,
-                                    _ rawPath: UnsafePointer<CChar>?) {
-    guard let rawObject, let rawPath else { return }
-    let object = Unmanaged<AnyObject>.fromOpaque(rawObject).takeUnretainedValue()
-    let label = rawLabel.map { String(cString: $0) } ?? "object"
-    let path = String(cString: rawPath)
-    var lines: [String] = ["\n=== SWIFT MIRROR \(label) ==="]
-    describe(object, label: label, depth: 0, into: &lines)
-    lines.append("")
-    guard let data = lines.joined(separator: "\n").data(using: .utf8) else { return }
-    if !FileManager.default.fileExists(atPath: path) {
-        FileManager.default.createFile(atPath: path, contents: nil)
-    }
-    guard let handle = FileHandle(forWritingAtPath: path) else { return }
-    defer { try? handle.close() }
-    do {
-        try handle.seekToEnd()
-        try handle.write(contentsOf: data)
-    } catch {
-    }
 }

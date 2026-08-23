@@ -61,6 +61,10 @@ trap - EXIT
 /usr/bin/defaults write "$bundle_id" shouldAutomaticallyUpdate -bool false
 /usr/bin/defaults write "$bundle_id" automaticallyUpdateArc -bool false
 /usr/bin/defaults write "$bundle_id" shouldAutomaticallyUpdateArc -bool false
+/usr/bin/defaults write "$bundle_id" SUEnableAutomaticChecks -bool false
+/usr/bin/defaults write "$bundle_id" SUAutomaticallyUpdate -bool false
+/usr/bin/defaults write "$bundle_id" SUScheduledCheckInterval -int 0
+/usr/bin/defaults write "$bundle_id" canShowUpdateBanner -bool false
 
 print "Built $clone_app"
 print "Profile: $profile"

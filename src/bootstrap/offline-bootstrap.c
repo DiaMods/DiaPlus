@@ -1,17 +1,12 @@
 #import <AppKit/AppKit.h>
 #include <objc/runtime.h>
 #include <dispatch/dispatch.h>
-#include <dlfcn.h>
 #include <mach-o/dyld.h>
-#include <mach/mach.h>
-#include <malloc/malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-extern void dia_custom_swift_log_object(const void *object,
-                                        const char *label,
-                                        const char *path);
 extern BOOL dia_custom_swift_invoke_window_presenter_action(
     const void *applicationController,
     const char *fieldName);
@@ -39,7 +34,21 @@ static const void *dia_custom_main_image_address(uintptr_t unslidOffset) {
     return (const void *)((uintptr_t)header + unslidOffset);
 }
 
-static void dia_custom_log_request_url(NSURL *url) {
+static void dia_custom_log_status(NSString *message) {
+    const char *rawPath = getenv("DIA_CUSTOM_RUNTIME_LOG");
+    if (rawPath == NULL || rawPath[0] == '\0' || message == nil) {
+        return;
+    }
+    FILE *output = fopen(rawPath, "a");
+    if (output == NULL) {
+        return;
+    }
+    fprintf(output, "%.3f\t%s\n",
+            [[NSDate date] timeIntervalSince1970], [message UTF8String]);
+    fclose(output);
+}
+
+static void dia_custom_log_request_url(NSURL *url, const char *disposition) {
     const char *path = getenv("DIA_CUSTOM_NETWORK_LOG");
     if (path == NULL || path[0] == '\0' || url == nil) {
         return;
@@ -47,8 +56,19 @@ static void dia_custom_log_request_url(NSURL *url) {
 
     NSURLComponents *components = [NSURLComponents componentsWithURL:url
                                               resolvingAgainstBaseURL:NO];
+    components.user = nil;
+    components.password = nil;
     components.query = nil;
     components.fragment = nil;
+    NSString *host = [components.host lowercaseString];
+    BOOL isLocal = [host isEqualToString:@"localhost"] ||
+        [host isEqualToString:@"127.0.0.1"] ||
+        [host isEqualToString:@"::1"];
+    // Local route names are useful for bridge diagnostics. For every external
+    // destination, retain only the origin so browsing paths never enter logs.
+    if (!isLocal) {
+        components.path = @"";
+    }
     NSString *safeURL = components.string;
     if (safeURL == nil) {
         return;
@@ -59,8 +79,9 @@ static void dia_custom_log_request_url(NSURL *url) {
         return;
     }
     flockfile(output);
-    fprintf(output, "%.3f\t%s\n",
-            [[NSDate date] timeIntervalSince1970], [safeURL UTF8String]);
+    fprintf(output, "%.3f\t%s\t%s\n",
+            [[NSDate date] timeIntervalSince1970], disposition,
+            [safeURL UTF8String]);
     funlockfile(output);
     fclose(output);
 }
@@ -78,13 +99,22 @@ static BOOL dia_custom_should_block_request_url(NSURL *url) {
         @"cdn-settings.segment.com",
         @"clientstream.launchdarkly.com",
         @"mobile.launchdarkly.com",
+        @"diabrowser.engineering",
+        @"diabrowser.com",
+        @"thebrowser.company",
+        @"thebrowser.com",
+        @"model-server.browserinternalstaging.com",
+        @"browser-intake-datadoghq.com",
         @"releases.diabrowser.com",
     ];
     if ([blockedHosts containsObject:host]) {
         return YES;
     }
     return [host hasSuffix:@".diabrowser.engineering"] ||
-           [host hasSuffix:@".thebrowser.company"];
+           [host hasSuffix:@".diabrowser.com"] ||
+           [host hasSuffix:@".thebrowser.company"] ||
+           [host hasSuffix:@".thebrowser.com"] ||
+           [host hasSuffix:@".browserinternalstaging.com"];
 }
 
 typedef void (*DiaCustomTaskResumeIMP)(id, SEL);
@@ -102,8 +132,9 @@ static void dia_custom_task_resume(id task, SEL command) {
     if (request == nil) {
         request = [task originalRequest];
     }
-    dia_custom_log_request_url(request.URL);
-    if (dia_custom_should_block_request_url(request.URL)) {
+    BOOL blocked = dia_custom_should_block_request_url(request.URL);
+    dia_custom_log_request_url(request.URL, blocked ? "BLOCKED" : "ALLOW");
+    if (blocked) {
         [task cancel];
         return;
     }
@@ -121,8 +152,7 @@ static void dia_custom_task_resume(id task, SEL command) {
 }
 
 static void dia_custom_install_task_resume_log(void) {
-    if (getenv("DIA_CUSTOM_NETWORK_LOG") == NULL ||
-        dia_custom_task_resume_entry_count != 0) {
+    if (dia_custom_task_resume_entry_count != 0) {
         return;
     }
 
@@ -163,7 +193,7 @@ static void dia_custom_install_task_resume_log(void) {
 
 @implementation DiaCustomLoggingURLProtocol
 + (BOOL)canInitWithRequest:(NSURLRequest *)request {
-    dia_custom_log_request_url(request.URL);
+    dia_custom_log_request_url(request.URL, "OBSERVED");
     return NO;
 }
 
@@ -174,80 +204,6 @@ static void dia_custom_install_task_resume_log(void) {
 - (void)startLoading {}
 - (void)stopLoading {}
 @end
-
-static int dia_custom_name_is_interesting(const char *name) {
-    if (name == NULL) {
-        return 0;
-    }
-
-    const char *needles[] = {
-        "Auth", "auth", "Onboard", "onboard", "ApplicationController",
-        "Unboxing", "Launch", "WindowController", "PromptTools",
-        "RoutingOverrides", "Gauntlet", "Clia", "Preferences",
-        "FeatureFlag", "DevTools", "SupertabFrontend", "PlatformWindow"
-    };
-    for (size_t i = 0; i < sizeof(needles) / sizeof(needles[0]); ++i) {
-        if (strstr(name, needles[i]) != NULL) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static void dia_custom_log_methods(FILE *output, Class cls, const char *prefix) {
-    unsigned int count = 0;
-    Method *methods = class_copyMethodList(cls, &count);
-    for (unsigned int i = 0; i < count; ++i) {
-        const char *selector = sel_getName(method_getName(methods[i]));
-        fprintf(output, "  %s%s\n", prefix, selector != NULL ? selector : "<unknown>");
-    }
-    free(methods);
-}
-
-static void dia_custom_log_ivars(FILE *output, id object) {
-    if (object == nil) {
-        return;
-    }
-    Class cls = object_getClass(object);
-    while (cls != Nil) {
-        unsigned int count = 0;
-        Ivar *ivars = class_copyIvarList(cls, &count);
-        fprintf(output, "IVARS class=%s object=%p\n", class_getName(cls), object);
-        for (unsigned int i = 0; i < count; ++i) {
-            const char *name = ivar_getName(ivars[i]);
-            const char *type = ivar_getTypeEncoding(ivars[i]);
-            ptrdiff_t offset = ivar_getOffset(ivars[i]);
-            fprintf(output, "  offset=%td name=%s type=%s",
-                    offset,
-                    name != NULL ? name : "<unknown>",
-                    type != NULL ? type : "<unknown>");
-            if (type != NULL && type[0] == '@') {
-                id value = object_getIvar(object, ivars[i]);
-                fprintf(output, " value=%s %p",
-                        value != nil ? class_getName(object_getClass(value)) : "<nil>",
-                        value);
-            }
-            fputc('\n', output);
-        }
-        free(ivars);
-        cls = class_getSuperclass(cls);
-    }
-}
-
-static BOOL dia_custom_class_implements_selector(Class cls, const char *selectorName) {
-    unsigned int count = 0;
-    Method *methods = class_copyMethodList(cls, &count);
-    BOOL found = NO;
-    for (unsigned int i = 0; i < count; ++i) {
-        const char *name = sel_getName(method_getName(methods[i]));
-        if (name != NULL && strcmp(name, selectorName) == 0) {
-            found = YES;
-            break;
-        }
-    }
-    free(methods);
-    return found;
-}
 
 static id dia_custom_object_ivar(id object, const char *name) {
     if (object == nil || name == NULL) {
@@ -260,155 +216,9 @@ static id dia_custom_object_ivar(id object, const char *name) {
     return object_getIvar(object, ivar);
 }
 
-typedef struct {
-    Class targetClass;
-    uintptr_t isaMask;
-    id result;
-} DiaCustomHeapSearch;
-
-static void dia_custom_heap_range_recorder(task_t task,
-                                           void *context,
-                                           unsigned type,
-                                           vm_range_t *ranges,
-                                           unsigned rangeCount) {
-    DiaCustomHeapSearch *search = context;
-    if (search->result != nil) {
-        return;
-    }
-    for (unsigned i = 0; i < rangeCount; ++i) {
-        if (ranges[i].size < sizeof(uintptr_t)) {
-            continue;
-        }
-        uintptr_t rawIsa = *(const uintptr_t *)(uintptr_t)ranges[i].address;
-        Class candidateClass = (Class)(rawIsa & search->isaMask);
-        if (candidateClass == search->targetClass ||
-            (Class)rawIsa == search->targetClass) {
-            search->result = (id)(uintptr_t)ranges[i].address;
-            return;
-        }
-    }
-}
-
-static id dia_custom_find_live_object(NSString *className) {
-    Class targetClass = NSClassFromString(className);
-    if (targetClass == Nil) {
-        return nil;
-    }
-
-    uintptr_t isaMask = UINTPTR_MAX;
-    uintptr_t *runtimeMask = dlsym(RTLD_DEFAULT, "objc_debug_isa_class_mask");
-    if (runtimeMask != NULL && *runtimeMask != 0) {
-        isaMask = *runtimeMask;
-    }
-
-    vm_address_t *zones = NULL;
-    unsigned zoneCount = 0;
-    kern_return_t result = malloc_get_all_zones(
-        mach_task_self(), NULL, &zones, &zoneCount);
-    if (result != KERN_SUCCESS) {
-        return nil;
-    }
-
-    DiaCustomHeapSearch search = {
-        .targetClass = targetClass,
-        .isaMask = isaMask,
-        .result = nil,
-    };
-    for (unsigned i = 0; i < zoneCount && search.result == nil; ++i) {
-        malloc_zone_t *zone = (malloc_zone_t *)(uintptr_t)zones[i];
-        if (zone == NULL || zone->introspect == NULL ||
-            zone->introspect->enumerator == NULL) {
-            continue;
-        }
-        zone->introspect->enumerator(
-            mach_task_self(), &search, MALLOC_PTR_IN_USE_RANGE_TYPE,
-            (vm_address_t)(uintptr_t)zone, NULL,
-            dia_custom_heap_range_recorder);
-    }
-    return search.result;
-}
-
-static void dia_custom_log_runtime(void) {
-    const char *path = getenv("DIA_CUSTOM_RUNTIME_LOG");
-    if (path == NULL || path[0] == '\0') {
-        return;
-    }
-
-    FILE *output = fopen(path, "w");
-    if (output == NULL) {
-        return;
-    }
-
-    int count = objc_getClassList(NULL, 0);
-    Class *classes = calloc((size_t)count, sizeof(Class));
-    if (classes == NULL) {
-        fclose(output);
-        return;
-    }
-    count = objc_getClassList(classes, count);
-    for (int i = 0; i < count; ++i) {
-        const char *name = class_getName(classes[i]);
-        BOOL ownsModelPickerAction = dia_custom_class_implements_selector(
-            classes[i], "handleModelSelectorClicked");
-        if (!dia_custom_name_is_interesting(name) && !ownsModelPickerAction) {
-            continue;
-        }
-        fprintf(output, "%s\n", name);
-        dia_custom_log_methods(output, classes[i], "-");
-        Class meta = object_getClass(classes[i]);
-        if (meta != Nil) {
-            dia_custom_log_methods(output, meta, "+");
-        }
-    }
-    free(classes);
-    fclose(output);
-}
-
-static void dia_custom_log_menu(NSMenu *menu, FILE *output, NSUInteger depth) {
-    for (NSMenuItem *item in [menu itemArray]) {
-        id target = [item target];
-        const char *targetName = target != nil
-            ? class_getName(object_getClass(target))
-            : "<responder-chain>";
-        fprintf(output,
-                "%*sMENU title=%s hidden=%d enabled=%d key=%s action=%s target=%s\n",
-                (int)(depth * 2), "",
-                [[item title] UTF8String], [item isHidden], [item isEnabled],
-                [[item keyEquivalent] UTF8String],
-                [item action] != NULL ? sel_getName([item action]) : "<none>",
-                targetName != NULL ? targetName : "<unknown>");
-        if ([item hasSubmenu]) {
-            dia_custom_log_menu([item submenu], output, depth + 1);
-        }
-    }
-}
-
-static void dia_custom_schedule_menu_log(void) {
-    const char *path = getenv("DIA_CUSTOM_RUNTIME_LOG");
-    if (path == NULL || path[0] == '\0') {
-        return;
-    }
-    NSString *logPath = [NSString stringWithUTF8String:path];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2500 * NSEC_PER_MSEC),
-                   dispatch_get_main_queue(), ^{
-        FILE *output = fopen([logPath fileSystemRepresentation], "a");
-        if (output == NULL) {
-            return;
-        }
-        fprintf(output, "\n=== MAIN MENU ===\n");
-        dia_custom_log_menu([NSApp mainMenu], output, 0);
-        fclose(output);
-    });
-}
-
 static void dia_custom_schedule_network_log(void) {
-    if (getenv("DIA_CUSTOM_NETWORK_LOG") == NULL) {
-        return;
-    }
-
-    // Model Registry starts during application construction, before the main
-    // queue runs. Install both observers synchronously so its first request is
-    // visible too; the old delayed installation missed that request entirely.
+    // Install synchronously because the model registry starts during
+    // application construction. Logging is optional; host blocking is not.
     [NSURLProtocol registerClass:[DiaCustomLoggingURLProtocol class]];
     dia_custom_install_task_resume_log();
 }
@@ -663,15 +473,299 @@ static id dia_custom_enable_native_model_picker(void) {
     }
 }
 
+static NSDictionary *dia_custom_model_catalog(void) {
+    const char *rawPath = getenv("DIA_CUSTOM_MODEL_CATALOG_PATH");
+    if (rawPath == NULL || rawPath[0] == '\0') {
+        return nil;
+    }
+    NSData *data = [NSData dataWithContentsOfFile:
+        [NSString stringWithUTF8String:rawPath]];
+    if (data == nil) {
+        return nil;
+    }
+    id value = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    return [value isKindOfClass:[NSDictionary class]] ? value : nil;
+}
+
+static NSArray<NSDictionary *> *dia_custom_catalog_models(NSDictionary *catalog) {
+    id models = catalog[@"models"];
+    return [models isKindOfClass:[NSArray class]] ? models : @[];
+}
+
+static NSString *dia_custom_model_title(NSDictionary *model) {
+    NSString *provider = [model[@"providerLabel"] isKindOfClass:[NSString class]]
+        ? model[@"providerLabel"] : @"Model";
+    NSString *label = [model[@"label"] isKindOfClass:[NSString class]]
+        ? model[@"label"] : model[@"key"];
+    return [NSString stringWithFormat:@"%@ · %@", provider, label ?: @"Unknown"];
+}
+
+static NSMenu *dia_custom_model_menu;
+static NSMutableArray<NSPopUpButton *> *dia_custom_model_popups;
+
+static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSArray<NSDictionary *> *models = dia_custom_catalog_models(catalog);
+    NSString *selected = [catalog[@"selectedModel"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectedModel"] : nil;
+    [popup removeAllItems];
+    if ([models count] == 0) {
+        [popup addItemWithTitle:@"Models loading…"];
+        [popup setEnabled:NO];
+        return;
+    }
+    [popup setEnabled:YES];
+    for (NSDictionary *model in models) {
+        NSString *key = [model[@"key"] isKindOfClass:[NSString class]]
+            ? model[@"key"] : nil;
+        if (key == nil) {
+            continue;
+        }
+        [popup addItemWithTitle:dia_custom_model_title(model)];
+        NSMenuItem *item = [popup lastItem];
+        [item setRepresentedObject:key];
+        BOOL available = ![model[@"available"] respondsToSelector:@selector(boolValue)] ||
+            [model[@"available"] boolValue];
+        [item setEnabled:available];
+        if ([model[@"reason"] isKindOfClass:[NSString class]]) {
+            [item setToolTip:model[@"reason"]];
+        } else if ([model[@"description"] isKindOfClass:[NSString class]]) {
+            [item setToolTip:model[@"description"]];
+        }
+        if ([key isEqualToString:selected]) {
+            [popup selectItem:item];
+        }
+    }
+}
+
+static void dia_custom_rebuild_model_menu(id target, SEL action) {
+    if (dia_custom_model_menu == nil) {
+        return;
+    }
+    [dia_custom_model_menu removeAllItems];
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSArray<NSDictionary *> *models = dia_custom_catalog_models(catalog);
+    NSString *selected = [catalog[@"selectedModel"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectedModel"] : nil;
+    NSString *lastProvider = nil;
+    for (NSDictionary *model in models) {
+        NSString *key = [model[@"key"] isKindOfClass:[NSString class]]
+            ? model[@"key"] : nil;
+        NSString *provider = [model[@"providerLabel"] isKindOfClass:[NSString class]]
+            ? model[@"providerLabel"] : @"Models";
+        if (key == nil) {
+            continue;
+        }
+        if (lastProvider != nil && ![provider isEqualToString:lastProvider]) {
+            [dia_custom_model_menu addItem:[NSMenuItem separatorItem]];
+        }
+        lastProvider = provider;
+        NSMenuItem *item = [[NSMenuItem alloc]
+            initWithTitle:dia_custom_model_title(model)
+                   action:action
+            keyEquivalent:@""];
+        [item setTarget:target];
+        [item setRepresentedObject:key];
+        BOOL available = ![model[@"available"] respondsToSelector:@selector(boolValue)] ||
+            [model[@"available"] boolValue];
+        [item setEnabled:available];
+        [item setState:[key isEqualToString:selected]
+            ? NSControlStateValueOn : NSControlStateValueOff];
+        if ([model[@"reason"] isKindOfClass:[NSString class]]) {
+            [item setToolTip:model[@"reason"]];
+        }
+        [dia_custom_model_menu addItem:item];
+    }
+    if ([models count] == 0) {
+        NSMenuItem *loading = [[NSMenuItem alloc]
+            initWithTitle:@"Models loading…" action:nil keyEquivalent:@""];
+        [loading setEnabled:NO];
+        [dia_custom_model_menu addItem:loading];
+    }
+    for (NSPopUpButton *popup in [dia_custom_model_popups copy]) {
+        dia_custom_populate_model_popup(popup);
+    }
+}
+
+static NSStackView *dia_custom_toolbar_standard_stack(id toolbar) {
+    @try {
+        id value = [toolbar valueForKey:@"standardContentStackView"];
+        if ([value isKindOfClass:[NSStackView class]]) {
+            return value;
+        }
+    } @catch (__unused NSException *exception) {
+    }
+    Ivar ivar = class_getInstanceVariable(object_getClass(toolbar),
+        "$__lazy_storage_$_standardContentStackView");
+    if (ivar != NULL) {
+        id value = object_getIvar(toolbar, ivar);
+        if ([value isKindOfClass:[NSStackView class]]) {
+            return value;
+        }
+    }
+    return nil;
+}
+
+static void dia_custom_install_custom_model_picker(id target, SEL action) {
+    if (target == nil) {
+        return;
+    }
+    if (dia_custom_model_popups == nil) {
+        dia_custom_model_popups = [NSMutableArray array];
+    }
+    for (NSWindow *window in [NSApp windows]) {
+        NSMutableArray *toolbars = [NSMutableArray array];
+        dia_custom_collect_views_named([window contentView],
+                                       @"BoostCommandBar.ToolbarView",
+                                       toolbars);
+        for (id toolbar in toolbars) {
+            NSStackView *stack = dia_custom_toolbar_standard_stack(toolbar);
+            if (stack == nil) {
+                continue;
+            }
+            BOOL alreadyInstalled = NO;
+            for (NSView *view in [stack arrangedSubviews]) {
+                if ([[view identifier] isEqualToString:@"DiaCustomModelPicker"]) {
+                    alreadyInstalled = YES;
+                    break;
+                }
+            }
+            if (alreadyInstalled) {
+                continue;
+            }
+            NSPopUpButton *popup = [[NSPopUpButton alloc]
+                initWithFrame:NSMakeRect(0, 0, 190, 28)
+                   pullsDown:NO];
+            [popup setIdentifier:@"DiaCustomModelPicker"];
+            [popup setControlSize:NSControlSizeSmall];
+            [popup setTarget:target];
+            [popup setAction:action];
+            [popup setToolTip:@"Choose the model for Dia Custom chat"];
+            [popup setContentHuggingPriority:NSLayoutPriorityDefaultHigh
+                              forOrientation:NSLayoutConstraintOrientationHorizontal];
+            [popup.widthAnchor constraintLessThanOrEqualToConstant:230].active = YES;
+            dia_custom_populate_model_popup(popup);
+            [stack addArrangedSubview:popup];
+            [dia_custom_model_popups addObject:popup];
+            dia_custom_log_status(@"model-picker-installed");
+        }
+    }
+}
+
+static void dia_custom_schedule_model_picker_attempts(id target,
+                                                       SEL action,
+                                                       unsigned attempt) {
+    if (target == nil || attempt >= 30) {
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC),
+                   dispatch_get_main_queue(), ^{
+        dia_custom_install_custom_model_picker(target, action);
+        dia_custom_schedule_model_picker_attempts(target, action, attempt + 1);
+    });
+}
+
 @interface DiaCustomDeveloperMenuController : NSObject
 - (void)openPromptTools:(id)sender;
 - (void)openNativeModelPicker:(id)sender;
+- (void)selectCustomModel:(id)sender;
+- (void)openModelSettings:(id)sender;
+- (void)windowBecameKey:(NSNotification *)notification;
 - (void)openBrowserDeveloperTools:(id)sender;
 - (void)openAgentServerDashboard:(id)sender;
 - (void)openLogLevels:(id)sender;
 @end
 
 @implementation DiaCustomDeveloperMenuController
+- (NSString *)modelKeyFromSender:(id)sender {
+    if ([sender isKindOfClass:[NSPopUpButton class]]) {
+        return [[[sender selectedItem] representedObject]
+            isKindOfClass:[NSString class]]
+            ? [[sender selectedItem] representedObject] : nil;
+    }
+    id value = [sender respondsToSelector:@selector(representedObject)]
+        ? [sender representedObject] : nil;
+    return [value isKindOfClass:[NSString class]] ? value : nil;
+}
+
+- (void)selectCustomModel:(id)sender {
+    NSString *modelKey = [self modelKeyFromSender:sender];
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSString *token = [catalog[@"selectionToken"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectionToken"] : nil;
+    const char *settingsValue = getenv("DIA_CUSTOM_SETTINGS_URL");
+    NSString *settings = settingsValue != NULL
+        ? [NSString stringWithUTF8String:settingsValue]
+        : @"http://127.0.0.1:8765/settings";
+    NSURLComponents *components = [NSURLComponents
+        componentsWithString:settings];
+    components.path = @"/api/selection";
+    components.query = nil;
+    components.fragment = nil;
+    if (modelKey == nil || token == nil || components.URL == nil) {
+        NSBeep();
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest
+        requestWithURL:components.URL];
+    request.HTTPMethod = @"PUT";
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [request setValue:token forHTTPHeaderField:@"x-dia-custom-token"];
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
+        @"model": modelKey,
+    } options:0 error:nil];
+    DiaCustomDeveloperMenuController *controller = self;
+    [[[NSURLSession sharedSession]
+        dataTaskWithRequest:request
+         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
+                ? [(NSHTTPURLResponse *)response statusCode] : 0;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                DiaCustomDeveloperMenuController *strongSelf = controller;
+                if (error != nil || status < 200 || status >= 300) {
+                    NSString *message = error.localizedDescription;
+                    if (message == nil && data != nil) {
+                        NSDictionary *value = [NSJSONSerialization
+                            JSONObjectWithData:data options:0 error:nil];
+                        message = [value[@"error"] isKindOfClass:[NSString class]]
+                            ? value[@"error"] : nil;
+                    }
+                    NSAlert *alert = [[NSAlert alloc] init];
+                    alert.messageText = @"Could not change Dia Custom model";
+                    alert.informativeText = message ?: @"The local bridge rejected the selection.";
+                    [alert runModal];
+                    dia_custom_rebuild_model_menu(strongSelf,
+                        @selector(selectCustomModel:));
+                    return;
+                }
+                dia_custom_rebuild_model_menu(strongSelf,
+                    @selector(selectCustomModel:));
+                dia_custom_install_custom_model_picker(strongSelf,
+                    @selector(selectCustomModel:));
+            });
+        }] resume];
+}
+
+- (void)openModelSettings:(id)sender {
+    const char *rawURL = getenv("DIA_CUSTOM_SETTINGS_URL");
+    NSString *value = rawURL != NULL
+        ? [NSString stringWithUTF8String:rawURL]
+        : @"http://127.0.0.1:8765/settings";
+    NSURL *url = [NSURL URLWithString:value];
+    if (url == nil || ![[NSWorkspace sharedWorkspace] openURL:url]) {
+        NSBeep();
+    }
+}
+
+- (void)windowBecameKey:(NSNotification *)notification {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        dia_custom_install_custom_model_picker(self,
+            @selector(selectCustomModel:));
+    });
+}
+
 - (void)openPromptTools:(id)sender {
     if (!dia_custom_present_prompt_tools()) {
         NSBeep();
@@ -709,14 +803,22 @@ static id dia_custom_enable_native_model_picker(void) {
 }
 
 - (void)openNativeModelPicker:(id)sender {
-    dia_custom_enable_native_model_picker();
+    id nativeButton = dia_custom_enable_native_model_picker();
     id owner = dia_custom_native_model_picker_owner();
     SEL selector = NSSelectorFromString(@"handleModelSelectorClicked");
-    if (owner != nil && [owner respondsToSelector:selector]) {
+    if (nativeButton != nil && owner != nil &&
+        [owner respondsToSelector:selector]) {
         IMP implementation = [owner methodForSelector:selector];
         ((void (*)(id, SEL))implementation)(owner, selector);
-    } else if (![NSApp sendAction:selector to:nil from:sender]) {
-        NSBeep();
+    } else {
+        dia_custom_install_custom_model_picker(self,
+            @selector(selectCustomModel:));
+        NSPopUpButton *popup = [dia_custom_model_popups firstObject];
+        if (popup != nil) {
+            [popup performClick:nil];
+        } else if (![NSApp sendAction:selector to:nil from:sender]) {
+            NSBeep();
+        }
     }
 }
 @end
@@ -744,8 +846,14 @@ static void dia_custom_install_developer_menu(void) {
                 break;
             }
         }
-        if (developerMenu == nil ||
-            [developerMenu itemWithTitle:@"Prompt Tools & Model Routing"] != nil) {
+        if (developerMenu == nil) {
+            developerMenu = [[NSMenu alloc] initWithTitle:@"Developer"];
+            NSMenuItem *developerItem = [[NSMenuItem alloc]
+                initWithTitle:@"Developer" action:nil keyEquivalent:@""];
+            [developerItem setSubmenu:developerMenu];
+            [viewMenu addItem:developerItem];
+        }
+        if ([developerMenu itemWithTitle:@"AI Model"] != nil) {
             return;
         }
 
@@ -753,6 +861,21 @@ static void dia_custom_install_developer_menu(void) {
             [[DiaCustomDeveloperMenuController alloc] init];
         id nativeModelPickerButton = dia_custom_enable_native_model_picker();
         [developerMenu addItem:[NSMenuItem separatorItem]];
+
+        dia_custom_model_menu = [[NSMenu alloc] initWithTitle:@"AI Model"];
+        NSMenuItem *modelMenuItem = [[NSMenuItem alloc]
+            initWithTitle:@"AI Model" action:nil keyEquivalent:@""];
+        [modelMenuItem setSubmenu:dia_custom_model_menu];
+        [developerMenu addItem:modelMenuItem];
+        dia_custom_rebuild_model_menu(dia_custom_developer_menu_controller,
+            @selector(selectCustomModel:));
+
+        NSMenuItem *modelSettings = [[NSMenuItem alloc]
+            initWithTitle:@"Model Providers & Settings…"
+                   action:@selector(openModelSettings:)
+            keyEquivalent:@""];
+        [modelSettings setTarget:dia_custom_developer_menu_controller];
+        [developerMenu addItem:modelSettings];
 
         NSMenuItem *promptTools = [[NSMenuItem alloc]
             initWithTitle:@"Prompt Tools & Model Routing"
@@ -789,161 +912,20 @@ static void dia_custom_install_developer_menu(void) {
         [logLevels setTarget:dia_custom_developer_menu_controller];
         [developerMenu addItem:logLevels];
 
-        const char *path = getenv("DIA_CUSTOM_RUNTIME_LOG");
-        if (path != NULL && path[0] != '\0') {
-            FILE *output = fopen(path, "a");
-            if (output != NULL) {
-                id controller = dia_custom_prompt_tools_window_controller();
-                fprintf(output, "\n=== DIA CUSTOM DEVELOPER ===\n");
-                fprintf(output, "promptToolsWindowController=%s\n",
-                        controller != nil
-                            ? class_getName(object_getClass(controller))
-                            : "<nil>");
-                id modelPickerOwner = dia_custom_native_model_picker_owner();
-                fprintf(output, "nativeModelPickerOwner=%s\n",
-                        modelPickerOwner != nil
-                            ? class_getName(object_getClass(modelPickerOwner))
-                            : "<nil>");
-                fprintf(output, "nativeModelPickerButton=%s hidden=%d enabled=%d\n",
-                        nativeModelPickerButton != nil
-                            ? class_getName(object_getClass(nativeModelPickerButton))
-                            : "<nil>",
-                        [nativeModelPickerButton respondsToSelector:@selector(isHidden)]
-                            ? [nativeModelPickerButton isHidden]
-                            : -1,
-                        [nativeModelPickerButton respondsToSelector:@selector(isEnabled)]
-                            ? [nativeModelPickerButton isEnabled]
-                            : -1);
-                NSArray<NSString *> *selectors = @[
-                    @"handleModelSelectorClicked",
-                    @"toggleDeveloperMode",
-                    @"_presentFeatureFlagsWindow",
-                    @"_presentInternalToolWindow",
-                    @"_openLLMDebugger",
-                ];
-                for (NSString *selectorName in selectors) {
-                    SEL selector = NSSelectorFromString(selectorName);
-                    id target = [NSApp targetForAction:selector];
-                    fprintf(output, "actionTarget %s=%s\n",
-                            [selectorName UTF8String],
-                            target != nil
-                                ? class_getName(object_getClass(target))
-                                : "<nil>");
-                }
-                NSArray<NSWindow *> *windows = [NSApp windows];
-                fprintf(output, "windowCount=%lu\n", (unsigned long)[windows count]);
-                for (NSWindow *candidate in windows) {
-                    id candidateController = [candidate windowController];
-                    fprintf(output,
-                            "WINDOW class=%s controller=%s key=%d main=%d "
-                            "identifier=%s title=%s\n",
-                            class_getName(object_getClass(candidate)),
-                            candidateController != nil
-                                ? class_getName(object_getClass(candidateController))
-                                : "<nil>",
-                            [candidate isKeyWindow],
-                            [candidate isMainWindow],
-                            [[[candidate identifier] description] UTF8String] ?: "<nil>",
-                            [[[candidate title] description] UTF8String] ?: "<nil>");
-                    if (![NSStringFromClass([candidate class])
-                            containsString:@"PlatformWindow"]) {
-                        continue;
-                    }
-                    @try {
-                        id viewModel = [candidate valueForKey:@"viewModel"];
-                        fprintf(output, "platformWindowViewModel=%s\n",
-                                viewModel != nil
-                                    ? class_getName(object_getClass(viewModel))
-                                    : "<nil>");
-                    } @catch (__unused NSException *exception) {
-                        fprintf(output, "platformWindowViewModel=<kvc-error>\n");
-                    }
-                    dia_custom_log_ivars(output, candidate);
-                    dia_custom_log_ivars(output, candidateController);
-                }
-                id appDelegate = [NSApp delegate];
-                id applicationController = dia_custom_object_ivar(
-                    appDelegate, "controller");
-                id menuOrchestrator = dia_custom_object_ivar(
-                    appDelegate, "mainMenuOrchestrator");
-                id menuItemsByAction = dia_custom_object_ivar(
-                    menuOrchestrator, "menuItemsByAction");
-                id platformWindowPresenter = dia_custom_find_live_object(
-                    @"Application.PlatformWindowPresenter");
-                id promptToolsController = dia_custom_find_live_object(
-                    @"SupertabFrontend.PromptToolsController");
-                id promptToolsViewModel = dia_custom_find_live_object(
-                    @"SupertabFrontend.PromptToolsViewModel");
-                id routingOverridesViewModel = dia_custom_find_live_object(
-                    @"SupertabFrontend.RoutingOverridesViewModel");
-                fprintf(output, "appDelegate=%s controller=%s menuOrchestrator=%s\n",
-                        appDelegate != nil
-                            ? class_getName(object_getClass(appDelegate))
-                            : "<nil>",
-                        applicationController != nil
-                            ? class_getName(object_getClass(applicationController))
-                            : "<nil>",
-                        menuOrchestrator != nil
-                            ? class_getName(object_getClass(menuOrchestrator))
-                            : "<nil>");
-                fprintf(output, "menuItemsByAction=%s\n",
-                        menuItemsByAction != nil
-                            ? class_getName(object_getClass(menuItemsByAction))
-                            : "<nil>");
-                fprintf(output, "platformWindowPresenter=%s %p\n",
-                        platformWindowPresenter != nil
-                            ? class_getName(object_getClass(platformWindowPresenter))
-                            : "<nil>",
-                        platformWindowPresenter);
-                fprintf(output, "promptToolsController=%s %p viewModel=%s %p "
-                        "routingOverridesViewModel=%s %p\n",
-                        promptToolsController != nil
-                            ? class_getName(object_getClass(promptToolsController))
-                            : "<nil>",
-                        promptToolsController,
-                        promptToolsViewModel != nil
-                            ? class_getName(object_getClass(promptToolsViewModel))
-                            : "<nil>",
-                        promptToolsViewModel,
-                        routingOverridesViewModel != nil
-                            ? class_getName(object_getClass(routingOverridesViewModel))
-                            : "<nil>",
-                        routingOverridesViewModel);
-                fclose(output);
-                NSString *swiftLogPath = [
-                    [NSString stringWithUTF8String:path]
-                    stringByAppendingString:@".swift"];
-                dia_custom_swift_log_object((const void *)applicationController,
-                                            "applicationController",
-                                            [swiftLogPath fileSystemRepresentation]);
-                dia_custom_swift_log_object((const void *)menuOrchestrator,
-                                            "menuOrchestrator",
-                                            [swiftLogPath fileSystemRepresentation]);
-                for (NSWindow *candidate in windows) {
-                    if (![NSStringFromClass([candidate class])
-                            containsString:@"PlatformWindow"]) {
-                        continue;
-                    }
-                    dia_custom_swift_log_object(
-                        (const void *)candidate,
-                        "platformWindow",
-                        [swiftLogPath fileSystemRepresentation]);
-                    dia_custom_swift_log_object(
-                        (const void *)[candidate windowController],
-                        "platformWindowController",
-                        [swiftLogPath fileSystemRepresentation]);
-                }
-                dia_custom_swift_log_object((const void *)modelPickerOwner,
-                                            "toolbarView",
-                                            [swiftLogPath fileSystemRepresentation]);
-                dia_custom_swift_log_object((const void *)platformWindowPresenter,
-                                            "platformWindowPresenter",
-                                            [swiftLogPath fileSystemRepresentation]);
-                dia_custom_swift_log_object((const void *)promptToolsController,
-                                            "promptToolsController",
-                                            [swiftLogPath fileSystemRepresentation]);
-            }
-        }
+        dia_custom_install_custom_model_picker(
+            dia_custom_developer_menu_controller,
+            @selector(selectCustomModel:));
+        dia_custom_schedule_model_picker_attempts(
+            dia_custom_developer_menu_controller,
+            @selector(selectCustomModel:),
+            0);
+        [[NSNotificationCenter defaultCenter]
+            addObserver:dia_custom_developer_menu_controller
+               selector:@selector(windowBecameKey:)
+                   name:NSWindowDidBecomeKeyNotification
+                 object:nil];
+        dia_custom_log_status(@"developer-menu-installed");
+
     });
 }
 
@@ -954,8 +936,6 @@ static void dia_custom_install_runtime_overrides(void) {
         return;
     }
 
-    dia_custom_log_runtime();
-    dia_custom_schedule_menu_log();
     dia_custom_schedule_network_log();
     dia_custom_close_account_window();
     dia_custom_install_developer_menu();
