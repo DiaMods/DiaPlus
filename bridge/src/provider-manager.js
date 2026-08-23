@@ -338,6 +338,32 @@ export class ProviderManager {
     return this.refreshCatalog({ force: true });
   }
 
+  async setLocalMemoryEnabled(enabled) {
+    if (typeof enabled !== "boolean") {
+      throw new Error("enabled must be a boolean");
+    }
+    const current = await this.configStore.load();
+    const updated = await this.configStore.update({
+      ...current,
+      localMemory: { ...current.localMemory, enabled },
+    });
+    if (enabled) await this.refreshLocalMemory(updated);
+    return updated.localMemory;
+  }
+
+  async setLocalMemoryRetention(retentionDays) {
+    if (!Number.isInteger(retentionDays) || retentionDays < 0 || retentionDays > 3_650) {
+      throw new Error("retentionDays must be an integer from 0 to 3650");
+    }
+    const current = await this.configStore.load();
+    const updated = await this.configStore.update({
+      ...current,
+      localMemory: { ...current.localMemory, retentionDays },
+    });
+    const stats = await this.memoryStore.prune(updated.localMemory);
+    return { localMemory: updated.localMemory, stats };
+  }
+
   async selectedProvider() {
     const config = await this.configStore.load();
     const { providerID, model } = splitModelKey(config.selectedModel);
@@ -466,7 +492,12 @@ export class ProviderManager {
       currentPayload = appendToolResults(currentPayload, localCalls, localResults);
     }
 
-    if (config.localMemory.enabled && config.localMemory.captureChats && result?.kind === "final") {
+    const finalConfig = await this.configStore.load();
+    if (
+      finalConfig.localMemory.enabled &&
+      finalConfig.localMemory.captureChats &&
+      result?.kind === "final"
+    ) {
       await this.memoryStore.recordConversation(payload, result).catch((error) => {
         process.stderr.write(`Local chat memory write failed: ${String(error?.message ?? error)}\n`);
       });

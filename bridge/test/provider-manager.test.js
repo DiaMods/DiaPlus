@@ -81,6 +81,81 @@ test("provider catalog discovers Ollama and routes local memory before native to
   memory.database.close();
 });
 
+test("local memory toggle controls tools, retrieval, and future chat capture", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-memory-toggle-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+
+  const presentedTools = [];
+  let releaseInFlight;
+  let enteredInFlight;
+  const inFlightEntered = new Promise((resolve) => { enteredInFlight = resolve; });
+  manager.runProvider = async (_provider, { tools, payload }) => {
+    presentedTools.push(tools.map((tool) => tool.name));
+    if (JSON.stringify(payload.messages).includes("in-flight-disable-marker")) {
+      enteredInFlight();
+      await new Promise((resolve) => { releaseInFlight = resolve; });
+    }
+    return {
+      kind: "final",
+      text: "Captured only when local memory is enabled.",
+      toolCalls: [],
+      model: "gpt-5.6-luna",
+    };
+  };
+  const run = (marker) => manager.run({
+    messages: [{ role: "user", content: marker }],
+    tools: [],
+  });
+
+  await run("enabled-memory-marker");
+  assert.ok(presentedTools.at(-1).includes("mcp__dia-tools__memory_search"));
+  const enabledCount = (await memory.stats()).total;
+  assert.ok(enabledCount > 0);
+
+  const inFlightRun = run("in-flight-disable-marker");
+  await inFlightEntered;
+  assert.equal((await manager.setLocalMemoryEnabled(false)).enabled, false);
+  releaseInFlight();
+  await inFlightRun;
+  assert.ok(presentedTools.at(-1).includes("mcp__dia-tools__memory_search"));
+  assert.equal((await memory.stats()).total, enabledCount);
+
+  await run("disabled-memory-marker");
+  assert.equal(presentedTools.at(-1).includes("mcp__dia-tools__memory_search"), false);
+  assert.equal((await memory.stats()).total, enabledCount);
+  await assert.rejects(
+    manager.localTools.execute({
+      name: "mcp__dia-tools__memory_search",
+      input: { query: "enabled-memory-marker" },
+    }),
+    /local memory is disabled/,
+  );
+
+  assert.equal((await manager.setLocalMemoryEnabled(true)).enabled, true);
+  await run("re-enabled-memory-marker");
+  assert.ok((await memory.stats()).total > enabledCount);
+
+  const retention = await manager.setLocalMemoryRetention(7);
+  assert.equal(retention.localMemory.retentionDays, 7);
+  assert.equal(retention.stats.total, (await memory.stats()).total);
+  await assert.rejects(() => manager.setLocalMemoryRetention(-1), /retentionDays/);
+  memory.database.close();
+});
+
 test("Report requests reject premature uploads, normalize Write paths, and upload", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-report-manager-"));
   const config = new ConfigStore(resolve(directory, "config.json"));

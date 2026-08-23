@@ -40,6 +40,8 @@ export class LocalToolRegistry {
 
   async execute(call) {
     if (isLocalMemoryTool(call.name)) {
+      const config = await this.configStore.load();
+      if (!config.localMemory.enabled) throw new Error("local memory is disabled");
       return executeLocalMemoryTool(this.memoryStore, call.name, call.input);
     }
     if (isLocalWebTool(call.name)) {

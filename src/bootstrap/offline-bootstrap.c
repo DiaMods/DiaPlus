@@ -479,6 +479,512 @@ static NSArray<NSDictionary *> *dia_custom_catalog_models(NSDictionary *catalog)
     return [models isKindOfClass:[NSArray class]] ? models : @[];
 }
 
+// -2 means the localhost bridge could not be reached, -1 means its state has
+// not loaded yet, 0 means disabled, and 1 means enabled.
+static NSInteger dia_custom_local_memory_state = -1;
+static BOOL dia_custom_local_memory_request_in_flight = NO;
+static NSDate *dia_custom_local_memory_last_refresh;
+static NSInteger dia_custom_local_memory_retention_days = 0;
+static NSInteger dia_custom_local_memory_entry_count = -1;
+
+static NSURL *dia_custom_local_api_url(NSString *path) {
+    const char *rawURL = getenv("DIA_CUSTOM_SETTINGS_URL");
+    NSString *value = rawURL != NULL
+        ? [NSString stringWithUTF8String:rawURL]
+        : @"http://127.0.0.1:8765/settings";
+    NSURLComponents *components = [NSURLComponents componentsWithString:value];
+    NSString *host = [[components host] lowercaseString];
+    if (!([host isEqualToString:@"127.0.0.1"] ||
+          [host isEqualToString:@"localhost"] ||
+          [host isEqualToString:@"::1"])) {
+        components = [NSURLComponents
+            componentsWithString:@"http://127.0.0.1:8765/settings"];
+    }
+    components.path = path;
+    components.query = nil;
+    components.fragment = nil;
+    return components.URL;
+}
+
+static NSString *dia_custom_memory_retention_title(NSInteger days) {
+    if (days <= 0) {
+        return @"Forever";
+    }
+    if (days == 1) {
+        return @"1 Day";
+    }
+    return [NSString stringWithFormat:@"%ld Days", (long)days];
+}
+
+static NSString *dia_custom_active_profile_name(void) {
+    static NSString *cachedName;
+    if (cachedName != nil) {
+        return cachedName;
+    }
+    cachedName = @"Current Profile";
+    const char *rawProfile = getenv("DIA_CUSTOM_PROFILE");
+    if (rawProfile == NULL || rawProfile[0] == '\0') {
+        return cachedName;
+    }
+    NSString *profile = [NSString stringWithUTF8String:rawProfile];
+    NSString *path = [profile stringByAppendingPathComponent:
+        @"User Data/Local State"];
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    NSDictionary *root = data != nil
+        ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+        : nil;
+    NSDictionary *profileState = [root[@"profile"]
+        isKindOfClass:[NSDictionary class]] ? root[@"profile"] : nil;
+    NSDictionary *cache = [profileState[@"info_cache"]
+        isKindOfClass:[NSDictionary class]] ? profileState[@"info_cache"] : nil;
+    NSArray *active = [profileState[@"last_active_profiles"]
+        isKindOfClass:[NSArray class]] ? profileState[@"last_active_profiles"] : nil;
+    NSString *key = [active.firstObject isKindOfClass:[NSString class]]
+        ? active.firstObject : nil;
+    NSDictionary *record = [cache[key] isKindOfClass:[NSDictionary class]]
+        ? cache[key] : nil;
+    NSString *name = [record[@"name"] isKindOfClass:[NSString class]]
+        ? record[@"name"] : nil;
+    if (name.length > 0) {
+        cachedName = [name copy];
+    }
+    return cachedName;
+}
+
+static NSView *dia_custom_find_identified_view(NSView *view,
+                                                NSString *identifier) {
+    if (view == nil || identifier == nil) {
+        return nil;
+    }
+    if ([[[view identifier] description] isEqualToString:identifier]) {
+        return view;
+    }
+    for (NSView *child in [view subviews]) {
+        NSView *match = dia_custom_find_identified_view(child, identifier);
+        if (match != nil) {
+            return match;
+        }
+    }
+    return nil;
+}
+
+static NSView *dia_custom_memory_content_host(NSView *view) {
+    NSView *fallback = nil;
+    for (NSView *candidate = view; candidate != nil;
+         candidate = [candidate superview]) {
+        if ([[candidate superview] isKindOfClass:[NSSplitView class]]) {
+            return candidate;
+        }
+        if (fallback == nil && NSWidth(candidate.bounds) >= 420.0 &&
+            NSHeight(candidate.bounds) >= 260.0) {
+            fallback = candidate;
+        }
+    }
+    return fallback;
+}
+
+static void dia_custom_populate_retention_popup(NSPopUpButton *popup) {
+    if (popup == nil) {
+        return;
+    }
+    NSArray<NSNumber *> *choices = @[@0, @1, @7, @30, @90, @365];
+    if (dia_custom_local_memory_retention_days > 0 &&
+        ![choices containsObject:@(dia_custom_local_memory_retention_days)]) {
+        choices = [choices arrayByAddingObject:
+            @(dia_custom_local_memory_retention_days)];
+    }
+    choices = [choices sortedArrayUsingSelector:@selector(compare:)];
+    [popup removeAllItems];
+    for (NSNumber *days in choices) {
+        [popup addItemWithTitle:
+            dia_custom_memory_retention_title([days integerValue])];
+        [[popup lastItem] setRepresentedObject:days];
+    }
+    for (NSMenuItem *item in [popup itemArray]) {
+        if ([[item representedObject] integerValue] ==
+            dia_custom_local_memory_retention_days) {
+            [popup selectItem:item];
+            break;
+        }
+    }
+}
+
+static NSTextField *dia_custom_memory_label(NSString *value,
+                                             NSFont *font,
+                                             NSColor *color) {
+    NSTextField *label = [NSTextField labelWithString:value ?: @""];
+    label.font = font;
+    label.textColor = color;
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    return label;
+}
+
+static void dia_custom_update_memory_panel(NSView *panel,
+                                            id target,
+                                            SEL toggleAction) {
+    if (panel == nil) {
+        return;
+    }
+    NSTextField *dot = (NSTextField *)dia_custom_find_identified_view(
+        panel, @"DiaCustomMemoryProfileDot");
+    if ([dot isKindOfClass:[NSTextField class]]) {
+        dot.textColor = dia_custom_local_memory_state == 1
+            ? [NSColor systemGreenColor] : [NSColor systemGrayColor];
+    }
+    NSPopUpButton *retention = (NSPopUpButton *)dia_custom_find_identified_view(
+        panel, @"DiaCustomMemoryRetention");
+    if ([retention isKindOfClass:[NSPopUpButton class]]) {
+        retention.target = target;
+        retention.action = NSSelectorFromString(@"setLocalMemoryRetention:");
+        retention.enabled = dia_custom_local_memory_state != -2;
+        dia_custom_populate_retention_popup(retention);
+    }
+    NSTextField *summary = (NSTextField *)dia_custom_find_identified_view(
+        panel, @"DiaCustomMemorySummary");
+    if ([summary isKindOfClass:[NSTextField class]]) {
+        if (dia_custom_local_memory_entry_count < 0) {
+            summary.stringValue = @"Loading local memory details…";
+        } else if (dia_custom_local_memory_state == 0) {
+            summary.stringValue = [NSString stringWithFormat:
+                @"%ld items retained locally while capture is off.",
+                (long)dia_custom_local_memory_entry_count];
+        } else {
+            summary.stringValue = [NSString stringWithFormat:
+                @"%ld items stored locally. Retention is applied on this Mac.",
+                (long)dia_custom_local_memory_entry_count];
+        }
+    }
+    NSButton *reset = (NSButton *)dia_custom_find_identified_view(
+        panel, @"DiaCustomResetMemoryButton");
+    if ([reset isKindOfClass:[NSButton class]]) {
+        reset.target = target;
+        reset.action = NSSelectorFromString(@"resetLocalMemory:");
+        reset.enabled = dia_custom_local_memory_state != -2 &&
+            dia_custom_local_memory_entry_count > 0;
+    }
+    NSButton *footer = (NSButton *)dia_custom_find_identified_view(
+        panel, @"DiaCustomMemoryFooterButton");
+    if ([footer isKindOfClass:[NSButton class]]) {
+        footer.target = target;
+        footer.action = toggleAction;
+        footer.enabled = dia_custom_local_memory_state == 0 ||
+            dia_custom_local_memory_state == 1;
+        footer.title = dia_custom_local_memory_state == 1
+            ? @"Disable Memory" : dia_custom_local_memory_state == 0
+                ? @"Enable Memory" : @"Memory Unavailable";
+        footer.bezelColor = dia_custom_local_memory_state == 1
+            ? [NSColor colorWithCalibratedRed:0.40
+                                         green:0.13
+                                          blue:0.13
+                                         alpha:1.0]
+            : [NSColor controlAccentColor];
+        footer.contentTintColor = [NSColor whiteColor];
+    }
+}
+
+static void dia_custom_install_memory_status_label(NSButton *button) {
+    NSView *parent = [button superview];
+    if (parent == nil) {
+        return;
+    }
+    NSTextField *status = (NSTextField *)dia_custom_find_identified_view(
+        parent, @"DiaCustomLocalMemoryStatus");
+    if (![status isKindOfClass:[NSTextField class]]) {
+        status = dia_custom_memory_label(
+            @"Checking…",
+            [NSFont systemFontOfSize:13.0 weight:NSFontWeightRegular],
+            [NSColor secondaryLabelColor]);
+        status.identifier = @"DiaCustomLocalMemoryStatus";
+        [parent addSubview:status];
+        [NSLayoutConstraint activateConstraints:@[
+            [status.trailingAnchor constraintEqualToAnchor:button.trailingAnchor],
+            [status.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
+        ]];
+    }
+    status.stringValue = dia_custom_local_memory_state == 1
+        ? @"✓ On" : dia_custom_local_memory_state == 0
+            ? @"Off" : dia_custom_local_memory_state == -2
+                ? @"Unavailable" : @"Checking…";
+    status.hidden = NO;
+    // Keep the native control in layout so SwiftUI preserves the trailing
+    // status position, but make its drawing and accessibility inert.
+    button.hidden = NO;
+    button.enabled = NO;
+    button.alphaValue = 0.0;
+    [button setAccessibilityElement:NO];
+    if ([button respondsToSelector:@selector(setAccessibilityHidden:)]) {
+        [button setAccessibilityHidden:YES];
+    }
+}
+
+static NSView *dia_custom_install_memory_panel(NSButton *button,
+                                                NSTextField *explanation,
+                                                id target,
+                                                SEL toggleAction) {
+    if (button == nil || explanation == nil) {
+        return nil;
+    }
+    NSView *host = dia_custom_memory_content_host(button);
+    if (host == nil || ![explanation isDescendantOf:host]) {
+        return nil;
+    }
+    NSView *existing = dia_custom_find_identified_view(
+        host, @"DiaCustomLocalMemoryPanel");
+    if (existing != nil) {
+        dia_custom_update_memory_panel(existing, target, toggleAction);
+        return existing;
+    }
+
+    NSView *panel = [[NSView alloc] initWithFrame:NSZeroRect];
+    panel.identifier = @"DiaCustomLocalMemoryPanel";
+    panel.translatesAutoresizingMaskIntoConstraints = NO;
+    [host addSubview:panel];
+
+    NSTextField *heading = dia_custom_memory_label(
+        @"Profile Settings", [NSFont systemFontOfSize:13.0 weight:NSFontWeightSemibold],
+        [NSColor secondaryLabelColor]);
+    NSView *card = [[NSView alloc] initWithFrame:NSZeroRect];
+    card.identifier = @"DiaCustomMemoryProfileCard";
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.wantsLayer = YES;
+    card.layer.cornerRadius = 10.0;
+    card.layer.backgroundColor = [[NSColor controlBackgroundColor] CGColor];
+    NSTextField *dot = dia_custom_memory_label(
+        @"●", [NSFont systemFontOfSize:13.0 weight:NSFontWeightRegular],
+        [NSColor systemGreenColor]);
+    dot.identifier = @"DiaCustomMemoryProfileDot";
+    NSTextField *profile = dia_custom_memory_label(
+        dia_custom_active_profile_name(),
+        [NSFont systemFontOfSize:13.0 weight:NSFontWeightSemibold],
+        [NSColor labelColor]);
+    NSPopUpButton *retention = [[NSPopUpButton alloc]
+        initWithFrame:NSZeroRect pullsDown:NO];
+    retention.identifier = @"DiaCustomMemoryRetention";
+    retention.translatesAutoresizingMaskIntoConstraints = NO;
+    retention.controlSize = NSControlSizeSmall;
+    retention.bordered = NO;
+    retention.toolTip = @"Choose how long Dia Custom keeps local memory";
+    [card addSubview:dot];
+    [card addSubview:profile];
+    [card addSubview:retention];
+
+    NSTextField *summary = dia_custom_memory_label(
+        @"Loading local memory details…",
+        [NSFont systemFontOfSize:11.0 weight:NSFontWeightRegular],
+        [NSColor secondaryLabelColor]);
+    summary.identifier = @"DiaCustomMemorySummary";
+    NSButton *reset = [NSButton buttonWithTitle:@"Reset Memory…"
+                                         target:target
+                                         action:NSSelectorFromString(@"resetLocalMemory:")];
+    reset.identifier = @"DiaCustomResetMemoryButton";
+    reset.translatesAutoresizingMaskIntoConstraints = NO;
+    reset.bezelStyle = NSBezelStyleRounded;
+    NSButton *footer = [NSButton buttonWithTitle:@"Disable Memory"
+                                          target:target
+                                          action:toggleAction];
+    footer.identifier = @"DiaCustomMemoryFooterButton";
+    footer.translatesAutoresizingMaskIntoConstraints = NO;
+    footer.bezelStyle = NSBezelStyleRounded;
+
+    [panel addSubview:heading];
+    [panel addSubview:card];
+    [panel addSubview:summary];
+    [panel addSubview:reset];
+    [panel addSubview:footer];
+    NSView *windowContent = [[button window] contentView] ?: host;
+    [NSLayoutConstraint activateConstraints:@[
+        [panel.leadingAnchor constraintEqualToAnchor:host.leadingAnchor constant:20.0],
+        [panel.trailingAnchor constraintEqualToAnchor:host.trailingAnchor constant:-20.0],
+        [panel.topAnchor constraintEqualToAnchor:explanation.bottomAnchor constant:18.0],
+        [panel.bottomAnchor constraintEqualToAnchor:windowContent.bottomAnchor constant:-18.0],
+        [heading.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
+        [heading.topAnchor constraintEqualToAnchor:panel.topAnchor],
+        [card.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor],
+        [card.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
+        [card.topAnchor constraintEqualToAnchor:heading.bottomAnchor constant:8.0],
+        [card.heightAnchor constraintEqualToConstant:44.0],
+        [dot.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [dot.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
+        [profile.leadingAnchor constraintEqualToAnchor:dot.trailingAnchor constant:8.0],
+        [profile.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
+        [retention.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-10.0],
+        [retention.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
+        [retention.widthAnchor constraintGreaterThanOrEqualToConstant:84.0],
+        [summary.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:2.0],
+        [summary.topAnchor constraintEqualToAnchor:card.bottomAnchor constant:8.0],
+        [reset.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor],
+        [footer.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor],
+        [footer.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor],
+        [reset.trailingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:-12.0],
+    ]];
+    dia_custom_update_memory_panel(panel, target, toggleAction);
+    return panel;
+}
+
+static BOOL dia_custom_update_memory_controls_in_view(NSView *view,
+                                                       id target,
+                                                       SEL action) {
+    if (view == nil) {
+        return NO;
+    }
+    BOOL found = NO;
+    NSString *identifier = [[view identifier] description];
+    if ([view isKindOfClass:[NSButton class]]) {
+        NSButton *button = (NSButton *)view;
+        NSString *title = [button title];
+        BOOL isUnclaimedNativeButton = identifier.length == 0 &&
+            ([title isEqualToString:@"Enable Memory"] ||
+             [title isEqualToString:@"Disable Memory"]);
+        if ([identifier isEqualToString:@"DiaCustomLocalMemoryButton"] ||
+            isUnclaimedNativeButton) {
+            found = YES;
+            [button setIdentifier:@"DiaCustomLocalMemoryButton"];
+            [button setTarget:target];
+            [button setAction:action];
+            [button setToolTip:@"Control Dia Custom's private local memory"];
+            [button setBordered:NO];
+            [button setContentTintColor:[NSColor secondaryLabelColor]];
+            NSString *desiredTitle = nil;
+            BOOL desiredEnabled = NO;
+            if (dia_custom_local_memory_state == 1) {
+                desiredTitle = @"✓ On";
+                desiredEnabled = YES;
+            } else if (dia_custom_local_memory_state == 0) {
+                desiredTitle = @"Off";
+                desiredEnabled = YES;
+            } else if (dia_custom_local_memory_state == -2) {
+                desiredTitle = @"Unavailable";
+            } else {
+                desiredTitle = @"Checking…";
+            }
+            if (![[button title] isEqualToString:desiredTitle]) {
+                [button setTitle:desiredTitle];
+            }
+            if ([button isEnabled] != desiredEnabled) {
+                [button setEnabled:desiredEnabled];
+            }
+        }
+    }
+    if ([view isKindOfClass:[NSTextField class]]) {
+        NSTextField *label = (NSTextField *)view;
+        NSString *text = [label stringValue];
+        if ([identifier isEqualToString:@"DiaCustomLocalMemoryExplanation"] ||
+            [[text lowercaseString] containsString:@"summarized on our servers"]) {
+            found = YES;
+            [label setIdentifier:@"DiaCustomLocalMemoryExplanation"];
+            NSString *desiredText = nil;
+            if (dia_custom_local_memory_state == 1) {
+                desiredText = @"Dia Custom remembers recent sites, chats, and preferences in an owner-only database on this Mac. Nothing is summarized by or sent to Dia.";
+            } else if (dia_custom_local_memory_state == 0) {
+                desiredText = @"Dia Custom local memory is off. New browsing activity and chats will not be saved; existing local memories are retained. Nothing is sent to Dia.";
+            } else {
+                desiredText = @"Checking Dia Custom's private local memory setting. Nothing is sent to Dia.";
+            }
+            if (![[label stringValue] isEqualToString:desiredText]) {
+                [label setStringValue:desiredText];
+            }
+        }
+    }
+    for (NSView *child in [view subviews]) {
+        found = dia_custom_update_memory_controls_in_view(
+            child, target, action) || found;
+    }
+    return found;
+}
+
+static BOOL dia_custom_refresh_memory_controls(id target, SEL action) {
+    BOOL found = NO;
+    for (NSWindow *window in [NSApp windows]) {
+        NSView *content = [window contentView];
+        BOOL windowFound = dia_custom_update_memory_controls_in_view(
+            content, target, action);
+        if (windowFound) {
+            NSButton *button = (NSButton *)dia_custom_find_identified_view(
+                content, @"DiaCustomLocalMemoryButton");
+            NSTextField *explanation = (NSTextField *)
+                dia_custom_find_identified_view(
+                    content, @"DiaCustomLocalMemoryExplanation");
+            if ([button isKindOfClass:[NSButton class]] &&
+                [explanation isKindOfClass:[NSTextField class]]) {
+                NSView *panel = dia_custom_install_memory_panel(
+                    button, explanation, target, action);
+                if (panel != nil) {
+                    // The official enabled-state pane presents this as a
+                    // passive status; destructive/enable actions live in the
+                    // footer where they cannot be clicked accidentally.
+                    button.enabled = NO;
+                    button.bordered = NO;
+                    button.bezelColor = [NSColor clearColor];
+                    button.contentTintColor = [NSColor secondaryLabelColor];
+                    button.alphaValue = 1.0;
+                    dia_custom_install_memory_status_label(button);
+                }
+            }
+        }
+        found = windowFound || found;
+    }
+    return found;
+}
+
+static void dia_custom_fetch_local_memory_state(id target,
+                                                SEL action,
+                                                BOOL force) {
+    if (target == nil || dia_custom_local_memory_request_in_flight) {
+        return;
+    }
+    if (!force && dia_custom_local_memory_last_refresh != nil &&
+        [dia_custom_local_memory_last_refresh timeIntervalSinceNow] > -5.0) {
+        return;
+    }
+    NSURL *url = dia_custom_local_api_url(@"/api/memory/enabled");
+    if (url == nil) {
+        dia_custom_local_memory_state = -2;
+        dia_custom_refresh_memory_controls(target, action);
+        return;
+    }
+    dia_custom_local_memory_request_in_flight = YES;
+    [[[NSURLSession sharedSession]
+        dataTaskWithURL:url
+      completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
+                ? [(NSHTTPURLResponse *)response statusCode] : 0;
+            NSDictionary *value = data != nil
+                ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+                : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                dia_custom_local_memory_request_in_flight = NO;
+                dia_custom_local_memory_last_refresh = [NSDate date];
+                if (error == nil && status >= 200 && status < 300 &&
+                    [value[@"enabled"] respondsToSelector:@selector(boolValue)]) {
+                    dia_custom_local_memory_state = [value[@"enabled"] boolValue]
+                        ? 1 : 0;
+                    if ([value[@"retentionDays"] respondsToSelector:
+                        @selector(integerValue)]) {
+                        dia_custom_local_memory_retention_days =
+                            [value[@"retentionDays"] integerValue];
+                    }
+                    NSDictionary *stats = [value[@"stats"]
+                        isKindOfClass:[NSDictionary class]]
+                        ? value[@"stats"] : nil;
+                    if ([stats[@"total"] respondsToSelector:
+                        @selector(integerValue)]) {
+                        dia_custom_local_memory_entry_count =
+                            [stats[@"total"] integerValue];
+                    }
+                } else {
+                    dia_custom_local_memory_state = -2;
+                }
+                dia_custom_refresh_memory_controls(target, action);
+            });
+        }] resume];
+}
+
+static void dia_custom_install_local_memory_controls(id target, SEL action) {
+    if (dia_custom_refresh_memory_controls(target, action)) {
+        dia_custom_fetch_local_memory_state(target, action, NO);
+    }
+}
+
 static BOOL dia_custom_model_popup_needs_refresh(NSPopUpButton *popup) {
     NSDictionary *catalog = dia_custom_model_catalog();
     NSArray<NSDictionary *> *models = dia_custom_catalog_models(catalog);
@@ -873,17 +1379,20 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
     }
 }
 
-static BOOL dia_custom_model_picker_refresh_pending = NO;
+static BOOL dia_custom_interface_refresh_pending = NO;
 
-static void dia_custom_request_model_picker_refresh(id target, SEL action) {
-    if (target == nil || dia_custom_model_picker_refresh_pending) {
+static void dia_custom_request_interface_refresh(id target,
+                                                 SEL modelAction,
+                                                 SEL memoryAction) {
+    if (target == nil || dia_custom_interface_refresh_pending) {
         return;
     }
-    dia_custom_model_picker_refresh_pending = YES;
+    dia_custom_interface_refresh_pending = YES;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 150 * NSEC_PER_MSEC),
                    dispatch_get_main_queue(), ^{
-        dia_custom_model_picker_refresh_pending = NO;
-        dia_custom_install_custom_model_picker(target, action);
+        dia_custom_interface_refresh_pending = NO;
+        dia_custom_install_custom_model_picker(target, modelAction);
+        dia_custom_install_local_memory_controls(target, memoryAction);
     });
 }
 
@@ -904,6 +1413,9 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 - (void)openPromptTools:(id)sender;
 - (void)openNativeModelPicker:(id)sender;
 - (void)selectCustomModel:(id)sender;
+- (void)toggleLocalMemory:(id)sender;
+- (void)setLocalMemoryRetention:(id)sender;
+- (void)resetLocalMemory:(id)sender;
 - (void)openModelSettings:(id)sender;
 - (void)windowBecameKey:(NSNotification *)notification;
 - (void)windowDidUpdate:(NSNotification *)notification;
@@ -999,12 +1511,240 @@ static void dia_custom_schedule_model_picker_attempts(id target,
                    dispatch_get_main_queue(), ^{
         dia_custom_install_custom_model_picker(self,
             @selector(selectCustomModel:));
+        dia_custom_install_local_memory_controls(self,
+            @selector(toggleLocalMemory:));
     });
 }
 
 - (void)windowDidUpdate:(NSNotification *)notification {
-    dia_custom_request_model_picker_refresh(self,
-        @selector(selectCustomModel:));
+    dia_custom_request_interface_refresh(self,
+        @selector(selectCustomModel:),
+        @selector(toggleLocalMemory:));
+}
+
+- (void)toggleLocalMemory:(id)sender {
+    if (![sender isKindOfClass:[NSButton class]]) {
+        return;
+    }
+    if (dia_custom_local_memory_state != 0 &&
+        dia_custom_local_memory_state != 1) {
+        dia_custom_local_memory_state = -1;
+        dia_custom_refresh_memory_controls(self,
+            @selector(toggleLocalMemory:));
+        dia_custom_fetch_local_memory_state(self,
+            @selector(toggleLocalMemory:), YES);
+        return;
+    }
+
+    NSInteger previousState = dia_custom_local_memory_state;
+    BOOL requestedState = previousState == 0;
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSString *token = [catalog[@"selectionToken"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectionToken"] : nil;
+    NSURL *url = dia_custom_local_api_url(@"/api/memory/enabled");
+    if (token == nil || url == nil) {
+        NSBeep();
+        return;
+    }
+
+    NSButton *button = (NSButton *)sender;
+    [button setEnabled:NO];
+    [button setTitle:@"Saving…"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"PUT";
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [request setValue:token forHTTPHeaderField:@"x-dia-custom-token"];
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
+        @"enabled": @(requestedState),
+    } options:0 error:nil];
+    DiaCustomDeveloperMenuController *controller = self;
+    [[[NSURLSession sharedSession]
+        dataTaskWithRequest:request
+         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
+                ? [(NSHTTPURLResponse *)response statusCode] : 0;
+            NSDictionary *value = data != nil
+                ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+                : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                DiaCustomDeveloperMenuController *strongSelf = controller;
+                dia_custom_local_memory_last_refresh = [NSDate date];
+                if (error == nil && status >= 200 && status < 300 &&
+                    [value[@"enabled"] respondsToSelector:@selector(boolValue)]) {
+                    dia_custom_local_memory_state = [value[@"enabled"] boolValue]
+                        ? 1 : 0;
+                } else {
+                    dia_custom_local_memory_state = previousState;
+                    NSString *message = error.localizedDescription;
+                    if (message == nil && [value[@"error"] isKindOfClass:[NSString class]]) {
+                        message = value[@"error"];
+                    }
+                    NSAlert *alert = [[NSAlert alloc] init];
+                    alert.messageText = @"Could not change local memory";
+                    alert.informativeText = message ?:
+                        @"The localhost bridge rejected the memory setting.";
+                    [alert runModal];
+                }
+                dia_custom_refresh_memory_controls(strongSelf,
+                    @selector(toggleLocalMemory:));
+            });
+        }] resume];
+}
+
+- (void)setLocalMemoryRetention:(id)sender {
+    if (![sender isKindOfClass:[NSPopUpButton class]]) {
+        return;
+    }
+    NSPopUpButton *popup = (NSPopUpButton *)sender;
+    NSNumber *selection = [[[popup selectedItem] representedObject]
+        isKindOfClass:[NSNumber class]]
+        ? [[popup selectedItem] representedObject] : nil;
+    if (selection == nil) {
+        dia_custom_populate_retention_popup(popup);
+        return;
+    }
+    NSInteger requestedDays = [selection integerValue];
+    NSInteger previousDays = dia_custom_local_memory_retention_days;
+    if (requestedDays == previousDays) {
+        return;
+    }
+    if (requestedDays > 0 &&
+        (previousDays == 0 || requestedDays < previousDays)) {
+        NSAlert *confirmation = [[NSAlert alloc] init];
+        confirmation.alertStyle = NSAlertStyleWarning;
+        confirmation.messageText = @"Shorten local memory retention?";
+        confirmation.informativeText = [NSString stringWithFormat:
+            @"Dia Custom will permanently remove local memory older than %@. This does not contact Dia.",
+            dia_custom_memory_retention_title(requestedDays)];
+        [confirmation addButtonWithTitle:@"Apply Retention"];
+        [confirmation addButtonWithTitle:@"Cancel"];
+        if ([confirmation runModal] != NSAlertFirstButtonReturn) {
+            dia_custom_populate_retention_popup(popup);
+            return;
+        }
+    }
+
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSString *token = [catalog[@"selectionToken"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectionToken"] : nil;
+    NSURL *url = dia_custom_local_api_url(@"/api/memory/retention");
+    if (token == nil || url == nil) {
+        NSBeep();
+        dia_custom_populate_retention_popup(popup);
+        return;
+    }
+    popup.enabled = NO;
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"PUT";
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [request setValue:token forHTTPHeaderField:@"x-dia-custom-token"];
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
+        @"retentionDays": @(requestedDays),
+    } options:0 error:nil];
+    DiaCustomDeveloperMenuController *controller = self;
+    [[[NSURLSession sharedSession]
+        dataTaskWithRequest:request
+         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
+                ? [(NSHTTPURLResponse *)response statusCode] : 0;
+            NSDictionary *value = data != nil
+                ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+                : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                DiaCustomDeveloperMenuController *strongSelf = controller;
+                NSDictionary *localMemory = [value[@"localMemory"]
+                    isKindOfClass:[NSDictionary class]]
+                    ? value[@"localMemory"] : nil;
+                NSDictionary *stats = [value[@"stats"]
+                    isKindOfClass:[NSDictionary class]] ? value[@"stats"] : nil;
+                if (error == nil && status >= 200 && status < 300 &&
+                    [localMemory[@"retentionDays"] respondsToSelector:
+                        @selector(integerValue)]) {
+                    dia_custom_local_memory_retention_days =
+                        [localMemory[@"retentionDays"] integerValue];
+                    if ([stats[@"total"] respondsToSelector:
+                        @selector(integerValue)]) {
+                        dia_custom_local_memory_entry_count =
+                            [stats[@"total"] integerValue];
+                    }
+                } else {
+                    dia_custom_local_memory_retention_days = previousDays;
+                    NSString *message = error.localizedDescription;
+                    if (message == nil && [value[@"error"]
+                        isKindOfClass:[NSString class]]) {
+                        message = value[@"error"];
+                    }
+                    NSAlert *alert = [[NSAlert alloc] init];
+                    alert.messageText = @"Could not change memory retention";
+                    alert.informativeText = message ?:
+                        @"The localhost bridge rejected the retention setting.";
+                    [alert runModal];
+                }
+                dia_custom_local_memory_last_refresh = [NSDate date];
+                dia_custom_refresh_memory_controls(strongSelf,
+                    @selector(toggleLocalMemory:));
+            });
+        }] resume];
+}
+
+- (void)resetLocalMemory:(id)sender {
+    NSAlert *confirmation = [[NSAlert alloc] init];
+    confirmation.alertStyle = NSAlertStyleWarning;
+    confirmation.messageText = @"Reset local Memory?";
+    confirmation.informativeText =
+        @"This permanently deletes Dia Custom browsing and chat memory on this Mac. Imported connector records are kept. Nothing is sent to Dia.";
+    [confirmation addButtonWithTitle:@"Reset Memory"];
+    [confirmation addButtonWithTitle:@"Cancel"];
+    if ([confirmation runModal] != NSAlertFirstButtonReturn) {
+        return;
+    }
+
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSString *token = [catalog[@"selectionToken"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectionToken"] : nil;
+    NSURL *url = dia_custom_local_api_url(@"/api/memory");
+    if (token == nil || url == nil) {
+        NSBeep();
+        return;
+    }
+    if ([sender respondsToSelector:@selector(setEnabled:)]) {
+        [sender setEnabled:NO];
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"DELETE";
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [request setValue:token forHTTPHeaderField:@"x-dia-custom-token"];
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
+        @"entryTypes": @[@"navigation", @"conversation"],
+    } options:0 error:nil];
+    DiaCustomDeveloperMenuController *controller = self;
+    [[[NSURLSession sharedSession]
+        dataTaskWithRequest:request
+         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
+                ? [(NSHTTPURLResponse *)response statusCode] : 0;
+            NSDictionary *value = data != nil
+                ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+                : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                DiaCustomDeveloperMenuController *strongSelf = controller;
+                if (error != nil || status < 200 || status >= 300) {
+                    NSString *message = error.localizedDescription;
+                    if (message == nil && [value[@"error"]
+                        isKindOfClass:[NSString class]]) {
+                        message = value[@"error"];
+                    }
+                    NSAlert *alert = [[NSAlert alloc] init];
+                    alert.messageText = @"Could not reset local Memory";
+                    alert.informativeText = message ?:
+                        @"The localhost bridge rejected the reset.";
+                    [alert runModal];
+                }
+                dia_custom_local_memory_last_refresh = nil;
+                dia_custom_fetch_local_memory_state(strongSelf,
+                    @selector(toggleLocalMemory:), YES);
+            });
+        }] resume];
 }
 
 - (void)openPromptTools:(id)sender {
@@ -1156,6 +1896,9 @@ static void dia_custom_install_developer_menu(void) {
         dia_custom_install_custom_model_picker(
             dia_custom_developer_menu_controller,
             @selector(selectCustomModel:));
+        dia_custom_install_local_memory_controls(
+            dia_custom_developer_menu_controller,
+            @selector(toggleLocalMemory:));
         dia_custom_schedule_model_picker_attempts(
             dia_custom_developer_menu_controller,
             @selector(selectCustomModel:),

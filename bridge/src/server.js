@@ -652,6 +652,48 @@ async function handleRequest(request, response) {
     return;
   }
 
+  if (request.method === "GET" && requestURL.pathname === "/api/memory/enabled") {
+    const config = await providerManager.configStore.load();
+    jsonResponse(response, 200, {
+      ...config.localMemory,
+      stats: await providerManager.memoryStore.stats(),
+    });
+    return;
+  }
+
+  if (request.method === "PUT" && requestURL.pathname === "/api/memory/enabled") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      const localMemory = await providerManager.setLocalMemoryEnabled(payload.enabled);
+      jsonResponse(response, 200, localMemory);
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "PUT" && requestURL.pathname === "/api/memory/retention") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      jsonResponse(
+        response,
+        200,
+        await providerManager.setLocalMemoryRetention(payload.retentionDays),
+      );
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
   if (request.method === "GET" && requestURL.pathname === "/api/credentials") {
     if (!await hasAdminToken(request)) {
       jsonResponse(response, 403, { error: "invalid local administration token" });

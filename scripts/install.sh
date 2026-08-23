@@ -45,15 +45,30 @@ else
   print -u2 "Apple Foundation Models helper was not built; other providers remain available."
 fi
 
+# A certificate-backed designated requirement stays stable across rebuilds, so
+# macOS can retain the user's TCC and Keychain decisions. Prefer Developer ID
+# when this Mac has one, while preserving an explicit/ad-hoc override for
+# contributors without a signing certificate.
+sign_identity="${DIA_CUSTOM_SIGN_IDENTITY:-}"
+if [[ -z "$sign_identity" ]]; then
+  sign_identity="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | \
+    /usr/bin/awk '/"Developer ID Application:/{print $2; exit}')"
+fi
+[[ -n "$sign_identity" ]] || sign_identity="-"
+
 # Sign the modified nested executable first, then seal the complete clone.
-codesign --force --sign - \
+codesign --force --sign "$sign_identity" \
   --entitlements "$project_dir/src/config/agent-runtime-entitlements.plist" \
   "$app/Contents/Resources/agent-server-resources/dist/handler"
-codesign --force --deep --sign - \
+codesign --force --deep --sign "$sign_identity" \
   --entitlements "$project_dir/src/config/clone-entitlements.plist" \
   "$app"
 codesign --verify --strict \
   "$app/Contents/Resources/agent-server-resources/dist/handler"
 codesign --verify --deep --strict "$app"
 
-print "Installed and signed Dia Custom patches in $app"
+if [[ "$sign_identity" == "-" ]]; then
+  print "Installed Dia Custom with an ad-hoc signature in $app"
+else
+  print "Installed Dia Custom with a stable certificate signature in $app"
+fi

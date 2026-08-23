@@ -61,7 +61,7 @@ Local memory is an owner-only SQLite database containing:
 
 Search combines FTS with Apple's on-device sentence embeddings when available. The settings page includes counts, JSON export, retention pruning, and deletion controls.
 
-Dia's native **Settings → Memory** pane controls Dia's account-backed cloud feature—the pane itself says activity is summarized on Dia's servers. It intentionally remains disabled in this server-free build and is not the status of Dia Custom's local index. Use **./dia-custom settings** to inspect and control local memory.
+Dia's native **Settings → Memory** pane is overridden in Dia Custom to operate this local index instead of Dia's account-backed service. It shows the active local profile, item count, retention choices, Reset Memory, and Disable Memory in the native layout. Turning it off immediately removes memory tools and stops future browsing-history, page-content, and chat capture; it does not delete memories already stored. Reset deletes browsing/chat memory only after confirmation, while imported connector records remain. No pane action contacts Dia. Use **./dia-custom settings** for export and more granular deletion.
 
 Connector JSON may be an array or `{ "records": [...] }`. Records can contain `id`, `title`/`name`/`subject`, `content`/`text`/`body`, `url`, `updatedAt`, `metadata`, and `kind: "person"`. Imports are local snapshots, not live account sync. OAuth adapters for services such as Gmail, Calendar, Slack, Notion, and Drive remain future work.
 
@@ -88,6 +88,8 @@ Three distinct sandboxes remain enabled:
 Browser internet access happens through native/local browser tools. Report files are written through Dia's sandboxed native tools. Disabling these sandboxes is neither required nor the Report fix.
 
 The clone's updater is disabled. Let official Dia update normally, then run **./dia-custom update**. Rebuilds preserve provider state and fail closed if a build-specific account patch has not been audited or a private integration point changes shape. Builds 85660 and 85823 are currently supported on Apple silicon.
+
+When a Developer ID Application certificate is available, installs use it automatically so Dia Custom keeps one stable macOS code requirement across rebuilds. This prevents repeated Documents, microphone, and similar permission prompts caused by changing ad-hoc CDHashes. `DIA_CUSTOM_SIGN_IDENTITY=-` explicitly selects the portable ad-hoc fallback; that fallback can require permissions again after a rebuild. Chromium also uses its mock keychain and the clone's patched **Dia Custom Store** label, so it does not reuse official Dia's **Dia Safe Storage** item.
 
 ## Project map
 

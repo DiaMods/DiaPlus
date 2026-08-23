@@ -167,6 +167,7 @@ fi
 launch_env=(
   --env "DIA_CUSTOM_RUNTIME_LOG=$runtime_log"
   --env "DIA_CUSTOM_NETWORK_LOG=$network_log"
+  --env "DIA_CUSTOM_PROFILE=$profile"
   --env "DIA_CUSTOM_MODEL_CATALOG_PATH=$model_catalog"
   --env "DIA_CUSTOM_SETTINGS_URL=http://127.0.0.1:8765/settings"
 )

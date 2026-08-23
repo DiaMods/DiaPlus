@@ -72,6 +72,12 @@ if [[ -d "$app" ]]; then
     fail "native Reports controller patch is missing or incompatible"
   fi
   if /usr/bin/codesign --verify --deep --strict "$app" >/dev/null 2>&1; then pass "custom app signature verifies"; else fail "custom app signature does not verify"; fi
+  signature_authority="$(/usr/bin/codesign -dvv "$app" 2>&1 | /usr/bin/awk -F= '/^Authority=/{print $2; exit}')"
+  if [[ "$signature_authority" == Developer\ ID\ Application:* ]]; then
+    pass "certificate-backed app identity is stable across rebuilds"
+  else
+    warn "app is ad-hoc signed; rebuilds can invalidate macOS permission decisions"
+  fi
 else
   fail "Dia Custom is missing at $app"
 fi
