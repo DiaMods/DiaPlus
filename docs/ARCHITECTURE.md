@@ -77,7 +77,7 @@ Dia's original request already includes `artifact-generation`, `report-kit`, san
 User Data/Default/AgentServer/contexts/<context UUID>/work/artifacts/<report folder>
 ~~~
 
-and then calls native `upload_artifact`.
+and then calls native `upload_artifact`. During the creation stage, the provider does not receive the upload schema. Dia Custom derives a deterministic report folder from the active request, normalizes native `Write` to that exact path, and advances to upload only after the matching tool result succeeds. A provider that answers early or invents an unavailable tool is retried with `Write` as its sole available action.
 
 Official Dia normally tears down its Artifacts controller when the profile lacks a server-derived account capability, even though all local persistence dependencies exist. A structural patch selects Dia's original async setup continuation for the anonymous clone.
 

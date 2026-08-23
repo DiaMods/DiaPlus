@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
-import { basename, dirname } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import { basename, dirname, resolve } from "node:path";
 
 const diaOwnedProductKnowledgeTools = new Set([
   "fetch_dia_product_knowledge",
@@ -202,6 +202,39 @@ function isSuccessfulReportIndexPath(value) {
     basename(value).toLowerCase() === "index.html";
 }
 
+function reportWorkingDirectory(payload) {
+  const text = [
+    systemAsText(payload?.system),
+    ...(Array.isArray(payload?.messages)
+      ? payload.messages.map((message) => contentAsText(message?.content))
+      : []),
+  ].join("\n");
+  const value = /<agent-context>[\s\S]*?<working-directory>([^<]+)<\/working-directory>[\s\S]*?<\/agent-context>/i
+    .exec(text)?.[1]?.trim();
+  if (!value) return null;
+  const directory = resolve(value);
+  return /\/AgentServer\/contexts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/work$/i
+    .test(directory)
+    ? directory
+    : null;
+}
+
+function reportArtifactFolder(request) {
+  const slug = request.text.normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\b(?:create|make|write|build|generate|prepare|produce|draft|report|brief|memo|about|please|a|an|the)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "") || "report";
+  const suffix = createHash("sha256")
+    .update(`${request.index}\0${request.text}`)
+    .digest("hex")
+    .slice(0, 8);
+  return `${slug}-report-${suffix}`;
+}
+
 /**
  * Locate an unfinished user-requested Report in the native Anthropic
  * transcript. Dia represents tool results as user messages too, so only
@@ -267,10 +300,17 @@ export function reportWorkflowState(payload) {
     }
   }
 
+  const workingDirectory = reportWorkingDirectory(payload);
+  const reportDirectory = workingDirectory
+    ? resolve(workingDirectory, "artifacts", reportArtifactFolder(reportRequest))
+    : null;
   const base = {
     active: true,
     requestIndex: reportRequest.index,
     requestText: reportRequest.text,
+    workingDirectory,
+    reportDirectory,
+    reportFilePath: reportDirectory ? resolve(reportDirectory, "index.html") : null,
     skills: {
       artifactGeneration: skills.has("artifact-generation"),
       reportKit: skills.has("report-kit"),
@@ -294,7 +334,9 @@ export function reportWorkflowState(payload) {
     return { ...base, stage: "load_skills", missingSkills };
   }
 
-  const reportFile = successfulWrites.at(-1);
+  const reportFile = base.reportFilePath
+    ? successfulWrites.findLast(({ filePath }) => resolve(filePath) === base.reportFilePath)
+    : successfulWrites.at(-1);
   if (!reportFile) return { ...base, stage: "create_report" };
   return {
     ...base,
@@ -332,7 +374,9 @@ export function reportWorkflowRequiresTool(payload, tools = null) {
 export function withReportWorkflowPolicy(payload, state, attempt = 0) {
   if (!state?.active) return payload;
   const directions = state.stage === "create_report"
-    ? "Return the next exact tool call now. Research with an available tool if needed; otherwise call Write to create a complete index.html under the current context's work/artifacts directory."
+    ? "Return the next exact tool call now. Research with an available tool if needed; otherwise call Write to create a complete index.html " +
+      `${state.reportFilePath ? `with file_path exactly ${JSON.stringify(state.reportFilePath)}` : "under the current context's work/artifacts directory"}. ` +
+      "Do not call upload_artifact yet: Dia Custom will reject upload until Write succeeds."
     : state.stage === "upload_report"
       ? `Call the available upload_artifact tool now with ${JSON.stringify(state.uploadInput)}.`
       : `Call Skill for each missing report skill now: ${(state.missingSkills ?? []).join(", ")}.`;
@@ -445,6 +489,10 @@ export const toolDecisionSchema = {
 
 export function toolDecisionSchemaForPayload(payload, tools = null) {
   if (!reportWorkflowRequiresTool(payload, tools)) return toolDecisionSchema;
+  const toolNames = Array.isArray(tools)
+    ? [...new Set(tools.map((tool) => tool?.name).filter(Boolean))]
+    : [];
+  const toolCallItem = toolDecisionSchema.properties.tool_calls.items;
   return {
     ...toolDecisionSchema,
     properties: {
@@ -452,6 +500,15 @@ export function toolDecisionSchemaForPayload(payload, tools = null) {
       kind: { type: "string", enum: ["tool_use"] },
       tool_calls: {
         ...toolDecisionSchema.properties.tool_calls,
+        items: toolNames.length > 0
+          ? {
+            ...toolCallItem,
+            properties: {
+              ...toolCallItem.properties,
+              name: { type: "string", enum: toolNames },
+            },
+          }
+          : toolCallItem,
         minItems: 1,
       },
     },

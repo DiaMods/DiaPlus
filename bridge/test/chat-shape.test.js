@@ -13,10 +13,11 @@ import {
 } from "../src/chat-shape.js";
 
 const reportTools = [
-  { name: "Skill", input_schema: { type: "object", properties: {} } },
-  { name: "Write", input_schema: { type: "object", properties: {} } },
+  { name: "Skill", source: "native", input_schema: { type: "object", properties: {} } },
+  { name: "Write", source: "native", input_schema: { type: "object", properties: {} } },
   {
     name: "mcp__dia-tools__upload_artifact",
+    source: "native",
     input_schema: { type: "object", properties: { site_root: { type: "string" } } },
   },
 ];
@@ -199,6 +200,66 @@ test("tracks the native Report workflow through skills, Write, upload failure, a
     },
   );
   assert.equal(reportWorkflowState(payload).stage, "complete");
+});
+
+test("pins a Report to a deterministic folder in the current agent context", () => {
+  const work = "/tmp/profile/User Data/Default/AgentServer/contexts/E53B9BE3-F23C-4C0E-987B-30921F6BA109/work";
+  const payload = {
+    messages: [{
+      role: "user",
+      content: `<agent-context>\n<agent-id>agent-1</agent-id>\n<working-directory>${work}</working-directory>\n</agent-context>\n<user-message>Write a report about black holes</user-message>`,
+    }],
+  };
+  const state = reportWorkflowState(payload);
+  assert.equal(state.workingDirectory, work);
+  assert.ok(state.reportDirectory.startsWith(`${work}/artifacts/black-holes-report-`));
+  assert.match(state.reportDirectory, /-report-[a-f0-9]{8}$/);
+  assert.equal(state.reportFilePath, `${state.reportDirectory}/index.html`);
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [
+        { type: "tool_use", id: "skill-a", name: "Skill", input: { skill: "artifact-generation" } },
+        { type: "tool_use", id: "skill-r", name: "Skill", input: { skill: "report-kit" } },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: "skill-a", content: "Launching skill" },
+        { type: "tool_result", tool_use_id: "skill-r", content: "Launching skill" },
+      ],
+    },
+  );
+
+  const writeOnly = [reportTools.find((tool) => tool.name === "Write")];
+  assert.deepEqual(
+    toolDecisionSchemaForPayload(payload, writeOnly)
+      .properties.tool_calls.items.properties.name.enum,
+    ["Write"],
+  );
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "wrong-context-write",
+        name: "Write",
+        input: { file_path: "/tmp/other/work/artifacts/old/index.html" },
+      }],
+    },
+    {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        tool_use_id: "wrong-context-write",
+        content: "File created successfully",
+      }],
+    },
+  );
+  assert.equal(reportWorkflowState(payload).stage, "create_report");
 });
 
 test("does not hijack a report question or an unrelated later request", () => {

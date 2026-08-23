@@ -31,6 +31,69 @@ const maximumLocalToolRounds = 6;
 const maximumReportDecisionRetries = 2;
 const historyRefreshMilliseconds = 5 * 60_000;
 
+function isReportUploadTool(name) {
+  return name === "upload_artifact" || name?.endsWith("__upload_artifact");
+}
+
+function providerToolsForReportStage(state, tools, attempt = 0) {
+  if (!state?.active || state.stage !== "create_report") return tools;
+
+  const creationTools = tools.filter((tool) =>
+    tool.name !== "Skill" && !isReportUploadTool(tool.name));
+  if (attempt === 0) return creationTools;
+
+  // If a model tried to answer early or requested an unavailable tool, make
+  // the correction deterministic: the only valid next decision is Write.
+  const writeTool = creationTools.find((tool) =>
+    tool.name === "Write" && tool.source === "native");
+  return writeTool ? [writeTool] : creationTools;
+}
+
+function normalizeReportWriteCalls(state, result) {
+  if (
+    !state?.active ||
+    state.stage !== "create_report" ||
+    !state.reportFilePath ||
+    result?.kind !== "tool_use"
+  ) {
+    return result;
+  }
+  return {
+    ...result,
+    toolCalls: result.toolCalls.map((call) => call.name === "Write"
+      ? {
+        ...call,
+        input: { ...call.input, file_path: state.reportFilePath },
+      }
+      : call),
+  };
+}
+
+function retainPresentedToolCalls(result, tools) {
+  if (result?.kind !== "tool_use") return { result, rejected: [] };
+  const presentedNames = new Set(tools.map((tool) => tool.name));
+  const accepted = [];
+  const rejected = [];
+  for (const call of result.toolCalls ?? []) {
+    (presentedNames.has(call.name) ? accepted : rejected).push(call);
+  }
+  if (accepted.length > 0) {
+    return { result: { ...result, toolCalls: accepted }, rejected };
+  }
+  if (rejected.length > 0) {
+    return {
+      result: {
+        ...result,
+        kind: "final",
+        toolCalls: [],
+        text: `The selected model requested a tool that was not available in this turn: ${rejected.map((call) => call.name).join(", ")}.`,
+      },
+      rejected,
+    };
+  }
+  return { result, rejected };
+}
+
 function nativeReportDecision(state, tools, model) {
   if (!state?.active) return null;
   if (state.stage === "load_skills") {
@@ -325,17 +388,30 @@ export class ProviderManager {
         }
         break;
       }
-      const providerPayload = reportWorkflowRequiresTool(currentPayload, tools)
+      const providerTools = providerToolsForReportStage(
+        reportState,
+        tools,
+        reportDecisionRetries,
+      );
+      const providerPayload = reportWorkflowRequiresTool(currentPayload, providerTools)
         ? withReportWorkflowPolicy(currentPayload, reportState, reportDecisionRetries)
         : currentPayload;
       result = await this.runProvider(provider, {
         payload: providerPayload,
-        tools,
+        tools: providerTools,
         model,
         apiKey,
         onReasoning,
       });
       result.model = key;
+      result = normalizeReportWriteCalls(reportState, result);
+      const presented = retainPresentedToolCalls(result, providerTools);
+      result = presented.result;
+      if (presented.rejected.length > 0 && onReasoning) {
+        await onReasoning(
+          `Correcting an unavailable tool request (${presented.rejected.map((call) => call.name).join(", ")})...`,
+        );
+      }
       if (result.kind === "tool_use") {
         const { allowed, blocked } = removeRepeatedFailedToolCalls(
           currentPayload,
@@ -363,7 +439,7 @@ export class ProviderManager {
       if (localCalls.length === 0) {
         if (
           result.kind === "final" &&
-          reportWorkflowRequiresTool(currentPayload, tools) &&
+          reportWorkflowRequiresTool(currentPayload, providerTools) &&
           reportDecisionRetries < maximumReportDecisionRetries
         ) {
           reportDecisionRetries += 1;

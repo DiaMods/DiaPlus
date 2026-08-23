@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { ConfigStore } from "../src/config.js";
 import { CredentialStore } from "../src/credentials.js";
+import { reportWorkflowState } from "../src/chat-shape.js";
 import { MemoryStore } from "../src/local-tools/memory.js";
 import { ProviderManager } from "../src/provider-manager.js";
 import { ToolCoverageStore } from "../src/tool-coverage.js";
@@ -80,7 +81,7 @@ test("provider catalog discovers Ollama and routes local memory before native to
   memory.database.close();
 });
 
-test("Report requests deterministically load skills, reject premature finals, and upload", async () => {
+test("Report requests reject premature uploads, normalize Write paths, and upload", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-report-manager-"));
   const config = new ConfigStore(resolve(directory, "config.json"));
   const current = await config.load();
@@ -105,10 +106,17 @@ test("Report requests deterministically load skills, reject premature finals, an
   });
   await manager.initialize();
 
+  const contextWork = resolve(
+    directory,
+    "User Data/Default/AgentServer/contexts/E53B9BE3-F23C-4C0E-987B-30921F6BA109/work",
+  );
   const payload = {
     messages: [{
       role: "user",
-      content: [{ type: "text", text: "<user-message>Create a report about Saturn</user-message>" }],
+      content: [{
+        type: "text",
+        text: `<agent-context>\n<agent-id>agent-1</agent-id>\n<working-directory>${contextWork}</working-directory>\n</agent-context>\n<user-message>Create a report about Saturn</user-message>`,
+      }],
     }],
     tools: [
       { name: "Skill", input_schema: { type: "object", properties: { skill: { type: "string" } } } },
@@ -121,11 +129,21 @@ test("Report requests deterministically load skills, reject premature finals, an
   };
 
   let providerCalls = 0;
-  manager.runProvider = async (_provider, { payload: providerPayload }) => {
+  manager.runProvider = async (_provider, { payload: providerPayload, tools }) => {
     providerCalls += 1;
     assert.match(JSON.stringify(providerPayload), /dia-custom-report-policy/);
+    assert.deepEqual(tools.map((tool) => tool.name), ["Write"]);
     if (providerCalls === 1) {
-      return { kind: "final", text: "I'm gathering information.", toolCalls: [], model: "gpt-5.6-luna" };
+      return {
+        kind: "tool_use",
+        text: "",
+        toolCalls: [{
+          id: "premature-upload",
+          name: "mcp__dia-tools__upload_artifact",
+          input: { site_root: "/tmp/missing-report", relative_path: "index.html" },
+        }],
+        model: "gpt-5.6-luna",
+      };
     }
     return {
       kind: "tool_use",
@@ -133,7 +151,7 @@ test("Report requests deterministically load skills, reject premature finals, an
       toolCalls: [{
         id: "write-report",
         name: "Write",
-        input: { file_path: "/tmp/context/work/artifacts/saturn/index.html", content: "<html></html>" },
+        input: { file_path: "/tmp/wrong-context/work/artifacts/saturn/index.html", content: "<html></html>" },
       }],
       model: "gpt-5.6-luna",
     };
@@ -168,6 +186,8 @@ test("Report requests deterministically load skills, reject premature finals, an
   const writeTurn = await manager.run(payload);
   assert.equal(providerCalls, 2);
   assert.equal(writeTurn.result.toolCalls[0].name, "Write");
+  const expectedReport = reportWorkflowState(payload);
+  assert.equal(writeTurn.result.toolCalls[0].input.file_path, expectedReport.reportFilePath);
   payload.messages.push(
     {
       role: "assistant",
@@ -192,7 +212,7 @@ test("Report requests deterministically load skills, reject premature finals, an
   assert.equal(providerCalls, 2);
   assert.equal(uploadTurn.result.toolCalls[0].name, "mcp__dia-tools__upload_artifact");
   assert.deepEqual(uploadTurn.result.toolCalls[0].input, {
-    site_root: "/tmp/context/work/artifacts/saturn",
+    site_root: expectedReport.reportDirectory,
     relative_path: "index.html",
   });
   memory.database.close();

@@ -13,7 +13,7 @@ Last audited against Dia 1.46.0, build 85823, on 2026-08-23. Build 85660 remains
 - Local replacements cover public web search/fetch, imported people lookup, and memory. Dia product-knowledge tools are suppressed so they cannot restore a Dia-service dependency.
 - Local memory imports isolated-profile history and native page results, captures chat turns, performs hybrid FTS/on-device semantic search, and supports retention, export, and deletion.
 - Local connector imports, search/query tools, people lookup, and settings UI work with owner-controlled JSON exports.
-- Dia's real artifact/report skills and sandboxed file tools reach the selected provider. The bridge deterministically loads `artifact-generation` and `report-kit`, rejects premature status/failure finals, and hands a successful native `Write` result to `upload_artifact`. Enforcement is scoped to native chat requests with Report tools, so background title/icon/summary jobs cannot inherit and loop on it. Report calls are bound to the active context and gated for path traversal, symlinks, size, file count, and outbound URLs.
+- Dia's real artifact/report skills and sandboxed file tools reach the selected provider. The bridge deterministically loads `artifact-generation` and `report-kit`, withholds `upload_artifact` during creation, constrains retries to native `Write`, and rewrites its destination to a stable folder in the exact active context. Only a successful matching write advances to upload. Enforcement is scoped to native chat requests with Report tools, so background title/icon/summary jobs cannot inherit and loop on it. Report calls remain gated for path traversal, symlinks, size, file count, and outbound URLs.
 - The anonymous-profile gate that skipped Dia's Artifacts controller and the uploader's duplicate official-profile registry check are both structurally patched. Live reflection confirms `ArtifactsDataController` plus its persistence controller initialize through Dia's original setup path. The native tool-safety event carries the exact upload tool ID, and the patched branch targets Dia's unchanged Reports-library continuation.
 - Chromium and Dia's per-agent filesystem sandboxes remain enabled. The Codex decision subprocess is additionally confined to an empty read-only workspace with its own action/network facilities disabled.
 - Normal browsing and chosen providers remain available. Runtime logs show Segment/LaunchDarkly/Dia telemetry attempts blocked or redirected locally, with no allowed Dia-owned host in the current run.
@@ -22,14 +22,14 @@ Last audited against Dia 1.46.0, build 85823, on 2026-08-23. Build 85660 remains
 
 Run **./dia-custom test** for the full suite and **./dia-custom doctor** for the installed runtime.
 
-## Previously verified in an unlocked UI
+## Live UI verification
 
 - New Chat renders Luna responses without a Dia AI/account request.
 - Native `open_tabs` and `read_tabs` tool round trips worked.
 - Dia's activity surface rendered local-provider thinking summaries.
 - New Chat flags and anonymous onboarding stopped the repeated-setup crash cycle.
 - The injected toolbar picker refreshed from “Models loading…” to Luna and opened a clickable five-model menu.
-- A fresh Luna request loaded both native Report skills, wrote `work/artifacts/saturn_report/index.html`, called native `upload_artifact`, updated `agent_artifacts.db-wal`, and opened the finished Report through Dia's `chrome-untrusted://…dia-artifacts/site/index.html` presentation.
+- A Luna retry of the previously failing Black Hole Report produced exactly one native `Write`, followed by exactly one `upload_artifact`, and opened the formatted result through Dia's `chrome-untrusted://…dia-artifacts/site/index.html` presentation. The file was created at the deterministic current-context path `work/artifacts/blackholes-report-b23a0803/index.html`.
 
 ## Remaining product work
 
