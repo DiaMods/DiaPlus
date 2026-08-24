@@ -67,6 +67,12 @@ The SQLite memory store imports:
 
 FTS5 supplies lexical retrieval. Apple's on-device sentence embedding supplies lazy semantic vectors, which are stored as Float32 blobs and combined with lexical results. Retention and count limits are applied after history refresh; administration routes support statistics, export, scoped deletion, and pruning.
 
+Raw browsing/chat entries are a short-lived evidence layer, not the user-facing semantic model. A queued background pass asks the currently selected user-controlled provider to infer zero or more durable Memories (facts, interests, plans, preferences, projects, relationships, and routines), stores their confidence and source links, and marks the evidence batch processed. Apple on-device performs this locally; a selected Codex/OpenAI-compatible remote provider receives the filtered evidence under that provider's boundary. No derivation uses Dia's service. Relevant derived Memories are retrieved automatically and appended as private context before the next provider decision; raw evidence is a fallback when no derived Memory matches.
+
+Memory is scoped to the Chromium profile ID recovered from each agent context. Dia's native profile rows are mapped through Chromium's `Local State` name-to-directory table, so each native retention menu writes its own profile value. Navigation evidence follows that profile's retention period; derived Memories and chats persist until Reset or a count-bound prune. Incognito/off-the-record payloads are never captured. Known sensitive hosts, user-excluded hosts, credentials, medical material, and financial/payment material are rejected before capture and again before derivation.
+
+The bootstrap does not recreate Settings UI. It reflects Dia's native `MemoryPreferencePaneViewModel` state, sends a copied state through its existing Combine subject, and retargets the native controls to authenticated loopback routes. As a result, Dia continues to own layout and future visual changes while the local bridge owns persistence and semantics.
+
 Connector imports are transactionally replaced by connector ID and use the same index with source isolation. Local `connector_query` enforces the connector entry type even when given explicit URIs. People records supply local versions of Dia's recent-person and lookup-person tools. No OAuth token or official-Dia database is used.
 
 ## Reports
@@ -120,6 +126,10 @@ The public web client and selected remote providers run in the bridge because th
 
 The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL/document registration. No account token is copied from official Dia.
 
-Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report controller gate and its setup target, Report validator, and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. The anonymous account/capability patch still has a small audited table for builds 85660 and 85823. **./dia-custom update** clones official Dia into a temporary bundle, applies and verifies every patch, signs it, and swaps only after success. Unknown layouts leave the existing clone untouched.
+Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report controller gate and its setup target, Report validator, and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. The anonymous account/capability patch still has a small audited table for builds 85660 and 85823.
+
+`src/config/compatibility-modules.json` is the single manifest for every independent integration. A profile-local override file records optional module choices. The launcher passes the resolved set to the native bootstrap and bridge; the installer conditionally applies build-time patches and seals both the complete and build-only snapshots into `Info.plist`. Runtime modules can be bisected with a restart. A change that would remove an already-applied binary patch is rejected and requires a clean rebuild from official Dia.
+
+`src/config/supported-dia-builds.json` is the update allowlist. **./dia-custom update** validates the official bundle and every enabled module against it before creating a temporary clone. Only then does it apply and verify patches, sign the result, preserve the prior clone as a backup, and swap. Unknown or partially audited layouts leave the existing clone untouched. Native Sparkle checks remain disabled and point to an empty loopback feed, so an update cannot bypass this audit path.
 
 Bridge configuration, credentials, model choice, memory, connector data, sessions, and coverage live outside the app bundle and survive supported rebuilds.

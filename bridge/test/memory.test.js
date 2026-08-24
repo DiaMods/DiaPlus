@@ -71,7 +71,7 @@ test("local memory imports browser history and captures conversations", async ()
   assert.ok(stats.total >= 4);
   assert.equal(stats.semanticAvailable, false);
   const exported = await store.exportEntries();
-  assert.equal(exported.format, "dia-custom-memory-v1");
+  assert.equal(exported.format, "dia-custom-memory-v2");
   assert.equal(exported.entries.length, stats.total);
 
   const imported = await store.importConnector({
@@ -109,6 +109,91 @@ test("local memory imports browser history and captures conversations", async ()
   store.database.close();
 });
 
+test("local memory derives durable profile-scoped Memories and filters private or sensitive activity", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-derived-memory-"));
+  const store = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+
+  const captured = await store.recordConversation({
+    metadata: { profileID: "Profile 2" },
+    messages: [{
+      role: "user",
+      content: "I am comparing Oslo restaurants for a September anniversary trip.",
+    }],
+  }, {
+    kind: "final",
+    text: "I can compare the neighborhoods and make a shortlist.",
+  });
+  assert.ok(captured.recorded >= 2);
+
+  const derived = await store.derivePending((batch) => ({
+    memories: [{
+      text: "The user is planning a September anniversary trip to Oslo and is interested in local restaurants.",
+      title: "Oslo anniversary trip",
+      kind: "plan",
+      confidence: 0.93,
+      sourceUris: [batch.entries[0].uri],
+    }],
+  }), { profileID: "Profile 2" });
+  assert.equal(derived.created, 1);
+  assert.equal(
+    store.database.prepare("SELECT COUNT(*) AS count FROM memory_sources").get().count,
+    1,
+  );
+
+  const recalled = await store.automaticContext("Oslo anniversary restaurants", {
+    profileID: "Profile 2",
+  });
+  assert.equal(recalled.memories[0].entryType, "memory");
+  assert.equal(recalled.memories[0].memoryKind, "plan");
+  assert.equal((await store.search({
+    query: "Oslo anniversary restaurants",
+    profileID: "Default",
+  })).results.length, 0);
+
+  const privateCapture = await store.recordConversation({
+    metadata: { profileID: "Profile 2", incognito: true },
+    messages: [{ role: "user", content: "private-only-redwood-marker" }],
+  }, { kind: "final", text: "Private response." });
+  assert.equal(privateCapture.private, true);
+  assert.equal(privateCapture.recorded, 0);
+
+  const sensitiveCapture = await store.recordConversation({
+    metadata: { profileID: "Profile 2" },
+    messages: [{
+      role: "user",
+      content: "My diagnosis and medication dosage are sensitive-clinical-marker.",
+    }],
+  }, { kind: "final", text: "Understood." });
+  assert.equal(sensitiveCapture.sensitive, true);
+  assert.equal(sensitiveCapture.recorded, 0);
+
+  await store.recordConversation({
+    metadata: { profileID: "Profile 2" },
+    messages: [
+      { role: "user", content: "Review the attached page." },
+      {
+        role: "user",
+        content: [{
+          type: "tool_result",
+          tool_use_id: "read_excluded",
+          content: JSON.stringify({
+            url: "https://private.example/excluded-path",
+            title: "Excluded page marker",
+            content: "excluded-page-content-marker",
+          }),
+        }],
+      },
+    ],
+  }, { kind: "final", text: "Reviewed." }, { excludedHosts: ["private.example"] });
+  assert.equal((await store.search({
+    query: "excluded-page-content-marker",
+    profileID: "Profile 2",
+    entryTypes: ["navigation"],
+  })).results.length, 0);
+
+  store.database.close();
+});
+
 test("local memory adds lazy on-device semantic retrieval", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-semantic-memory-"));
   const embedder = async (texts) => ({
@@ -132,4 +217,38 @@ test("local memory adds lazy on-device semantic retrieval", async () => {
   assert.equal(stats.semanticAvailable, true);
   assert.ok(stats.embedded >= 1);
   store.database.close();
+});
+
+test("local memory migration deduplicates legacy unscoped navigation URIs", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-memory-migration-"));
+  const path = resolve(directory, "memory.sqlite3");
+  const first = new MemoryStore(path, null);
+  await first.open();
+  const now = Date.now();
+  for (const uri of [
+    "navigation:https://example.test/profile-migration",
+    "navigation:Default:https://example.test/profile-migration",
+  ]) {
+    first.upsert({
+      uri,
+      entryType: "navigation",
+      title: "Profile migration",
+      url: "https://example.test/profile-migration",
+      content: "Profile migration marker",
+      source: "chromium-history",
+      profileID: "Default",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  first.database.close();
+
+  const migrated = new MemoryStore(path, null);
+  await migrated.open();
+  const rows = migrated.database.prepare(
+    "SELECT uri FROM entries WHERE entry_type = 'navigation' AND url = ?",
+  ).all("https://example.test/profile-migration");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].uri, "navigation:Default:https://example.test/profile-migration");
+  migrated.database.close();
 });

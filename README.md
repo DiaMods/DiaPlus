@@ -33,7 +33,8 @@ Useful commands:
 ./dia-custom models             Print the discovered model catalog
 ./dia-custom openai-key         Save or clear the OpenAI key privately
 ./dia-custom test               Run provider, tool, patch, and build checks
-./dia-custom update             Rebuild from the latest audited /Applications/Dia.app
+./dia-custom update             Rebuild only from an audited /Applications/Dia.app
+./dia-custom modules            List independently gated compatibility modules
 ./dia-custom status             Print the exact verified/remaining status
 ~~~
 
@@ -52,16 +53,20 @@ The settings page records every eager and on-demand tool Dia exposes. It labels 
 
 ## Memory and connectors
 
-Local memory is an owner-only SQLite database containing:
+Local Memory is an owner-only SQLite database containing:
 
 - history from Dia Custom's isolated Chromium profile;
 - page content returned by native tab tools;
 - user and assistant chat turns;
 - records explicitly imported from account exports.
 
-Search combines FTS with Apple's on-device sentence embeddings when available. The settings page includes counts, JSON export, retention pruning, and deletion controls.
+Those sources are not themselves the final Memory product. Following [Dia's published Memory behavior](https://public.diabrowser.com/what-is-dia-memory), the selected user-controlled model infers durable plans, projects, preferences, interests, routines, facts, and relationships even when the user did not explicitly say “remember this.” Derived Memories retain source provenance, are recalled automatically into relevant chats, and remain isolated by Chromium profile. Incognito activity is never stored. Credential, medical, financial/payment, excluded-site, and known-sensitive-site content is filtered before storage and again before derivation.
 
-Dia's native **Settings → Memory** pane is overridden in Dia Custom to operate this local index instead of Dia's account-backed service. It shows the active local profile, item count, retention choices, Reset Memory, and Disable Memory in the native layout. Turning it off immediately removes memory tools and stops future browsing-history, page-content, and chat capture; it does not delete memories already stored. Reset deletes browsing/chat memory only after confirmation, while imported connector records remain. No pane action contacts Dia. Use **./dia-custom settings** for export and more granular deletion.
+Search combines FTS with Apple's on-device sentence embeddings when available. The settings page includes counts, JSON export, retention pruning, deletion controls, and host exclusions through Advanced JSON.
+
+Dia's native **Settings → Memory** pane remains Dia's own view and view model. Dia Custom redirects its existing Enable, Disable, Reset, and per-profile retention actions to this local index, and changes only the inaccurate Dia-server sentence to say the activity is summarized using the selected model. Turning Memory off immediately removes memory tools, automatic recall, derivation, and future browsing/chat capture; it does not delete existing entries. Reset deletes browsing, chat, and derived Memories after confirmation while retaining imported connector records. No pane action contacts Dia. Use **./dia-custom settings** for export and granular deletion.
+
+Memory storage and retrieval stay on this Mac. Derivation runs through the selected model: Apple on-device stays local, while Codex/OpenAI or another remote provider receives the filtered evidence needed for that derivation under that provider's own privacy boundary. It is never sent to Dia.
 
 Connector JSON may be an array or `{ "records": [...] }`. Records can contain `id`, `title`/`name`/`subject`, `content`/`text`/`body`, `url`, `updatedAt`, `metadata`, and `kind: "person"`. Imports are local snapshots, not live account sync. OAuth adapters for services such as Gmail, Calendar, Slack, Notion, and Drive remain future work.
 
@@ -87,7 +92,19 @@ Three distinct sandboxes remain enabled:
 
 Browser internet access happens through native/local browser tools. Report files are written through Dia's sandboxed native tools. Disabling these sandboxes is neither required nor the Report fix.
 
-The clone's updater is disabled. Let official Dia update normally, then run **./dia-custom update**. Rebuilds preserve provider state and fail closed if a build-specific account patch has not been audited or a private integration point changes shape. Builds 85660 and 85823 are currently supported on Apple silicon.
+The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. That command checks **src/config/supported-dia-builds.json before copying or replacing anything**; an unknown build leaves the working clone untouched. Rebuilds preserve provider state and also fail closed if a private integration point changes shape. Builds 85660 and 85823 are currently audited on Apple silicon.
+
+## Compatibility modules
+
+Every integration has a stable ID in **src/config/compatibility-modules.json**. Run:
+
+~~~sh
+./dia-custom modules
+./dia-custom modules disable developer-tools
+./dia-custom modules enable developer-tools
+~~~
+
+Runtime/bridge modules apply after a restart. Binary modules report that a clean **./dia-custom build --replace** is required, so disabling a Report or account patch never pretends to undo bytes in place. The current resolved build-module snapshot is sealed into the clone and checked by **doctor**. Safety/core modules—identity isolation, Dia-service network isolation, controlled updates, and localhost AI routing—are required and deliberately cannot be switched off through the normal module command.
 
 When a Developer ID Application certificate is available, installs use it automatically so Dia Custom keeps one stable macOS code requirement across rebuilds. This prevents repeated Documents, microphone, and similar permission prompts caused by changing ad-hoc CDHashes. `DIA_CUSTOM_SIGN_IDENTITY=-` explicitly selects the portable ad-hoc fallback; that fallback can require permissions again after a rebuild. Chromium also uses its mock keychain and the clone's patched **Dia Custom Store** label, so it does not reuse official Dia's **Dia Safe Storage** item.
 
@@ -103,10 +120,12 @@ When a Developer ID Application certificate is available, installs use it automa
 | **bridge/src/server.js** | Dia protocols, streaming, and local administration API |
 | **src/bootstrap/** | Native picker, Developer menu, and service-host blocking |
 | **src/patches/** | Guarded identity, endpoint, account, handler, and Report patches |
+| **src/config/compatibility-modules.json** | Toggleable integration manifest and rebuild policy |
+| **src/config/supported-dia-builds.json** | Audited Dia-build allowlist used before install/update |
 | **scripts/** | Build, install, launch, update, doctor, and test workflows |
 | **research/** | Build-analysis tools and notes; never runtime code |
 
-See [Architecture](docs/ARCHITECTURE.md) and [Status](docs/STATUS.md) for exact boundaries.
+See [Architecture](docs/ARCHITECTURE.md), [Compatibility modules](docs/MODULES.md), and [Status](docs/STATUS.md) for exact boundaries.
 
 ## Runtime locations
 

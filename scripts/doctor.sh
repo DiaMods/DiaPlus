@@ -7,11 +7,21 @@ work_dir="${project_dir:h}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
 app="${DIA_CUSTOM_APP:-$work_dir/Dia Custom RTTM.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
+enabled_modules="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/modules.js" resolved)"
+enabled_build_modules="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/modules.js" resolved --scope build)"
 failures=0
 
 pass() { print "ok    $1"; }
 warn() { print "warn  $1"; }
 fail() { print "FAIL  $1"; failures=$((failures + 1)); }
+module_enabled() {
+  case ",${enabled_modules}," in
+    *",${1},"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+pass "compatibility manifest resolved ($(print -r -- "$enabled_modules" | /usr/bin/awk -F, '{print NF}') modules enabled)"
 
 for dependency in node npm xcrun codesign; do
   if command -v "$dependency" >/dev/null; then pass "$dependency is available"; else fail "$dependency is missing"; fi
@@ -26,10 +36,11 @@ if [[ -d "$source_app" ]]; then
   source_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$source_app/Contents/Info.plist" 2>/dev/null)"
   source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$source_app/Contents/Info.plist" 2>/dev/null)"
   [[ "$source_id" == "company.thebrowser.dia" ]] && pass "original Dia bundle is untouched ($source_build)" || warn "unexpected original bundle id: $source_id"
-  case "$source_build" in
-    85660|85823) pass "installed Dia build is supported by the audited patch layouts" ;;
-    *) warn "installed Dia build $source_build needs a new patch audit before rebuilding" ;;
-  esac
+  if node "$script_dir/check-dia-build.js" "$source_app" --modules "$enabled_modules" >/dev/null 2>&1; then
+    pass "installed Dia build is audited for all enabled modules"
+  else
+    warn "installed Dia build $source_build cannot be used until its enabled modules are audited"
+  fi
 else
   fail "original Dia is missing at $source_app"
 fi
@@ -41,12 +52,21 @@ if [[ -d "$app" ]]; then
   custom_auto_update="$(/usr/libexec/PlistBuddy -c 'Print :SUAutomaticallyUpdate' "$app/Contents/Info.plist" 2>/dev/null)"
   custom_update_interval="$(/usr/libexec/PlistBuddy -c 'Print :SUScheduledCheckInterval' "$app/Contents/Info.plist" 2>/dev/null)"
   custom_update_feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$app/Contents/Info.plist" 2>/dev/null)"
+  custom_build_modules="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBuildModules' "$app/Contents/Info.plist" 2>/dev/null)"
   [[ "$custom_id" == "local.rttm.dia" ]] && pass "custom bundle id is local.rttm.dia" || fail "custom bundle id is $custom_id"
   [[ -z "${source_build:-}" || "$custom_build" == "$source_build" ]] && pass "custom build matches installed Dia ($custom_build)" || warn "custom build $custom_build differs from installed Dia ${source_build:-unknown}"
-  case "$custom_build" in
-    85660|85823) pass "custom build uses an audited patch layout" ;;
-    *) fail "custom build $custom_build is not supported by the audited patch layouts" ;;
-  esac
+  if node "$script_dir/check-dia-build.js" "$app" --modules "$enabled_modules" >/dev/null 2>&1; then
+    pass "custom build uses an audited compatibility manifest"
+  else
+    fail "custom build $custom_build is not audited for every enabled module"
+  fi
+  if [[ -z "$custom_build_modules" ]]; then
+    warn "installed clone predates module snapshots; reinstall it after quitting Dia Custom"
+  elif [[ "$custom_build_modules" == "$enabled_build_modules" ]]; then
+    pass "installed build-module snapshot matches the profile configuration"
+  else
+    warn "a build-time module changed; rebuild Dia Custom before relying on it"
+  fi
   [[ "$custom_update_checks" == "false" && "$custom_auto_update" == "false" && "$custom_update_interval" == "0" ]] && \
     pass "Sparkle automatic updates are disabled in the custom bundle" || \
     fail "Sparkle automatic updates are not fully disabled in the custom bundle"
@@ -54,19 +74,27 @@ if [[ -d "$app" ]]; then
     pass "manual update checks are routed to the empty local appcast" || \
     fail "custom update feed is not local: $custom_update_feed"
   [[ -f "$app/Contents/Frameworks/DiaCustomBootstrap.dylib" ]] && pass "runtime bootstrap is embedded" || fail "runtime bootstrap is missing"
-  [[ -x "$app/Contents/Helpers/DiaCustomAppleModel" ]] && pass "Apple Foundation Models helper is embedded" || warn "Apple Foundation Models helper is unavailable"
+  if module_enabled apple-models; then
+    [[ -x "$app/Contents/Helpers/DiaCustomAppleModel" ]] && pass "Apple Foundation Models helper is embedded" || warn "Apple Foundation Models helper is unavailable"
+  else
+    pass "Apple Foundation Models module is disabled"
+  fi
   if /usr/bin/grep -a -q "http://localhost:8765/ai-service-local-v1" "$app/Contents/MacOS/Dia"; then pass "AI endpoint is local"; else fail "local AI endpoint patch is missing"; fi
   if /usr/bin/grep -a -q 'GATEWAY_PORT=8765' "$app/Contents/Resources/agent-server-resources/dist/handler"; then
     pass "native per-context agent sandbox is enabled for the local bridge"
   else
     fail "agent sandbox gateway patch is missing"
   fi
-  if node "$project_dir/src/patches/patch-report-upload.js" --check "$app" 2>/dev/null | /usr/bin/grep -q "already patched"; then
+  if ! module_enabled reports; then
+    pass "native Reports module is disabled"
+  elif node "$project_dir/src/patches/patch-report-upload.js" --check "$app" 2>/dev/null | /usr/bin/grep -q "already patched"; then
     pass "native Reports-library path is patched with the local safety gate"
   else
     fail "native Report upload patch is missing or incompatible"
   fi
-  if node "$project_dir/src/patches/patch-report-controller.js" --check "$app" 2>/dev/null | /usr/bin/grep -q "already patched"; then
+  if ! module_enabled reports; then
+    :
+  elif node "$project_dir/src/patches/patch-report-controller.js" --check "$app" 2>/dev/null | /usr/bin/grep -q "already patched"; then
     pass "native Reports controller is enabled for the anonymous profile"
   else
     fail "native Reports controller patch is missing or incompatible"
@@ -89,7 +117,7 @@ if [[ -d "$bridge_state" ]]; then
   [[ "$state_mode" == "700" ]] && pass "local bridge state directory is owner-only" || \
     fail "local bridge state directory permissions are $state_mode, expected 700"
   sensitive_permissions_ok=true
-  for state_file in config.json credentials.json memory.sqlite3 memory.sqlite3-shm memory.sqlite3-wal models.json sessions.json tool-coverage.json; do
+  for state_file in config.json credentials.json memory.sqlite3 memory.sqlite3-shm memory.sqlite3-wal models.json modules.json sessions.json tool-coverage.json; do
     state_path="$bridge_state/$state_file"
     [[ ! -e "$state_path" ]] || [[ "$(/usr/bin/stat -f '%Lp' "$state_path" 2>/dev/null)" == "600" ]] || \
       sensitive_permissions_ok=false

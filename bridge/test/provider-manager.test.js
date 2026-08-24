@@ -44,6 +44,8 @@ test("provider catalog discovers Ollama and routes local memory before native to
   manager.runProvider = async (_provider, { payload }) => {
     calls += 1;
     if (calls === 1) {
+      assert.match(JSON.stringify(payload.system), /local-memory-context/);
+      assert.match(JSON.stringify(payload.system), /marigold/i);
       return {
         kind: "tool_use",
         text: "",
@@ -60,17 +62,19 @@ test("provider catalog discovers Ollama and routes local memory before native to
     assert.match(last.content[0].content, /marigold/i);
     return { kind: "final", text: "The codeword was marigold.", toolCalls: [], model: "gpt-5.6-luna" };
   };
+  const reasoning = [];
   const { result, nativeToolCount, totalToolCount } = await manager.run({
     messages: [{ role: "user", content: "What was the local codeword?" }],
     tools: [
       { name: "open_tabs", description: "Open tabs", input_schema: { type: "object", properties: {} } },
       { name: "search_dia_product_knowledge", description: "Search Dia", input_schema: { type: "object", properties: {} } },
     ],
-  });
+  }, { onReasoning: async (value) => reasoning.push(value) });
   assert.equal(result.text, "The codeword was marigold.");
   assert.equal(calls, 2);
   assert.equal(nativeToolCount, 1);
   assert.equal(totalToolCount, 9);
+  assert.ok(reasoning.some((value) => /Recalled .* local Memor/i.test(value)));
   const coverage = await manager.toolCoverageStore.publicValue();
   assert.equal(coverage.tools.find((tool) => tool.name === "open_tabs").route, "native");
   assert.equal(coverage.tools.find((tool) =>

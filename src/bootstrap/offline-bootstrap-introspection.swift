@@ -1,4 +1,12 @@
 import Foundation
+import Darwin
+
+@_silgen_name("dia_custom_call_current_value_subject_send")
+private func callCurrentValueSubjectSend(
+    _ implementation: UnsafeRawPointer,
+    _ subject: UnsafeRawPointer,
+    _ value: UnsafeRawPointer
+)
 
 private func reflectedField(in value: Any,
                             containerTypeName: String,
@@ -85,4 +93,85 @@ public func diaCustomSwiftInvokeWindowPresenterAction(
     }
     appendActionProbe("\(fieldName): closure cast failed")
     return false
+}
+
+private func sendMemoryStateCopy<T>(
+    _ value: T,
+    enabled: Bool,
+    subject: AnyObject,
+    implementation: UnsafeRawPointer
+) -> Bool {
+    let fields = Mirror(reflecting: value).children
+    guard let first = fields.first,
+          let current = first.value as? Bool else {
+        appendActionProbe("memory-state: first field is not Bool")
+        return false
+    }
+
+    let label = first.label ?? "<unnamed>"
+    guard label.localizedCaseInsensitiveContains("memory") ||
+          label.localizedCaseInsensitiveContains("enabled") else {
+        appendActionProbe("memory-state: refusing unexpected first field \(label)")
+        return false
+    }
+    if current == enabled {
+        return true
+    }
+
+    var copy = value
+    let didSend = withUnsafeMutableBytes(of: &copy) { bytes -> Bool in
+        guard let firstByte = bytes.baseAddress, !bytes.isEmpty else {
+            return false
+        }
+        firstByte.storeBytes(of: enabled, as: Bool.self)
+        callCurrentValueSubjectSend(
+            implementation,
+            Unmanaged.passUnretained(subject).toOpaque(),
+            UnsafeRawPointer(firstByte)
+        )
+        return true
+    }
+    if didSend {
+        appendActionProbe("memory-state: sent \(label)=\(enabled)")
+    }
+    return didSend
+}
+
+@_cdecl("dia_custom_swift_set_native_memory_enabled")
+@MainActor
+public func diaCustomSwiftSetNativeMemoryEnabled(
+    _ rawViewModel: UnsafeRawPointer?,
+    _ enabled: Bool
+) -> Bool {
+    guard let rawViewModel else { return false }
+    let viewModel = Unmanaged<AnyObject>
+        .fromOpaque(rawViewModel)
+        .takeUnretainedValue()
+    guard let subject = Mirror(reflecting: viewModel).children
+        .first(where: { $0.label == "stateSubject" })?.value as AnyObject? else {
+        appendActionProbe("memory-state: missing stateSubject")
+        return false
+    }
+    guard let currentValue = Mirror(reflecting: subject).children
+        .first(where: { $0.label == "currentValue" })?.value else {
+        appendActionProbe("memory-state: missing currentValue")
+        return false
+    }
+    guard let symbol = dlsym(
+        UnsafeMutableRawPointer(bitPattern: -2),
+        "$s7Combine19CurrentValueSubjectC4sendyyxF"
+    ) else {
+        appendActionProbe("memory-state: CurrentValueSubject.send unavailable")
+        return false
+    }
+
+    func open<T>(_ value: T) -> Bool {
+        sendMemoryStateCopy(
+            value,
+            enabled: enabled,
+            subject: subject,
+            implementation: UnsafeRawPointer(symbol)
+        )
+    }
+    return _openExistential(currentValue, do: open)
 }

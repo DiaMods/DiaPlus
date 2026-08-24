@@ -25,6 +25,7 @@ import {
 } from "./paths.js";
 import { renderSettingsPage } from "./settings-page.js";
 import { isAllowedLoopbackHostHeader } from "./network-policy.js";
+import { enabledModuleIDs } from "./modules.js";
 
 const host = "127.0.0.1";
 const port = Number.parseInt(process.env.DIA_CUSTOM_BRIDGE_PORT ?? "8765", 10);
@@ -625,6 +626,7 @@ async function handleRequest(request, response) {
       ok: true,
       mode: captureEnabled ? "capture" : "bridge",
       selectedModel,
+      enabledModules: enabledModuleIDs(),
     }));
     return;
   }
@@ -686,7 +688,10 @@ async function handleRequest(request, response) {
       jsonResponse(
         response,
         200,
-        await providerManager.setLocalMemoryRetention(payload.retentionDays),
+        await providerManager.setLocalMemoryRetention(
+          payload.retentionDays,
+          typeof payload.profileID === "string" ? payload.profileID : null,
+        ),
       );
     } catch (error) {
       jsonResponse(response, 400, { error: String(error?.message ?? error) });

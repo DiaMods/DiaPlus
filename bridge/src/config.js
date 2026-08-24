@@ -75,7 +75,11 @@ export function defaultConfig() {
       enabled: true,
       importBrowserHistory: true,
       captureChats: true,
-      retentionDays: 0,
+      deriveMemories: true,
+      automaticRecall: true,
+      retentionDays: 7,
+      profileRetentionDays: {},
+      excludedHosts: [],
       maxEntries: 100_000,
     },
     localWeb: {
@@ -170,6 +174,22 @@ export function validateConfig(input, previous = null) {
     throw new Error(`selectedModel references an unknown provider: ${selectedModel}`);
   }
 
+  const profileRetentionDays = Object.fromEntries(Object.entries(
+    input.localMemory?.profileRetentionDays ?? {},
+  ).flatMap(([profileID, days]) => (
+    typeof profileID === "string" && profileID.trim() && profileID.length <= 120 &&
+    Number.isInteger(days) && days >= 0 && days <= 3_650
+      ? [[profileID.trim(), days]]
+      : []
+  )));
+  const excludedHosts = [...new Set((Array.isArray(input.localMemory?.excludedHosts)
+    ? input.localMemory.excludedHosts
+    : []).flatMap((value) => {
+    if (typeof value !== "string") return [];
+    const host = value.trim().toLowerCase().replace(/^\./, "");
+    return /^[a-z0-9.-]{1,253}$/.test(host) && !host.includes("..") ? [host] : [];
+  }))].slice(0, 500);
+
   return {
     version: 1,
     selectedModel,
@@ -178,9 +198,13 @@ export function validateConfig(input, previous = null) {
       enabled: input.localMemory?.enabled !== false,
       importBrowserHistory: input.localMemory?.importBrowserHistory !== false,
       captureChats: input.localMemory?.captureChats !== false,
+      deriveMemories: input.localMemory?.deriveMemories !== false,
+      automaticRecall: input.localMemory?.automaticRecall !== false,
       retentionDays: Number.isInteger(input.localMemory?.retentionDays)
-        ? Math.max(0, Math.min(3_650, input.localMemory.retentionDays))
-        : 0,
+        ? Math.max(1, Math.min(3_650, input.localMemory.retentionDays || 7))
+        : 7,
+      profileRetentionDays,
+      excludedHosts,
       maxEntries: Number.isInteger(input.localMemory?.maxEntries)
         ? Math.max(1_000, Math.min(1_000_000, input.localMemory.maxEntries))
         : 100_000,

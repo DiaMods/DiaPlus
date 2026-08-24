@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "modules": [
+    {
+      "id": "identity-isolation",
+      "label": "App & Keychain isolation",
+      "scope": ["build", "launch"],
+      "defaultEnabled": true,
+      "required": true,
+      "rebuildOnChange": true,
+      "description": "Keeps Dia Custom's bundle, profile, Keychain label, and permissions separate from official Dia."
+    },
+    {
+      "id": "network-isolation",
+      "label": "Dia service isolation",
+      "scope": ["build", "runtime", "bridge", "launch"],
+      "defaultEnabled": true,
+      "required": true,
+      "rebuildOnChange": true,
+      "description": "Blocks Dia and The Browser Company service, telemetry, crash, registry, and updater destinations while allowing normal browsing and selected providers."
+    },
+    {
+      "id": "update-blocker",
+      "label": "Controlled updates",
+      "scope": ["build", "launch"],
+      "defaultEnabled": true,
+      "required": true,
+      "rebuildOnChange": true,
+      "description": "Disables the clone's native updater and permits rebuilds only from audited Dia builds."
+    },
+    {
+      "id": "local-ai-routing",
+      "label": "Local AI routing",
+      "scope": ["build", "bridge"],
+      "defaultEnabled": true,
+      "required": true,
+      "rebuildOnChange": true,
+      "description": "Routes Dia's native chat protocol to the localhost provider bridge and preserves the agent sandbox."
+    },
+    {
+      "id": "account-bypass",
+      "label": "Anonymous local profile",
+      "scope": ["build", "runtime", "launch"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": true,
+      "description": "Uses Dia's anonymous dependency path so local chat can run without a Dia account."
+    },
+    {
+      "id": "model-picker",
+      "label": "Native model picker",
+      "scope": ["runtime"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Populates Dia's chat toolbar and View menu with models from the local catalog."
+    },
+    {
+      "id": "developer-tools",
+      "label": "Developer surfaces",
+      "scope": ["runtime"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Exposes Dia's hidden Prompt Tools, browser tools, agent dashboard, and log-level windows."
+    },
+    {
+      "id": "native-memory",
+      "label": "Local native Memory",
+      "scope": ["runtime", "bridge"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Redirects Dia's native Memory settings and recall behavior to the local profile-aware memory store."
+    },
+    {
+      "id": "reports",
+      "label": "Native Reports",
+      "scope": ["build", "bridge"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": true,
+      "description": "Enables Dia's native report workflow, sandbox validation, and Reports-library ingestion for the anonymous clone."
+    },
+    {
+      "id": "local-web",
+      "label": "Local public-web tools",
+      "scope": ["bridge"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Replaces Dia-service web search and fetch with the bounded local public-web client."
+    },
+    {
+      "id": "connectors",
+      "label": "Local connectors",
+      "scope": ["bridge"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Adds owner-controlled imported records and people lookup to the local tool layer."
+    },
+    {
+      "id": "apple-models",
+      "label": "Apple Foundation Models",
+      "scope": ["build", "bridge"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": true,
+      "description": "Builds and exposes the optional Apple on-device model helper."
+    }
+  ]
+}

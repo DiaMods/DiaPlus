@@ -52,7 +52,7 @@ export function renderSettingsPage(adminToken) {
   </div>
 
   <h2>Local memory</h2>
-  <div class="muted">Browsing and chat memory stays in an owner-only SQLite database on this Mac. Semantic matching uses Apple's on-device sentence embeddings when available.</div>
+  <div class="muted">Browsing, chat evidence, and derived Memories stay in an owner-only SQLite database on this Mac. The selected model derives durable context; semantic matching uses Apple's on-device sentence embeddings when available. Nothing is sent to Dia.</div>
   <div class="card">
     <div id="memoryStats" class="memory-grid"></div>
     <div class="actions">
@@ -174,10 +174,12 @@ export function renderSettingsPage(adminToken) {
           : ('Configured selection: ' + catalog.selectedModel);
         const navigation = memory.entryTypes.navigation?.count || 0;
         const conversations = memory.entryTypes.conversation?.count || 0;
+        const derivedMemories = memory.entryTypes.memory?.count || 0;
         const connectorEntries = memory.entryTypes.connector?.count || 0;
         memoryStats.innerHTML = '';
         for (const item of [
           [memory.total, 'Total entries'],
+          [derivedMemories, 'Derived Memories'],
           [navigation, 'Browsing'],
           [conversations, 'Chats'],
           [connectorEntries, 'Connector records'],

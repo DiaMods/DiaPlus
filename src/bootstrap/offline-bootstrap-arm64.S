@@ -26,3 +26,16 @@ _dia_custom_call_platform_window_prompt_tools_presenter:
     blr x16
     ldp x20, x30, [sp], #16
     ret
+
+// Combine's CurrentValueSubject.send(_:) uses Swift's self-in-x20 calling
+// convention and receives the value indirectly in x0.  The Swift reflection
+// shim supplies a value of the subject's exact private Output type.
+.globl _dia_custom_call_current_value_subject_send
+_dia_custom_call_current_value_subject_send:
+    stp x20, x30, [sp, #-16]!
+    mov x16, x0                 // CurrentValueSubject.send implementation
+    mov x20, x1                 // CurrentValueSubject self
+    mov x0, x2                  // pointer to Output value
+    blr x16
+    ldp x20, x30, [sp], #16
+    ret

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { chmod, copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { browserHistoryPath, memoryDatabasePath } from "../paths.js";
 
@@ -11,7 +12,11 @@ const storedPageContentLimit = 100_000;
 const semanticCandidateLimit = 400;
 const semanticTextLimit = 4_000;
 const semanticModel = "apple-natural-language-en-v1";
-const memoryEntryTypes = new Set(["navigation", "conversation", "connector"]);
+const defaultProfileID = "Default";
+const memoryEntryTypes = new Set(["memory", "navigation", "conversation", "connector"]);
+const derivedMemoryKinds = new Set([
+  "fact", "interest", "plan", "preference", "project", "relationship", "routine",
+]);
 const searchStopWords = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "for",
   "from", "had", "has", "have", "i", "in", "is", "it", "me", "my", "of",
@@ -19,10 +24,21 @@ const searchStopWords = new Set([
   "you", "your",
 ]);
 
+const sensitiveHostPattern = /(?:^|\.)(?:mychart|patient|healthportal|onlinebanking|securebank|paypal|venmo|cash\.app|login|accounts)\./i;
+const credentialPattern = /\b(?:password|passcode|one[- ]time (?:code|password)|security answer|recovery code|api key|secret key|social security number|credit card number|routing number)\b/i;
+const medicalPatterns = [
+  /\b(?:diagnosis|diagnosed|prescription|patient portal|medical record|lab result)\b/i,
+  /\b(?:medication|dosage|physician|therapist|symptoms?|treatment plan)\b/i,
+];
+const financialPatterns = [
+  /\b(?:account balance|bank statement|routing number|card ending|credit limit)\b/i,
+  /\b(?:transaction history|payment due|paycheck|tax return|investment account)\b/i,
+];
+
 const memoryToolDefinitions = [
   {
     name: "mcp__dia-tools__memory_search",
-    description: "Search the user's local Dia Custom browsing, chat, and imported connector memory with lexical and on-device semantic matching. This runs entirely on this Mac.",
+    description: "Search the user's locally derived Memories, browsing activity, chats, and imported records with lexical and on-device semantic matching. This runs entirely on this Mac.",
     input_schema: {
       type: "object",
       properties: {
@@ -84,6 +100,91 @@ function excerpt(value, length) {
   return value.length <= length ? value : `${value.slice(0, length)}…`;
 }
 
+function normalizedProfileID(value) {
+  if (typeof value !== "string") return defaultProfileID;
+  const profile = value.trim();
+  return profile && profile.length <= 120 && !profile.includes("/") && !profile.includes("\\")
+    ? profile
+    : defaultProfileID;
+}
+
+function payloadText(payload) {
+  return [
+    textBlocks(payload?.system),
+    ...(payload?.messages ?? []).map((message) => textBlocks(message?.content)),
+  ].join("\n");
+}
+
+export function profileIDFromPayload(payload) {
+  const direct = [
+    payload?.metadata?.profile_id,
+    payload?.metadata?.profileID,
+    payload?.profile_id,
+    payload?.profileID,
+  ].find((value) => typeof value === "string" && value.trim());
+  if (direct) return normalizedProfileID(direct);
+  const pathProfile = /\/User Data\/([^/]+)\/AgentServer\//i.exec(payloadText(payload))?.[1];
+  return normalizedProfileID(pathProfile ? decodeURIComponent(pathProfile) : defaultProfileID);
+}
+
+export function isPrivateMemoryPayload(payload) {
+  if (payload?.metadata?.incognito === true || payload?.metadata?.private === true ||
+      payload?.incognito === true || payload?.isOffTheRecord === true) return true;
+  return /(?:incognito|off[- ]the[- ]record|private browsing)[^\n]{0,40}(?:true|enabled|active)/i
+    .test(payloadText(payload));
+}
+
+function hostIsExcluded(url, excludedHosts = []) {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return excludedHosts.some((value) => {
+      const excluded = String(value).trim().toLowerCase().replace(/^\./, "");
+      return excluded && (host === excluded || host.endsWith(`.${excluded}`));
+    });
+  } catch {
+    return false;
+  }
+}
+
+export function sensitiveMemoryReason({ url = "", title = "", content = "" } = {}) {
+  if (url) {
+    try {
+      if (sensitiveHostPattern.test(new URL(url).hostname)) return "sensitive-site";
+    } catch {
+      // A memory source does not need a URL.
+    }
+  }
+  const text = `${title}\n${content}`.slice(0, storedPageContentLimit);
+  if (credentialPattern.test(text)) return "credentials";
+  if (medicalPatterns.every((pattern) => pattern.test(text))) return "medical";
+  if (financialPatterns.every((pattern) => pattern.test(text))) return "financial";
+  return null;
+}
+
+function memorySourceAllowed(entry, excludedHosts = []) {
+  return !hostIsExcluded(entry.url, excludedHosts) && !sensitiveMemoryReason(entry);
+}
+
+async function snapshotSQLiteDatabase(path) {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-history-"));
+  const snapshot = resolve(directory, "History");
+  // Copy transactional sidecars before the main file. If Chromium commits
+  // during the copy, SQLite can recover the copied rollback journal/WAL into
+  // a consistent private snapshot without ever requesting a lock from Dia.
+  for (const suffix of ["-journal", "-wal"]) {
+    try {
+      await copyFile(`${path}${suffix}`, `${snapshot}${suffix}`);
+      await chmod(`${snapshot}${suffix}`, 0o600);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  await copyFile(path, snapshot);
+  await chmod(snapshot, 0o600);
+  return { directory, path: snapshot };
+}
+
 function textBlocks(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -109,9 +210,21 @@ function conversationText(message) {
   return excerpt(text, storedPageContentLimit);
 }
 
-function stableChatURI(role, content) {
-  const digest = createHash("sha256").update(`${role}\0${content}`).digest("hex");
-  return `dia-custom-chat:${digest}`;
+export function latestMemoryQuery(payload) {
+  for (let index = (payload?.messages?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const message = payload.messages[index];
+    if (message?.role !== "user") continue;
+    const content = conversationText(message).trim();
+    if (content) return excerpt(content, 2_000);
+  }
+  return "";
+}
+
+function stableChatURI(profileID, role, content) {
+  const digest = createHash("sha256")
+    .update(`${profileID}\0${role}\0${content}`)
+    .digest("hex");
+  return `dia-custom-chat:${encodeURIComponent(profileID)}:${digest}`;
 }
 
 function parsePossibleJSON(value) {
@@ -172,6 +285,34 @@ function browserPagesFromMessages(messages) {
   return [...pages.values()];
 }
 
+function normalizeDerivedCandidates(value, sourceRows) {
+  const raw = Array.isArray(value) ? value : value?.memories;
+  if (!Array.isArray(raw)) return [];
+  const sourceByURI = new Map(sourceRows.map((row) => [row.uri, row]));
+  return raw.slice(0, 8).flatMap((candidate) => {
+    const text = typeof candidate?.text === "string" ? candidate.text.trim() : "";
+    const kind = derivedMemoryKinds.has(candidate?.kind) ? candidate.kind : "fact";
+    const confidence = Number(candidate?.confidence);
+    if (text.length < 12 || text.length > 800 || !Number.isFinite(confidence) ||
+        confidence < 0.55 || sensitiveMemoryReason({ content: text })) return [];
+    const requestedSources = Array.isArray(candidate.sourceUris)
+      ? candidate.sourceUris.filter((uri) => sourceByURI.has(uri))
+      : [];
+    const sources = (requestedSources.length > 0
+      ? requestedSources
+      : sourceRows.slice(-4).map((row) => row.uri));
+    return [{
+      text,
+      kind,
+      confidence: Math.min(1, confidence),
+      title: typeof candidate.title === "string" && candidate.title.trim()
+        ? excerpt(candidate.title.trim(), 160)
+        : `${kind[0].toUpperCase()}${kind.slice(1)} Memory`,
+      sourceUris: sources,
+    }];
+  });
+}
+
 function encodeVector(values) {
   const vector = Float32Array.from(values);
   return Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength);
@@ -210,7 +351,15 @@ export class MemoryStore {
     this.historyPath = historyPath;
     this.embedder = embedder;
     this.embeddingDisabledReason = null;
+    this.excludedHosts = [];
     this.database = null;
+  }
+
+  setPrivacyFilters(excludedHosts = []) {
+    this.excludedHosts = Array.isArray(excludedHosts)
+      ? [...new Set(excludedHosts.map((value) => String(value).trim().toLowerCase())
+        .filter(Boolean))]
+      : [];
   }
 
   async open() {
@@ -229,6 +378,10 @@ export class MemoryStore {
         url TEXT NOT NULL DEFAULT '',
         content TEXT NOT NULL DEFAULT '',
         source TEXT NOT NULL,
+        profile_id TEXT NOT NULL DEFAULT 'Default',
+        derived_at INTEGER,
+        memory_kind TEXT,
+        confidence REAL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -247,6 +400,11 @@ export class MemoryStore {
         label TEXT NOT NULL,
         imported_at INTEGER NOT NULL,
         item_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS memory_sources (
+        memory_entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+        source_entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+        PRIMARY KEY(memory_entry_id, source_entry_id)
       );
       CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
         title, url, content,
@@ -268,6 +426,76 @@ export class MemoryStore {
         VALUES (new.id, new.title, new.url, new.content);
       END;
     `);
+    const entryColumns = new Set(this.database.prepare("PRAGMA table_info(entries)")
+      .all().map((column) => column.name));
+    if (!entryColumns.has("profile_id")) {
+      this.database.exec("ALTER TABLE entries ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'Default'");
+    }
+    if (!entryColumns.has("derived_at")) {
+      this.database.exec("ALTER TABLE entries ADD COLUMN derived_at INTEGER");
+    }
+    if (!entryColumns.has("memory_kind")) {
+      this.database.exec("ALTER TABLE entries ADD COLUMN memory_kind TEXT");
+    }
+    if (!entryColumns.has("confidence")) {
+      this.database.exec("ALTER TABLE entries ADD COLUMN confidence REAL");
+    }
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS entries_profile_type_time
+        ON entries(profile_id, entry_type, updated_at DESC);
+      UPDATE entries SET profile_id = '*'
+        WHERE entry_type = 'connector' AND profile_id != '*';
+
+      BEGIN IMMEDIATE;
+      INSERT OR IGNORE INTO memory_sources(memory_entry_id, source_entry_id)
+        SELECT links.memory_entry_id, scoped.id
+        FROM entries legacy
+        JOIN entries scoped
+          ON scoped.entry_type = 'navigation'
+         AND scoped.profile_id = legacy.profile_id
+         AND scoped.url = legacy.url
+         AND scoped.uri = 'navigation:Default:' || legacy.url
+        JOIN memory_sources links ON links.source_entry_id = legacy.id
+        WHERE legacy.entry_type = 'navigation'
+          AND legacy.profile_id = 'Default'
+          AND legacy.uri != 'navigation:Default:' || legacy.url;
+      UPDATE entries AS scoped
+        SET derived_at = COALESCE(derived_at, (
+          SELECT legacy.derived_at FROM entries legacy
+          WHERE legacy.entry_type = 'navigation'
+            AND legacy.profile_id = scoped.profile_id
+            AND legacy.url = scoped.url
+            AND legacy.uri != scoped.uri
+          LIMIT 1
+        ))
+        WHERE scoped.entry_type = 'navigation'
+          AND scoped.profile_id = 'Default'
+          AND scoped.uri = 'navigation:Default:' || scoped.url;
+      DELETE FROM entries
+        WHERE entry_type = 'navigation'
+          AND profile_id = 'Default'
+          AND uri != 'navigation:Default:' || url
+          AND EXISTS (
+            SELECT 1 FROM entries scoped
+            WHERE scoped.entry_type = 'navigation'
+              AND scoped.profile_id = 'Default'
+              AND scoped.url = entries.url
+              AND scoped.uri = 'navigation:Default:' || entries.url
+          );
+      UPDATE entries
+        SET uri = 'navigation:Default:' || url
+        WHERE entry_type = 'navigation'
+          AND profile_id = 'Default'
+          AND uri != 'navigation:Default:' || url;
+      UPDATE entries
+        SET uri = 'dia-custom-chat:Default:' ||
+          substr(uri, length('dia-custom-chat:') + 1)
+        WHERE entry_type = 'conversation'
+          AND profile_id = 'Default'
+          AND uri LIKE 'dia-custom-chat:%'
+          AND uri NOT LIKE 'dia-custom-chat:Default:%';
+      COMMIT;
+    `);
     await chmod(dirname(this.path), 0o700);
     for (const path of [this.path, `${this.path}-wal`, `${this.path}-shm`]) {
       await chmod(path, 0o600).catch((error) => {
@@ -283,13 +511,18 @@ export class MemoryStore {
     ).get(entry.uri);
     this.database.prepare(`
       INSERT INTO entries
-        (uri, entry_type, title, url, content, source, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (uri, entry_type, title, url, content, source, profile_id, derived_at,
+         memory_kind, confidence, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(uri) DO UPDATE SET
         title=excluded.title,
         url=excluded.url,
         content=excluded.content,
         source=excluded.source,
+        profile_id=excluded.profile_id,
+        derived_at=COALESCE(excluded.derived_at, entries.derived_at),
+        memory_kind=COALESCE(excluded.memory_kind, entries.memory_kind),
+        confidence=COALESCE(excluded.confidence, entries.confidence),
         updated_at=MAX(entries.updated_at, excluded.updated_at)
     `).run(
       entry.uri,
@@ -298,6 +531,10 @@ export class MemoryStore {
       entry.url ?? "",
       entry.content ?? "",
       entry.source,
+      normalizedProfileID(entry.profileID),
+      entry.derivedAt ?? null,
+      entry.memoryKind ?? null,
+      Number.isFinite(entry.confidence) ? entry.confidence : null,
       entry.createdAt,
       entry.updatedAt,
     );
@@ -311,12 +548,32 @@ export class MemoryStore {
     }
   }
 
-  async importBrowserHistory(limit = 25_000) {
+  async importBrowserHistory(
+    limit = 25_000,
+    {
+      profileID = defaultProfileID,
+      excludedHosts = this.excludedHosts,
+      historyPath = this.historyPath,
+    } = {},
+  ) {
     await this.open();
-    if (!this.historyPath || !existsSync(this.historyPath)) return 0;
+    const profile = normalizedProfileID(profileID);
+    if (!historyPath || !existsSync(historyPath)) return 0;
     let history;
+    let snapshotDirectory = null;
     try {
-      history = new DatabaseSync(this.historyPath, { readOnly: true });
+      try {
+        history = new DatabaseSync(historyPath, { readOnly: true });
+        // Preparing the first statement is where a rollback-journal database
+        // can report SQLITE_BUSY, so force the lock check before continuing.
+        history.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get();
+      } catch (error) {
+        history?.close();
+        if (!/locked|busy/i.test(String(error?.message ?? error))) throw error;
+        const snapshot = await snapshotSQLiteDatabase(historyPath);
+        snapshotDirectory = snapshot.directory;
+        history = new DatabaseSync(snapshot.path);
+      }
       const rows = history.prepare(`
         SELECT
           url,
@@ -329,78 +586,245 @@ export class MemoryStore {
         LIMIT ?
       `).all(limit);
       this.database.exec("BEGIN IMMEDIATE");
+      let imported = 0;
       try {
         for (const row of rows) {
           const time = Number(row.time_ms) || Date.now();
-          this.upsert({
-            uri: `navigation:${row.url}`,
-            entryType: "navigation",
-            title: row.title || row.url,
+          const source = {
             url: row.url,
+            title: row.title || row.url,
             content: `${row.title || ""}\n${row.url}\nVisited ${row.visit_count} time(s).`,
+          };
+          if (!memorySourceAllowed(source, excludedHosts)) continue;
+          this.upsert({
+            uri: `navigation:${encodeURIComponent(profile)}:${row.url}`,
+            entryType: "navigation",
+            title: source.title,
+            url: row.url,
+            content: source.content,
             source: "chromium-history",
+            profileID: profile,
             createdAt: time,
             updatedAt: time,
           });
+          imported += 1;
         }
         this.database.exec("COMMIT");
       } catch (error) {
         this.database.exec("ROLLBACK");
         throw error;
       }
-      return rows.length;
+      return imported;
     } catch (error) {
       process.stderr.write(`Local history import skipped: ${String(error?.message ?? error)}\n`);
       return 0;
     } finally {
       history?.close();
+      if (snapshotDirectory) {
+        await rm(snapshotDirectory, { recursive: true, force: true });
+      }
     }
   }
 
-  async recordConversation(payload, result) {
+  async recordConversation(
+    payload,
+    result,
+    {
+      profileID = profileIDFromPayload(payload),
+      excludedHosts = this.excludedHosts,
+    } = {},
+  ) {
     await this.open();
+    const profile = normalizedProfileID(profileID);
+    if (isPrivateMemoryPayload(payload)) {
+      return { profileID: profile, private: true, recorded: 0, sourceIDs: [] };
+    }
+    const containsSensitiveConversation = (payload?.messages ?? []).some((message) => {
+      if (message?.role !== "user") return false;
+      const content = conversationText(message);
+      return content && !memorySourceAllowed({ content }, excludedHosts);
+    });
+    if (containsSensitiveConversation) {
+      return {
+        profileID: profile,
+        private: false,
+        sensitive: true,
+        recorded: 0,
+        sourceIDs: [],
+      };
+    }
     const now = Date.now();
     const entries = [];
     for (const message of payload?.messages ?? []) {
       if (!["user", "assistant"].includes(message?.role)) continue;
       const content = conversationText(message);
-      if (!content) continue;
+      if (!content || !memorySourceAllowed({ content }, excludedHosts)) continue;
       entries.push({ role: message.role, content });
     }
     if (result?.kind === "final" && typeof result.text === "string" && result.text.trim()) {
-      entries.push({ role: "assistant", content: result.text.trim() });
+      const content = excerpt(result.text.trim(), storedPageContentLimit);
+      if (memorySourceAllowed({ content }, excludedHosts)) {
+        entries.push({ role: "assistant", content });
+      }
     }
+    const sourceIDs = [];
     this.database.exec("BEGIN IMMEDIATE");
     try {
       for (const page of browserPagesFromMessages(payload?.messages)) {
+        const content = `${page.title}\n${page.url}${page.content ? `\n\n${page.content}` : ""}`;
+        if (!memorySourceAllowed({ ...page, content }, excludedHosts)) continue;
+        const uri = `navigation:${encodeURIComponent(profile)}:${page.url}`;
         this.upsert({
-          uri: `navigation:${page.url}`,
+          uri,
           entryType: "navigation",
           title: page.title,
           url: page.url,
-          content: `${page.title}\n${page.url}${page.content ? `\n\n${page.content}` : ""}`,
+          content,
           source: "native-tool-result",
+          profileID: profile,
           createdAt: now,
           updatedAt: now,
         });
+        sourceIDs.push(Number(this.database.prepare(
+          "SELECT id FROM entries WHERE uri = ?",
+        ).get(uri).id));
       }
       for (const entry of entries) {
+        const uri = stableChatURI(profile, entry.role, entry.content);
         this.upsert({
-          uri: stableChatURI(entry.role, entry.content),
+          uri,
           entryType: "conversation",
           title: `${entry.role === "user" ? "You" : "Assistant"}: ${excerpt(entry.content.replaceAll("\n", " "), 100)}`,
           url: "",
           content: entry.content,
           source: "dia-custom-chat",
+          profileID: profile,
           createdAt: now,
           updatedAt: now,
         });
+        sourceIDs.push(Number(this.database.prepare(
+          "SELECT id FROM entries WHERE uri = ?",
+        ).get(uri).id));
       }
       this.database.exec("COMMIT");
     } catch (error) {
       this.database.exec("ROLLBACK");
       throw error;
     }
+    return { profileID: profile, private: false, recorded: sourceIDs.length, sourceIDs };
+  }
+
+  async pendingDerivation({ profileID = defaultProfileID, limit = 24 } = {}) {
+    await this.open();
+    const profile = normalizedProfileID(profileID);
+    const bounded = Math.max(1, Math.min(50, Number.isInteger(limit) ? limit : 24));
+    return this.database.prepare(`
+      SELECT id, uri, entry_type, title, url, content, source, profile_id,
+             created_at, updated_at
+      FROM entries
+      WHERE profile_id = ?
+        AND entry_type IN ('navigation', 'conversation')
+        AND derived_at IS NULL
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `).all(profile, Math.min(1_000, bounded * 10))
+      .filter((row) => memorySourceAllowed(row, this.excludedHosts))
+      .slice(0, bounded)
+      .reverse();
+  }
+
+  async derivePending(deriver, { profileID = defaultProfileID, limit = 24 } = {}) {
+    if (typeof deriver !== "function") throw new Error("memory deriver must be a function");
+    const profile = normalizedProfileID(profileID);
+    const sourceRows = await this.pendingDerivation({ profileID: profile, limit });
+    if (sourceRows.length === 0) {
+      return { profileID: profile, processed: 0, created: 0, memories: [] };
+    }
+    const sourcePayload = sourceRows.map((row) => ({
+      uri: row.uri,
+      type: row.entry_type,
+      title: excerpt(row.title, 240),
+      url: row.url,
+      content: excerpt(row.content, 4_000),
+      timestamp: new Date(row.updated_at).toISOString(),
+    }));
+    const candidates = normalizeDerivedCandidates(
+      await deriver({ profileID: profile, entries: sourcePayload }),
+      sourceRows,
+    );
+    const now = Date.now();
+    const stored = [];
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const candidate of candidates) {
+        const digest = createHash("sha256")
+          .update(`${profile}\0${candidate.text.toLowerCase()}`)
+          .digest("hex");
+        const uri = `dia-custom-memory:${encodeURIComponent(profile)}:${digest}`;
+        this.upsert({
+          uri,
+          entryType: "memory",
+          title: candidate.title,
+          url: "",
+          content: candidate.text,
+          source: "local-derived",
+          profileID: profile,
+          memoryKind: candidate.kind,
+          confidence: candidate.confidence,
+          derivedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+        const memoryID = Number(this.database.prepare(
+          "SELECT id FROM entries WHERE uri = ?",
+        ).get(uri).id);
+        for (const sourceURI of candidate.sourceUris) {
+          const source = sourceRows.find((row) => row.uri === sourceURI);
+          if (!source) continue;
+          this.database.prepare(`
+            INSERT OR IGNORE INTO memory_sources(memory_entry_id, source_entry_id)
+            VALUES (?, ?)
+          `).run(memoryID, source.id);
+        }
+        stored.push({ uri, ...candidate });
+      }
+      this.database.prepare(`
+        UPDATE entries SET derived_at = ?
+        WHERE id IN (${sourceRows.map(() => "?").join(",")})
+      `).run(now, ...sourceRows.map((row) => row.id));
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      profileID: profile,
+      processed: sourceRows.length,
+      created: stored.length,
+      memories: stored,
+    };
+  }
+
+  async automaticContext(query, { profileID = defaultProfileID, limit = 6 } = {}) {
+    const text = typeof query === "string" ? query.trim() : "";
+    if (!text) return { query: text, profileID: normalizedProfileID(profileID), memories: [] };
+    const profile = normalizedProfileID(profileID);
+    const derived = await this.search({
+      query: text,
+      profileID: profile,
+      entryTypes: ["memory"],
+      limit,
+    });
+    let memories = derived.results;
+    if (memories.length === 0) {
+      memories = (await this.search({
+        query: text,
+        profileID: profile,
+        entryTypes: ["conversation", "navigation", "connector"],
+        limit: Math.min(3, limit),
+      })).results;
+    }
+    return { query: text, profileID: profile, memories };
   }
 
   async importConnector({ id, label, records, replace = true } = {}) {
@@ -456,6 +880,7 @@ export class MemoryStore {
           url,
           content,
           source: `connector:${id}:${kind}`,
+          profileID: "*",
           createdAt: updatedAt,
           updatedAt,
         });
@@ -538,6 +963,10 @@ export class MemoryStore {
 
   filters(input, values) {
     const clauses = [];
+    if (input?.allProfiles !== true) {
+      clauses.push("e.profile_id IN (?, '*')");
+      values.push(normalizedProfileID(input?.profileID));
+    }
     if (Array.isArray(input.entryTypes) && input.entryTypes.length > 0) {
       const types = input.entryTypes.filter((type) => memoryEntryTypes.has(type));
       if (types.length > 0) {
@@ -579,7 +1008,9 @@ export class MemoryStore {
 
   formatRows(rows, mode = "summary") {
     const length = mode === "fullContent" ? fullContentLimit : summaryLimit;
-    return rows.map((row) => ({
+    return rows
+      .filter((row) => memorySourceAllowed(row, this.excludedHosts))
+      .map((row) => ({
       uri: row.uri,
       entryType: row.entry_type,
       title: row.title,
@@ -587,7 +1018,10 @@ export class MemoryStore {
       content: excerpt(row.content, length),
       timestamp: new Date(row.updated_at).toISOString(),
       source: row.source,
-    }));
+      profileID: row.profile_id,
+      ...(row.memory_kind ? { memoryKind: row.memory_kind } : {}),
+      ...(Number.isFinite(row.confidence) ? { confidence: row.confidence } : {}),
+      }));
   }
 
   async embeddingVectors(texts) {
@@ -769,21 +1203,25 @@ export class MemoryStore {
     await this.open();
     const bounded = Math.max(1, Math.min(100_000, Number.isInteger(limit) ? limit : 100_000));
     const rows = this.database.prepare(`
-      SELECT uri, entry_type, title, url, content, source, created_at, updated_at
+      SELECT uri, entry_type, title, url, content, source, profile_id,
+             memory_kind, confidence, created_at, updated_at
       FROM entries
       ORDER BY updated_at DESC
       LIMIT ?
     `).all(bounded);
     return {
-      format: "dia-custom-memory-v1",
+      format: "dia-custom-memory-v2",
       exportedAt: new Date().toISOString(),
-      entries: rows.map((row) => ({
+      entries: rows.filter((row) => memorySourceAllowed(row, this.excludedHosts)).map((row) => ({
         uri: row.uri,
         entryType: row.entry_type,
         title: row.title,
         url: row.url,
         content: row.content,
         source: row.source,
+        profileID: row.profile_id,
+        ...(row.memory_kind ? { memoryKind: row.memory_kind } : {}),
+        ...(Number.isFinite(row.confidence) ? { confidence: row.confidence } : {}),
         createdAt: new Date(row.created_at).toISOString(),
         updatedAt: new Date(row.updated_at).toISOString(),
       })),
@@ -813,21 +1251,39 @@ export class MemoryStore {
     return { deleted: Number(result.changes) };
   }
 
-  async prune({ retentionDays = 0, maxEntries = 100_000 } = {}) {
+  async prune({ retentionDays = 7, maxEntries = 100_000, profileRetentionDays = {} } = {}) {
     await this.open();
     let deleted = 0;
     const days = Number.isFinite(retentionDays) ? Math.max(0, retentionDays) : 0;
+    const retainedProfiles = Object.entries(profileRetentionDays ?? {})
+      .filter(([, value]) => Number.isInteger(value) && value >= 0)
+      .map(([profileID]) => normalizedProfileID(profileID));
     if (days > 0) {
       const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-      deleted += Number(this.database.prepare("DELETE FROM entries WHERE updated_at < ?")
-        .run(cutoff).changes);
+      deleted += Number(this.database.prepare(`
+        DELETE FROM entries
+        WHERE entry_type = 'navigation' AND updated_at < ?
+        ${retainedProfiles.length > 0
+    ? `AND profile_id NOT IN (${retainedProfiles.map(() => "?").join(",")})`
+    : ""}
+      `).run(cutoff, ...retainedProfiles).changes);
+    }
+    for (const [profileID, profileDays] of Object.entries(profileRetentionDays ?? {})) {
+      if (!Number.isInteger(profileDays) || profileDays <= 0) continue;
+      const cutoff = Date.now() - profileDays * 24 * 60 * 60 * 1000;
+      deleted += Number(this.database.prepare(`
+        DELETE FROM entries
+        WHERE entry_type = 'navigation' AND profile_id = ? AND updated_at < ?
+      `).run(normalizedProfileID(profileID), cutoff).changes);
     }
     const maximum = Number.isInteger(maxEntries)
       ? Math.max(1_000, Math.min(1_000_000, maxEntries))
       : 100_000;
     deleted += Number(this.database.prepare(`
       DELETE FROM entries WHERE id IN (
-        SELECT id FROM entries ORDER BY updated_at DESC LIMIT -1 OFFSET ?
+        SELECT id FROM entries
+        WHERE entry_type IN ('navigation', 'conversation')
+        ORDER BY updated_at DESC LIMIT -1 OFFSET ?
       )
     `).run(maximum).changes);
     return { deleted, ...(await this.stats()) };
@@ -847,8 +1303,12 @@ export function isLocalMemoryTool(name) {
   ].includes(name);
 }
 
-export async function executeLocalMemoryTool(store, name, input) {
-  if (name.endsWith("memory_search")) return store.search(input ?? {});
-  if (name.endsWith("memory_query")) return store.query(input ?? {});
+export async function executeLocalMemoryTool(store, name, input, context = {}) {
+  const scopedInput = {
+    ...(input ?? {}),
+    profileID: normalizedProfileID(context.profileID ?? input?.profileID),
+  };
+  if (name.endsWith("memory_search")) return store.search(scopedInput);
+  if (name.endsWith("memory_query")) return store.query(scopedInput);
   throw new Error(`unknown local memory tool: ${name}`);
 }

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-24",
+  "builds": {
+    "85660": {
+      "status": "audited",
+      "notes": "Legacy guarded ARM64 layout retained for reproducible rebuilds.",
+      "modules": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "local-ai-routing",
+        "account-bypass",
+        "model-picker",
+        "developer-tools",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "apple-models"
+      ]
+    },
+    "85823": {
+      "status": "audited",
+      "version": "1.46.0",
+      "notes": "Current live-tested Dia Custom compatibility baseline.",
+      "modules": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "local-ai-routing",
+        "account-bypass",
+        "model-picker",
+        "developer-tools",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "apple-models"
+      ]
+    }
+  }
+}
