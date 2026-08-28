@@ -126,7 +126,7 @@ The public web client and selected remote providers run in the bridge because th
 
 The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL/document registration. No account token is copied from official Dia.
 
-Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report controller gate and its setup target, Report validator, and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. The anonymous account/capability patch still has a small audited table for builds 85660, 85823, and 86064.
+Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report controller gate and its setup target, Report validator, and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. Prompt Tools offsets are retained for compatibility research, but the current production controller is not constructed because its initializer requires Dia's unavailable task-local dependency context. The anonymous account/capability patch still has a small audited table for builds 85660, 85823, and 86064.
 
 `src/config/compatibility-modules.json` is the single manifest for every independent integration. A profile-local override file records optional module choices. The launcher passes the resolved set to the native bootstrap and bridge; the installer conditionally applies build-time patches and seals both the complete and build-only snapshots into `Info.plist`. Runtime modules can be bisected with a restart. A change that would remove an already-applied binary patch is rejected and requires a clean rebuild from official Dia.
 

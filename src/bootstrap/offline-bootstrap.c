@@ -1256,6 +1256,7 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 - (void)setLocalMemoryRetention:(id)sender;
 - (void)resetLocalMemory:(id)sender;
 - (void)openModelSettings:(id)sender;
+- (BOOL)openLocalSettingsFragment:(NSString *)fragment;
 - (void)windowBecameKey:(NSNotification *)notification;
 - (void)windowDidUpdate:(NSNotification *)notification;
 - (void)openBrowserDeveloperTools:(id)sender;
@@ -1335,14 +1336,38 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 }
 
 - (void)openModelSettings:(id)sender {
+    [self openLocalSettingsFragment:nil];
+}
+
+- (BOOL)openLocalSettingsFragment:(NSString *)fragment {
     const char *rawURL = getenv("DIA_CUSTOM_SETTINGS_URL");
     NSString *value = rawURL != NULL
         ? [NSString stringWithUTF8String:rawURL]
         : @"http://127.0.0.1:8765/settings";
-    NSURL *url = [NSURL URLWithString:value];
-    if (url == nil || ![[NSWorkspace sharedWorkspace] openURL:url]) {
-        NSBeep();
+    NSURLComponents *components = [NSURLComponents componentsWithString:value];
+    if (fragment.length > 0) {
+        components.fragment = fragment;
     }
+    NSURL *url = components.URL;
+    NSURL *applicationURL = NSBundle.mainBundle.bundleURL;
+    if (url == nil || applicationURL == nil) {
+        NSBeep();
+        return NO;
+    }
+    NSWorkspaceOpenConfiguration *configuration =
+        [NSWorkspaceOpenConfiguration configuration];
+    configuration.activates = YES;
+    [[NSWorkspace sharedWorkspace]
+        openURLs:@[url]
+        withApplicationAtURL:applicationURL
+        configuration:configuration
+        completionHandler:^(__unused NSRunningApplication *application,
+                            NSError *error) {
+            if (error != nil) {
+                dispatch_async(dispatch_get_main_queue(), ^{ NSBeep(); });
+            }
+        }];
+    return YES;
 }
 
 - (void)windowBecameKey:(NSNotification *)notification {
@@ -1608,16 +1633,31 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 }
 
 - (void)openPromptTools:(id)sender {
-    if (!dia_custom_present_prompt_tools()) {
-        NSBeep();
-    }
+    // Dia 1.46's private PromptToolsController now requires a Swift task-local
+    // dependency token that the production app does not expose. Constructing
+    // it with a synthetic token traps the process, so present the local routing
+    // editor that actually owns Dia Custom's provider behavior.
+    [self openLocalSettingsFragment:@"advanced-json"];
 }
 
 - (void)openBrowserDeveloperTools:(id)sender {
+    NSWindow *window = NSApp.keyWindow ?: NSApp.mainWindow;
+    if ([window.title isEqualToString:@"New Tab"]) {
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = @"Developer Tools need a webpage";
+        alert.informativeText = @"Open a normal webpage first, then choose View → Developer → Browser Developer Tools. Dia disables its native inspector on the New Tab page.";
+        [alert addButtonWithTitle:@"OK"];
+        [alert runModal];
+        return;
+    }
     if (![NSApp sendAction:NSSelectorFromString(@"toggleDevTools:")
                         to:nil
                       from:sender]) {
-        NSBeep();
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = @"Developer Tools need a webpage";
+        alert.informativeText = @"Open a normal webpage first, then choose View → Developer → Browser Developer Tools. Dia disables its native inspector on the New Tab page.";
+        [alert addButtonWithTitle:@"OK"];
+        [alert runModal];
     }
 }
 
@@ -1632,13 +1672,23 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 }
 
 - (void)openAgentServerDashboard:(id)sender {
-    if (![self invokeWindowPresenterAction:"_presentAgentServerDashboardWindow"]) {
-        NSBeep();
-    }
+    [self openLocalSettingsFragment:@"tool-coverage"];
 }
 
 - (void)openLogLevels:(id)sender {
-    if (![self invokeWindowPresenterAction:"_presentLogLevelsWindow"]) {
+    const char *rawProfile = getenv("DIA_CUSTOM_PROFILE");
+    NSString *profile = rawProfile != NULL
+        ? [NSString stringWithUTF8String:rawProfile] : nil;
+    NSString *diagnostics = profile.length > 0
+        ? [profile stringByAppendingPathComponent:@"Diagnostics"] : nil;
+    NSError *error = nil;
+    BOOL ready = diagnostics.length > 0 && [[NSFileManager defaultManager]
+        createDirectoryAtPath:diagnostics
+        withIntermediateDirectories:YES
+        attributes:@{NSFilePosixPermissions: @0700}
+        error:&error];
+    if (!ready || ![[NSWorkspace sharedWorkspace]
+        openURL:[NSURL fileURLWithPath:diagnostics isDirectory:YES]]) {
         NSBeep();
     }
 }
@@ -1734,9 +1784,9 @@ static void dia_custom_install_developer_menu(void) {
         }
 
         if (developerToolsEnabled &&
-            [developerMenu itemWithTitle:@"Prompt Tools & Model Routing"] == nil) {
+            [developerMenu itemWithTitle:@"Prompt & Model Routing…"] == nil) {
             NSMenuItem *promptTools = [[NSMenuItem alloc]
-                initWithTitle:@"Prompt Tools & Model Routing"
+                initWithTitle:@"Prompt & Model Routing…"
                        action:@selector(openPromptTools:)
                 keyEquivalent:@""];
             [promptTools setTarget:dia_custom_developer_menu_controller];
@@ -1750,14 +1800,14 @@ static void dia_custom_install_developer_menu(void) {
             [developerMenu addItem:browserTools];
 
             NSMenuItem *agentServerDashboard = [[NSMenuItem alloc]
-                initWithTitle:@"Agent Server Dashboard"
+                initWithTitle:@"Agent & Tool Dashboard…"
                        action:@selector(openAgentServerDashboard:)
                 keyEquivalent:@""];
             [agentServerDashboard setTarget:dia_custom_developer_menu_controller];
             [developerMenu addItem:agentServerDashboard];
 
             NSMenuItem *logLevels = [[NSMenuItem alloc]
-                initWithTitle:@"Log Levels"
+                initWithTitle:@"Open Diagnostics Folder"
                        action:@selector(openLogLevels:)
                 keyEquivalent:@""];
             [logLevels setTarget:dia_custom_developer_menu_controller];

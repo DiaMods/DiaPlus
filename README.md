@@ -24,7 +24,7 @@ Choose a model from View → Developer → AI Model. Dia Custom also inserts a c
 ./dia-custom settings
 ~~~
 
-The Developer menu also exposes Dia's hidden Prompt Tools & Model Routing panel, the browser developer tools, Agent Server dashboard, and log-level window. Private Prompt Tools entry points are discovered and structurally verified against the exact Dia binary during each build.
+The Developer menu opens Dia Custom's routing editor, model/tool dashboard, diagnostics folder, and Dia's native browser developer tools. Browser Developer Tools require a normal webpage because Dia disables its inspector on New Tab. Dia 1.46's private Prompt Tools window is intentionally not constructed: its production initializer requires an unavailable task-local dependency context and crashes when invoked with a synthetic one.
 
 Useful commands:
 

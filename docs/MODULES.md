@@ -10,7 +10,7 @@
 | `local-ai-routing` | `patch-endpoint.js`, `patch-agent-handler.js`, bridge server/providers | Protocol/provider tests and bridge health; required |
 | `account-bypass` | `patch-no-account.js`, anonymous launch defaults | Per-build ARM64 layout check; clean rebuild to remove |
 | `model-picker` | native bootstrap model catalog/toolbar functions | Runtime-discovered toolbar plus View-menu fallback |
-| `developer-tools` | native bootstrap and Prompt Tools discovery | Build-specific structural discovery and guarded presenters |
+| `developer-tools` | native bootstrap, local routing/tool pages, browser inspector | Native inspector is webpage-only; local diagnostics fail closed |
 | `native-memory` | native Memory reflection shim, `memory.js`, `provider-manager.js` | Memory derivation/profile/privacy/migration tests |
 | `reports` | Report controller/uploader patches, `chat-shape.js`, `artifact-safety.js` | Structural patch checks and staged Report test suite |
 | `local-web` | `local-tools/web.js`, `network-policy.js` | Public/private/Dia destination and parsing tests |

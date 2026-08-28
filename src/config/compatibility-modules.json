@@ -62,7 +62,7 @@
       "defaultEnabled": true,
       "required": false,
       "rebuildOnChange": false,
-      "description": "Exposes Dia's hidden Prompt Tools, browser tools, agent dashboard, and log-level windows."
+      "description": "Exposes local routing and tool diagnostics plus Dia's native webpage developer tools."
     },
     {
       "id": "native-memory",

@@ -8,6 +8,8 @@ test("local settings page keeps provider, memory, connector, and tool controls p
   assert.match(html, /Local connectors/);
   assert.match(html, /Local memory/);
   assert.match(html, /Tool coverage/);
+  assert.match(html, /id="tool-coverage"/);
+  assert.match(html, /id="advanced-json"/);
   assert.match(html, /local-test-token/);
 
   const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];

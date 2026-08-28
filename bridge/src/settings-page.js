@@ -10,7 +10,7 @@ export function renderSettingsPage(adminToken) {
     :root { color-scheme: light dark; font: 15px -apple-system, BlinkMacSystemFont, sans-serif; }
     body { max-width: 820px; margin: 48px auto; padding: 0 24px 80px; background: Canvas; color: CanvasText; }
     h1 { font-size: 30px; margin-bottom: 6px; }
-    h2 { margin-top: 34px; font-size: 19px; }
+    h2 { margin-top: 34px; font-size: 19px; scroll-margin-top: 24px; }
     .muted { color: color-mix(in srgb, CanvasText 58%, transparent); line-height: 1.5; }
     .card { border: 1px solid color-mix(in srgb, CanvasText 15%, transparent); border-radius: 14px; padding: 18px; margin-top: 16px; background: color-mix(in srgb, Canvas 96%, CanvasText 4%); }
     .row { display: flex; gap: 10px; align-items: center; }
@@ -51,7 +51,7 @@ export function renderSettingsPage(adminToken) {
     <div id="status" class="muted"></div>
   </div>
 
-  <h2>Local memory</h2>
+  <h2 id="local-memory">Local memory</h2>
   <div class="muted">Browsing, chat evidence, and derived Memories stay in an owner-only SQLite database on this Mac. The selected model derives durable context; semantic matching uses Apple's on-device sentence embeddings when available. Nothing is sent to Dia.</div>
   <div class="card">
     <div id="memoryStats" class="memory-grid"></div>
@@ -65,18 +65,18 @@ export function renderSettingsPage(adminToken) {
     <div id="memoryStatus" class="muted" style="margin-top:10px"></div>
   </div>
 
-  <h2>Provider configuration</h2>
+  <h2 id="provider-configuration">Provider configuration</h2>
   <div class="muted">Keys are never returned to this page or put in the provider JSON. They are stored separately in an owner-only local file and are excluded from the Codex subprocess environment.</div>
   <div class="card" id="providerList"></div>
 
-  <h2>Tool coverage</h2>
+  <h2 id="tool-coverage">Tool coverage</h2>
   <div class="muted">This inventory updates whenever Dia sends a chat request. Native tools return to Dia's browser harness; local tools execute in the localhost bridge.</div>
   <div class="card">
     <div id="toolSummary" class="muted"></div>
     <div id="toolList" style="margin-top:10px"></div>
   </div>
 
-  <h2>Local connectors</h2>
+  <h2 id="local-connectors">Local connectors</h2>
   <div class="muted">Import account exports into the private local index. Records are searchable by every model and never pass through Dia. Future OAuth adapters use this same connector store.</div>
   <div class="card">
     <div class="add-grid">
@@ -92,7 +92,7 @@ export function renderSettingsPage(adminToken) {
     <div class="muted" style="margin-top:10px">JSON may be an array of records or <code>{ records: [...] }</code>. Each record can contain <code>id</code>, <code>title</code>/<code>name</code>, <code>content</code>, <code>url</code>, <code>updatedAt</code>, and <code>kind: "person"</code>.</div>
   </div>
 
-  <h2>Add OpenAI-compatible provider</h2>
+  <h2 id="add-provider">Add OpenAI-compatible provider</h2>
   <div class="card">
     <div class="add-grid">
       <input id="newProviderID" placeholder="Provider ID (for example lm-studio)">
@@ -105,7 +105,7 @@ export function renderSettingsPage(adminToken) {
     <div class="row" style="margin-top:10px"><button id="addProvider">Add provider</button><span id="providerStatus" class="muted"></span></div>
   </div>
 
-  <h2>Advanced JSON</h2>
+  <h2 id="advanced-json">Advanced JSON</h2>
   <div class="muted">Use this editor for provider aliases, endpoint details, and memory retention. Dia-owned endpoint URLs are always rejected.</div>
   <div class="card">
     <textarea id="config" spellcheck="false" aria-label="Provider configuration"></textarea>

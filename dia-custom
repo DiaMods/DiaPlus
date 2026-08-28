@@ -18,7 +18,14 @@ case "$command" in
     exec /usr/bin/curl --silent --show-error --fail \
       http://127.0.0.1:8765/api/models
     ;;
-  settings) exec /usr/bin/open http://127.0.0.1:8765/settings ;;
+  settings)
+    custom_app="${DIA_CUSTOM_APP:-${project_dir:h}/Dia Custom RTTM.app}"
+    if [[ ! -d "$custom_app" ]]; then
+      print -u2 "Dia Custom is not installed at $custom_app"
+      exit 1
+    fi
+    exec /usr/bin/open -a "$custom_app" http://127.0.0.1:8765/settings
+    ;;
   openai-key) exec "$project_dir/scripts/openai-key.sh" "$@" ;;
   status) exec /usr/bin/sed -n '1,240p' "$project_dir/docs/STATUS.md" ;;
   help|-h|--help)
