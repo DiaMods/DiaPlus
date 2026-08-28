@@ -343,6 +343,21 @@ static NSString *dia_custom_localized_string(id bundle, SEL selector,
         return @"Dia";
     }
     NSString *lowerResult = result.lowercaseString;
+    if ([result isEqualToString:@"Import from Arc"] ||
+        [lowerKey isEqualToString:@"import from arc"] ||
+        [lowerKey hasPrefix:@"import from %"] ||
+        [lowerResult hasPrefix:@"import from %"] ||
+        [lowerKey containsString:
+            @"onboarding import profiles view title format"]) {
+        return @"Import from Dia";
+    }
+    if ([result isEqualToString:
+            @"We'll import your Arc spaces, tabs, and folders to Dia."]) {
+        return @"We'll import your Dia profiles, bookmarks, history, and extensions.";
+    }
+    if ([result isEqualToString:@"Select spaces to import"]) {
+        return @"Select profiles to import";
+    }
     BOOL spacesCountFormat =
         ([lowerKey containsString:@"spaces"] &&
          ([lowerKey containsString:@"%"] ||
@@ -392,7 +407,8 @@ static void dia_custom_install_dia_import_presentation_override(void) {
 }
 
 static id dia_custom_arc_import_name(id object, SEL selector) {
-    return @"Dia";
+    return dia_custom_arc_import_original_name != NULL
+        ? dia_custom_arc_import_original_name(object, selector) : @"Dia";
 }
 
 static id dia_custom_arc_import_app_path(id object, SEL selector) {
