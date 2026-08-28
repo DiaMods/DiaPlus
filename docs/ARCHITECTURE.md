@@ -55,7 +55,7 @@ If a provider asks for local and native actions in separate rounds, local result
 
 The local web client searches DuckDuckGo's public HTML endpoint and fetches public HTTP(S) text directly. It enforces request/redirect limits, bounded response bodies, supported content types, DNS resolution, and private/reserved IP rejection on every hop. Dia and The Browser Company hosts are always rejected.
 
-This client does not receive Chromium cookies. Signed-in content already visible in the browser is available through Dia's native page/tab context; general cookie-backed service browsing needs a future local browser-session adapter.
+This client does not receive Chromium cookies. Signed-in content stays behind Dia's browser-session clients; the native Apps view model supplies only sanitized connection state, account display text, and presented capabilities. Cookie values and browser tokens are never exported.
 
 ## Memory and connectors
 
@@ -74,7 +74,15 @@ Memory is scoped to the Chromium profile ID recovered from each agent context. D
 
 The bootstrap does not recreate Settings UI. It reflects Dia's native `MemoryPreferencePaneViewModel` state, sends a copied state through its existing Combine subject, and retargets the native controls to authenticated loopback routes. As a result, Dia continues to own layout and future visual changes while the local bridge owns persistence and semantics.
 
-Connector imports are transactionally replaced by connector ID and use the same index with source isolation. Local `connector_query` enforces the connector entry type even when given explicit URIs. People records supply local versions of Dia's recent-person and lookup-person tools. No OAuth token or official-Dia database is used.
+Connector imports are transactionally replaced by connector ID and use the same index with source isolation. Local `connector_query` enforces the connector entry type even when given explicit URIs. People records supply local versions of Dia's recent-person and lookup-person tools.
+
+The live connector registry has two adapter boundaries. `NativeSessionAdapter` leaves Gmail, Calendar, Drive, GitHub, Slack, Notion, LinkedIn, and future shipped browser-session tools in Dia's native harness; only connection metadata and presented capability names are mirrored locally. `BridgeConnectorAdapter` loads owner-installed JSON manifests and talks directly to standards-based MCP servers. Remote connectors require HTTPS, explicit allowed domains, and never accept Dia-owned destinations; loopback HTTP is permitted for local servers. OAuth uses PKCE, expiring one-use state, direct token refresh/revocation, and the owner-only credential file with redacted logs. Unknown connectors use namespaced generic tool names. When Memory is on, the relevant resulting chat summary enters the normal provenance-bearing conversation evidence; raw account responses and blanket account copies do not.
+
+## Native Apps and Morning Brief
+
+The bootstrap does not rebuild the Apps pane. It validates and copies Dia's shipped `AppsPreferencePaneViewModel.State`, then publishes the locally entitled Advanced Chat and Morning Brief values through the view model's existing Combine subject. Dia continues to own its Profile, Morning Brief, Connected Apps, branded rows, and layout. The shipped Morning Brief callback is retained so Dia's per-profile preference and scheduler remain authoritative; the same click is mirrored to the authenticated loopback state. Native connector rows are reflected into sanitized local status records. If a future state layout or callback set no longer matches the audited labels and types, `native-apps` stops applying and records a compatibility diagnostic without disabling chat, Memory, or Reports.
+
+Morning Brief retains Dia's bundled `clia-brief` agent, native schedule client, skills, paintings, HTML template, browser tools, and Reports ingestion. The selected custom provider receives its inference turns through the same localhost model route. `apps.json` mirrors the one enabled profile, the 5–11 AM local schedule, attempts, source diagnostics, and one success per local day. Dia's native scheduler owns windowing, launch catch-up, and Report delivery; the bridge recognizes the bundled agent request, marks its local run state, and records successful completion. An abandoned local run becomes retryable after 30 minutes. Connector failures remain model-visible tool results so the native agent can produce a partial brief rather than losing the entire report.
 
 ## Reports
 

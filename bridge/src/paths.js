@@ -12,6 +12,10 @@ export const modelCatalogPath = process.env.DIA_CUSTOM_MODEL_CATALOG_PATH ??
   resolve(stateDirectory, "models.json");
 export const credentialsPath = process.env.DIA_CUSTOM_CREDENTIALS_PATH ??
   resolve(stateDirectory, "credentials.json");
+export const appsStatePath = process.env.DIA_CUSTOM_APPS_STATE_PATH ??
+  resolve(stateDirectory, "apps.json");
+export const connectorManifestDirectory = process.env.DIA_CUSTOM_CONNECTOR_MANIFESTS ??
+  resolve(stateDirectory, "connectors");
 export const memoryDatabasePath = process.env.DIA_CUSTOM_MEMORY_PATH ??
   resolve(stateDirectory, "memory.sqlite3");
 export const decisionWorkspacePath = process.env.DIA_CUSTOM_DECISION_WORKSPACE ??

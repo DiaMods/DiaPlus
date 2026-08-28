@@ -19,6 +19,8 @@ import {
 } from "./chat-shape.js";
 import { ConfigStore, defaultCodexModel } from "./config.js";
 import { CredentialStore } from "./credentials.js";
+import { AppsStateStore } from "./apps-state.js";
+import { ConnectorRegistry } from "./connectors/registry.js";
 import { LocalToolRegistry } from "./local-tools/index.js";
 import {
   isPrivateMemoryPayload,
@@ -319,6 +321,15 @@ function splitModelKey(key) {
   return { providerID: key.slice(0, separator), model: key.slice(separator + 1) };
 }
 
+function isMorningBriefPayload(payload) {
+  const metadata = JSON.stringify({
+    metadata: payload?.metadata,
+    agent: payload?.agent,
+    system: payload?.system,
+  });
+  return /clia[-_ ]brief|morningbrief|morning brief/i.test(metadata);
+}
+
 async function atomicWriteJSON(path, value) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporaryPath = `${path}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
@@ -366,13 +377,23 @@ export class ProviderManager {
     appleStatusImplementation = appleProviderStatus,
     catalogPath = modelCatalogPath,
     toolCoverageStore = new ToolCoverageStore(),
+    appsStateStore = new AppsStateStore(),
+    connectorRegistry = null,
   } = {}) {
     this.configStore = configStore;
     this.credentialStore = credentialStore;
     this.memoryStore = memoryStore ?? new MemoryStore(undefined, undefined, {
       embedder: async (texts) => appleSentenceEmbeddings(texts),
     });
-    this.localTools = new LocalToolRegistry(this.memoryStore, configStore);
+    this.appsStateStore = appsStateStore;
+    this.connectorRegistry = connectorRegistry ?? new ConnectorRegistry({
+      stateStore: this.appsStateStore,
+      credentialStore,
+      fetchImplementation,
+    });
+    this.localTools = new LocalToolRegistry(this.memoryStore, configStore, {
+      connectorRegistry: this.connectorRegistry,
+    });
     this.fetch = fetchImplementation;
     this.appleStatus = appleStatusImplementation;
     this.catalogPath = catalogPath;
@@ -396,6 +417,8 @@ export class ProviderManager {
       config = await this.configStore.select(`codex:${defaultCodexModel}`);
     }
     await this.memoryStore.open();
+    await this.appsStateStore.load();
+    if (moduleEnabled("live-connectors")) await this.connectorRegistry.initialize();
     this.memoryStore.setPrivacyFilters(config.localMemory.excludedHosts);
     if (moduleEnabled("native-memory") &&
         config.localMemory.enabled && config.localMemory.importBrowserHistory) {
@@ -654,9 +677,24 @@ export class ProviderManager {
     const emitStatus = onStatus ?? onReasoning;
     const { config, provider, model, key } = await this.selectedProvider();
     const profileID = profileIDFromPayload(payload);
+    const morningBriefRun = moduleEnabled("morning-brief") && isMorningBriefPayload(payload);
+    if (morningBriefRun) {
+      await this.appsStateStore.recordMorningBrief({
+        profileID,
+        status: "running",
+      }).catch(() => {});
+    }
     const observedNativeTools = normalizeAnthropicTools(payload, { includeBlocked: true });
     const observedNativeToolNames = new Set(observedNativeTools.map((tool) => tool.name));
     const deferredTools = deferredAnthropicTools(payload);
+    if (moduleEnabled("live-connectors")) {
+      await this.connectorRegistry.observeNativeTools(
+        profileID,
+        [...observedNativeTools, ...deferredTools],
+      ).catch((error) => {
+        process.stderr.write(`Native connector observation failed: ${String(error?.message ?? error)}\n`);
+      });
+    }
     const observedForCoverage = new Map(
       deferredTools.map((tool) => [tool.name, tool]),
     );
@@ -878,6 +916,15 @@ export class ProviderManager {
       };
     }
 
+    if (morningBriefRun && result?.kind === "final") {
+      await this.appsStateStore.recordMorningBrief({
+        profileID,
+        status: "succeeded",
+      }).catch((error) => {
+        process.stderr.write(`Morning Brief completion state failed: ${String(error?.message ?? error)}\n`);
+      });
+    }
+
     const finalConfig = await this.configStore.load();
     if (
       moduleEnabled("native-memory") &&
@@ -900,4 +947,4 @@ export class ProviderManager {
   }
 }
 
-export { splitModelKey };
+export { isMorningBriefPayload, splitModelKey };

@@ -91,7 +91,7 @@ fi
 /usr/bin/defaults write local.rttm.dia SUAutomaticallyUpdate -bool false
 /usr/bin/defaults write local.rttm.dia SUScheduledCheckInterval -int 0
 /usr/bin/defaults write local.rttm.dia canShowUpdateBanner -bool false
-/usr/bin/defaults write local.rttm.dia transientFeatureFlagOverrides -array \
+feature_flags=( \
   "clia-agents-chat-enabled=true" \
   "force-classic-chat-enabled=false" \
   "agent-thinking-ui-enabled=true" \
@@ -105,14 +105,31 @@ fi
   "search-slack-step-enabled=true" \
   "search-slack-bylines-enabled=true" \
   "clia-settings-toggle-always-visible-enabled=true" \
-  "apps-pref-pane-redesign-enabled=true" \
   "auto-enable-clia-from-onboarding-enabled=true" \
   "clia-in-app-upsell-enabled=true" \
   "clia-report-enabled=true" \
   "clia-artifact-in-chat-presentation-enabled=true" \
   "clia-artifact-tab-preview-enabled=true" \
   "external-qa-access-for-developer-menu-enabled=true" \
-  "enable-llm-debugger=true"
+  "enable-llm-debugger=true" \
+)
+if module_enabled native-apps; then
+  feature_flags+=("apps-pref-pane-redesign-enabled=true")
+fi
+if module_enabled morning-brief; then
+  feature_flags+=(
+    "clia-morning-brief-settings-enabled=true"
+    "clia-morning-brief-allow-gmail-gcal-enabled=true"
+    "clia-morning-brief-allow-msft-enabled=true"
+    "clia-morning-brief-connect-apps-enabled=true"
+    "clia-morning-brief-auto-focus-enabled=true"
+    "clia-morning-brief-open-links-enabled=true"
+    "clia-morning-brief-paper-window-enabled=true"
+    "clia-morning-brief-paper-expand-into-tab-enabled=true"
+    "context-builder-morning-brief-enabled=true"
+  )
+fi
+/usr/bin/defaults write local.rttm.dia transientFeatureFlagOverrides -array "${feature_flags[@]}"
 
 node_bin="${DIA_CUSTOM_NODE:-$(command -v node || true)}"
 if [[ -z "$node_bin" ]]; then

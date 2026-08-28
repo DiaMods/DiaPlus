@@ -25,7 +25,7 @@ import {
 } from "./paths.js";
 import { renderSettingsPage } from "./settings-page.js";
 import { isAllowedLoopbackHostHeader } from "./network-policy.js";
-import { enabledModuleIDs } from "./modules.js";
+import { enabledModuleIDs, moduleEnabled } from "./modules.js";
 import { AnthropicStreamWriter } from "./anthropic-stream.js";
 import { isToolContinuation } from "./chat-shape.js";
 
@@ -547,6 +547,108 @@ async function handleRequest(request, response) {
   if (request.method === "GET" && requestURL.pathname === "/api/config") {
     await providerManager.configStore.load();
     jsonResponse(response, 200, providerManager.configStore.publicValue());
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/api/apps/state") {
+    try {
+      const profileID = requestURL.searchParams.get("profileID") ?? "Default";
+      const state = await providerManager.appsStateStore.publicState(profileID);
+      const connectors = moduleEnabled("live-connectors")
+        ? await providerManager.connectorRegistry.status(profileID)
+        : [];
+      jsonResponse(response, 200, { ...state, connectors });
+    } catch (error) {
+      jsonResponse(response, 500, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "PUT" && requestURL.pathname === "/api/apps/morning-brief") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      if (!moduleEnabled("morning-brief")) throw new Error("morning-brief module is disabled");
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      await providerManager.appsStateStore.setMorningBrief(payload);
+      jsonResponse(
+        response,
+        200,
+        await providerManager.appsStateStore.publicState(payload.profileID ?? "Default"),
+      );
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && requestURL.pathname === "/api/apps/morning-brief/status") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      await providerManager.appsStateStore.recordMorningBrief(payload);
+      jsonResponse(response, 200, await providerManager.appsStateStore.publicState(payload.profileID));
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "POST" && requestURL.pathname === "/api/apps/native-state") {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      if (!moduleEnabled("native-apps")) throw new Error("native-apps module is disabled");
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      await providerManager.appsStateStore.updateNativeState(payload);
+      jsonResponse(response, 200, await providerManager.appsStateStore.publicState(payload.profileID));
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  const connectorAction = requestURL.pathname.match(
+    /^\/api\/apps\/connectors\/([^/]+)\/(connect|reconnect|disconnect)$/,
+  );
+  if (request.method === "POST" && connectorAction) {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      if (!moduleEnabled("live-connectors")) throw new Error("live-connectors module is disabled");
+      const connectorID = decodeURIComponent(connectorAction[1]);
+      const action = connectorAction[2];
+      const value = action === "disconnect"
+        ? await providerManager.connectorRegistry.disconnect(connectorID)
+        : await providerManager.connectorRegistry.connect(connectorID);
+      jsonResponse(response, 200, value);
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/api/apps/oauth/callback") {
+    try {
+      const value = await providerManager.connectorRegistry.completeOAuth({
+        state: requestURL.searchParams.get("state"),
+        code: requestURL.searchParams.get("code"),
+        error: requestURL.searchParams.get("error"),
+      });
+      htmlResponse(response, `<!doctype html><meta charset="utf-8"><title>Connected</title><p>${value.connector} is connected to Dia Custom. You can close this tab.</p>`);
+    } catch (error) {
+      response.writeHead(400, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      response.end("<!doctype html><meta charset=\"utf-8\"><title>Connection failed</title><p>The connector could not be connected. Return to Dia Custom and try again.</p>");
+    }
     return;
   }
 

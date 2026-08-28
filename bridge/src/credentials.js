@@ -27,7 +27,9 @@ export class CredentialStore {
       this.value = {
         version: 1,
         credentials: Object.fromEntries(Object.entries(raw?.credentials ?? {})
-          .filter(([id, secret]) => validProviderID(id) && typeof secret === "string" && secret)),
+          .filter(([id, secret]) => validProviderID(id) && (
+            typeof secret === "string" || (secret && typeof secret === "object")
+          ))),
       };
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
@@ -41,7 +43,8 @@ export class CredentialStore {
       return process.env[provider.apiKeyEnv];
     }
     const value = await this.load();
-    return value.credentials[provider?.id] ?? null;
+    const secret = value.credentials[provider?.id];
+    return typeof secret === "string" ? secret : null;
   }
 
   async set(providerID, secret) {
@@ -51,6 +54,23 @@ export class CredentialStore {
     }
     const value = await this.load();
     value.credentials[providerID] = secret.trim();
+    await atomicWrite(this.path, value);
+  }
+
+  async getRecord(recordID) {
+    if (!validProviderID(recordID)) throw new Error("invalid credential record id");
+    const value = await this.load();
+    const record = value.credentials[recordID];
+    return record && typeof record === "object" ? structuredClone(record) : null;
+  }
+
+  async setRecord(recordID, record) {
+    if (!validProviderID(recordID)) throw new Error("invalid credential record id");
+    if (!record || typeof record !== "object" || Array.isArray(record)) {
+      throw new Error("credential record must be an object");
+    }
+    const value = await this.load();
+    value.credentials[recordID] = structuredClone(record);
     await atomicWrite(this.path, value);
   }
 

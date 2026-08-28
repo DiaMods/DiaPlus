@@ -43,6 +43,24 @@ export function assertAllowedProviderURL(rawURL) {
   return url;
 }
 
+function isLoopbackHostname(hostname) {
+  const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+}
+
+export function assertAllowedConnectorURL(rawURL, allowedDomains = []) {
+  const url = assertAllowedProviderURL(rawURL);
+  if (url.protocol !== "https:" && !isLoopbackHostname(url.hostname)) {
+    throw new Error("remote connector URLs must use HTTPS");
+  }
+  const domains = allowedDomains.map((value) => String(value).toLowerCase().replace(/^\./, ""));
+  if (domains.length > 0 && !domains.some((domain) =>
+    url.hostname.toLowerCase() === domain || url.hostname.toLowerCase().endsWith(`.${domain}`))) {
+    throw new Error(`connector destination is not in its allowed domain list: ${url.hostname}`);
+  }
+  return url;
+}
+
 export function joinProviderURL(baseURL, path) {
   const base = assertAllowedProviderURL(baseURL);
   const normalizedBase = base.toString().replace(/\/$/, "");

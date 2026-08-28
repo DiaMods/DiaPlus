@@ -15,6 +15,9 @@
 | `reports` | Report controller/uploader patches, `chat-shape.js`, `artifact-safety.js` | Structural patch checks and staged Report test suite |
 | `local-web` | `local-tools/web.js`, `network-policy.js` | Public/private/Dia destination and parsing tests |
 | `connectors` | `local-tools/connectors.js`, shared Memory index | Entry-type boundary and connector import/search tests |
+| `native-apps` | native Apps state/callback shim, `apps-state.js` | Native view-model layout validation; disables itself on an incompatible shape |
+| `live-connectors` | `connectors/registry.js`, native state observation, OAuth/MCP APIs | PKCE, one-use state, allowlist, discovery, execution, and secret-store tests |
+| `morning-brief` | native Morning Brief feature gates/scheduler callback, `apps-state.js` | Profile exclusivity, daily idempotency, catch-up, and retry-state tests |
 | `apple-models` | Swift helper and Apple provider adapter | Helper build/status/structured tool fixtures |
 
 ## Commands

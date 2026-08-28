@@ -101,6 +101,33 @@
       "description": "Adds owner-controlled imported records and people lookup to the local tool layer."
     },
     {
+      "id": "native-apps",
+      "label": "Native Apps state",
+      "scope": ["runtime", "bridge", "launch"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Feeds Dia's shipped Apps preference pane local Advanced Chat, profile, eligibility, and connection state."
+    },
+    {
+      "id": "live-connectors",
+      "label": "Live connector adapters",
+      "scope": ["runtime", "bridge"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Preserves browser-session connector tools and adds direct, owner-controlled OAuth/MCP adapters."
+    },
+    {
+      "id": "morning-brief",
+      "label": "Native Morning Brief",
+      "scope": ["runtime", "bridge", "launch"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Enables Dia's bundled Morning Brief UI and schedules its native Reports workflow with local state."
+    },
+    {
       "id": "apple-models",
       "label": "Apple Foundation Models",
       "scope": ["build", "bridge"],

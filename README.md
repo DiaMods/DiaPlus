@@ -70,7 +70,11 @@ Dia's native **Settings → Memory** pane remains Dia's own view and view model.
 
 Memory storage and retrieval stay on this Mac. Derivation runs through the selected model: Apple on-device stays local, while Codex/OpenAI or another remote provider receives the filtered evidence needed for that derivation under that provider's own privacy boundary. It is never sent to Dia.
 
-Connector JSON may be an array or `{ "records": [...] }`. Records can contain `id`, `title`/`name`/`subject`, `content`/`text`/`body`, `url`, `updatedAt`, `metadata`, and `kind: "person"`. Imports are local snapshots, not live account sync. OAuth adapters for services such as Gmail, Calendar, Slack, Notion, and Drive remain future work.
+Connector JSON may be an array or `{ "records": [...] }`. Records can contain `id`, `title`/`name`/`subject`, `content`/`text`/`body`, `url`, `updatedAt`, `metadata`, and `kind: "person"`.
+
+Dia's native Apps pane is also locally enabled. Browser-session connectors—currently Gmail, Calendar, Drive, GitHub, Slack, Notion, LinkedIn, plus future native capabilities detected from Dia—keep authentication and cookies inside Chromium and return their tools through Dia's native progress UI. Direct third-party MCP connectors can be added by copying a manifest based on **examples/connectors/sample-mcp.json** into **Bridge/.state/connectors/** and restarting the bridge. Those adapters use explicit allowed domains, direct OAuth with PKCE/refresh/revocation, owner-only token storage, and namespaced generic tool presentation. Dia-owned authentication services remain blocked.
+
+The native Apps layout owns the Advanced Chat, Profile, Morning Brief, and Connected Apps presentation; Dia Custom changes its real local view-model state rather than injecting replacement controls. Morning Brief uses Dia's bundled `clia-brief` agent and Report template with the selected model. It is exclusive to one profile, runs once per local day beginning at 5 AM, catches up on launch, retries an abandoned run, and lands in Dia's native Reports library.
 
 ## Native Reports
 
@@ -120,6 +124,8 @@ When a Developer ID Application certificate is available, installs use it automa
 | **bridge/src/provider-manager.js** | Provider discovery, selection, local-tool loop, and coverage tracking |
 | **bridge/src/providers/** | Codex, Apple, OpenAI Responses, and Chat Completions adapters |
 | **bridge/src/local-tools/** | Memory, connector, and public-web implementations |
+| **bridge/src/connectors/** | Native-session and direct OAuth/MCP connector registry |
+| **bridge/src/apps-state.js** | Native Apps and once-daily Morning Brief state |
 | **bridge/src/artifact-safety.js** | Active-context Report upload and outbound-network gate |
 | **bridge/src/server.js** | Dia protocols, streaming, and local administration API |
 | **src/bootstrap/** | Native picker, Developer menu, and service-host blocking |
@@ -140,4 +146,6 @@ See [Architecture](docs/ARCHITECTURE.md), [Compatibility modules](docs/MODULES.m
 - Provider credentials: **Bridge/.state/credentials.json**
 - Model/tool catalogs: **Bridge/.state/models.json**, **Bridge/.state/tool-coverage.json**
 - Local memory: **Bridge/.state/memory.sqlite3**
+- Apps/Morning Brief state: **Bridge/.state/apps.json**
+- Custom connector manifests: **Bridge/.state/connectors/*.json**
 - Diagnostics: **~/Library/Application Support/Dia Custom RTTM/Diagnostics**

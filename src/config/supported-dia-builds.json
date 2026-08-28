@@ -17,6 +17,9 @@
         "reports",
         "local-web",
         "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
         "apple-models"
       ]
     },
@@ -36,6 +39,9 @@
         "reports",
         "local-web",
         "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
         "apple-models"
       ]
     },
@@ -55,6 +61,9 @@
         "reports",
         "local-web",
         "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
         "apple-models"
       ]
     }

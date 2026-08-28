@@ -1,6 +1,12 @@
 import Foundation
 import Darwin
 
+@_silgen_name("swift_reflectionMirror_recursiveCount")
+private func recursiveFieldCount(_ type: Any.Type) -> Int
+
+@_silgen_name("swift_reflectionMirror_recursiveChildOffset")
+private func recursiveFieldOffset(_ type: Any.Type, index: Int) -> Int
+
 @_silgen_name("dia_custom_call_current_value_subject_send")
 private func callCurrentValueSubjectSend(
     _ implementation: UnsafeRawPointer,
@@ -174,4 +180,224 @@ public func diaCustomSwiftSetNativeMemoryEnabled(
         )
     }
     return _openExistential(currentValue, do: open)
+}
+
+private func sendAppsLocalStateCopy<T>(
+    _ value: T,
+    morningBriefEnabled: Bool,
+    subject: AnyObject,
+    implementation: UnsafeRawPointer
+) -> Bool {
+    let fields = Array(Mirror(reflecting: value).children)
+    guard fields.count == recursiveFieldCount(T.self),
+          fields.first?.label == "isCliaEnabled",
+          fields.count > 17,
+          fields[10].label == "isRedesignEnabled",
+          fields[15].label == "morningBriefPreference",
+          fields[16].label == "isMorningBriefSourceAvailable",
+          fields[17].label == "isMorningBriefSubscriptionEligible",
+          fields[0].value is Bool,
+          fields[10].value is Bool,
+          String(reflecting: Swift.type(of: fields[15].value)) ==
+            "Swift.Optional<CliaReport.MorningBriefGenerationPreference>",
+          fields[16].value is Bool?,
+          fields[17].value is Bool else {
+        appendActionProbe("apps-state: refusing unexpected native state layout")
+        return false
+    }
+    let currentEnabled = fields[0].value as! Bool
+    let currentRedesign = fields[10].value as! Bool
+    let currentPreference = String(describing: fields[15].value)
+    let currentSource = fields[16].value as! Bool?
+    let currentEligible = fields[17].value as! Bool
+    let desiredPreference = morningBriefEnabled ? ".daily)" : ".never)"
+    if currentEnabled && currentRedesign && currentSource == true && currentEligible &&
+        currentPreference.hasSuffix(desiredPreference) {
+        return true
+    }
+    var copy = value
+    return withUnsafeMutableBytes(of: &copy) { bytes -> Bool in
+        let offsets = [0, 10, 15, 16, 17].map {
+            recursiveFieldOffset(T.self, index: $0)
+        }
+        guard let base = bytes.baseAddress,
+              offsets.allSatisfy({ $0 >= 0 && $0 < bytes.count }) else { return false }
+        base.advanced(by: offsets[0]).storeBytes(of: true, as: Bool.self)
+        base.advanced(by: offsets[1]).storeBytes(of: true, as: Bool.self)
+        // Native enum reflection confirms byte 0 is `.daily`, byte 1 is
+        // `.never`, and byte 2 is Optional.none for this audited build.
+        base.advanced(by: offsets[2]).storeBytes(
+            of: morningBriefEnabled ? UInt8(0) : UInt8(1), as: UInt8.self)
+        var sourceAvailable: Bool? = true
+        withUnsafeBytes(of: &sourceAvailable) { sourceBytes in
+            base.advanced(by: offsets[3]).copyMemory(
+                from: sourceBytes.baseAddress!, byteCount: sourceBytes.count)
+        }
+        base.advanced(by: offsets[4]).storeBytes(of: true, as: Bool.self)
+        callCurrentValueSubjectSend(
+            implementation,
+            Unmanaged.passUnretained(subject).toOpaque(),
+            UnsafeRawPointer(base)
+        )
+        appendActionProbe("apps-state: sent local enabled state morningBrief=\(morningBriefEnabled)")
+        return true
+    }
+}
+
+@_cdecl("dia_custom_swift_set_native_apps_enabled")
+@MainActor
+public func diaCustomSwiftSetNativeAppsEnabled(
+    _ rawViewModel: UnsafeRawPointer?,
+    _ morningBriefEnabled: Bool
+) -> Bool {
+    guard let rawViewModel else { return false }
+    let viewModel = Unmanaged<AnyObject>.fromOpaque(rawViewModel).takeUnretainedValue()
+    guard let subject = Mirror(reflecting: viewModel).children
+        .first(where: { $0.label == "stateSubject" })?.value as AnyObject?,
+          let currentValue = Mirror(reflecting: subject).children
+        .first(where: { $0.label == "currentValue" })?.value,
+          let symbol = dlsym(
+            UnsafeMutableRawPointer(bitPattern: -2),
+            "$s7Combine19CurrentValueSubjectC4sendyyxF"
+          ) else {
+        appendActionProbe("apps-state: state subject unavailable")
+        return false
+    }
+    func open<T>(_ value: T) -> Bool {
+        sendAppsLocalStateCopy(
+            value,
+            morningBriefEnabled: morningBriefEnabled,
+            subject: subject,
+            implementation: UnsafeRawPointer(symbol)
+        )
+    }
+    return _openExistential(currentValue, do: open)
+}
+
+private func unwrappedOptional(_ value: Any) -> Any? {
+    let mirror = Mirror(reflecting: value)
+    guard mirror.displayStyle == .optional else { return value }
+    return mirror.children.first?.value
+}
+
+private func reflectedValue(_ value: Any, named name: String) -> Any? {
+    Mirror(reflecting: value).children.first(where: { $0.label == name })?.value
+}
+
+private func reflectedString(_ value: Any, named name: String) -> String? {
+    guard let candidate = reflectedValue(value, named: name),
+          let unwrapped = unwrappedOptional(candidate) else { return nil }
+    return unwrapped as? String
+}
+
+private func nativeConnectorID(displayName: String, fallback: String? = nil) -> String {
+    let known: [String: String] = [
+        "google calendar": "google-calendar",
+        "google drive": "google-drive",
+        "gmail": "gmail",
+        "github": "github",
+        "slack": "slack",
+        "notion": "notion",
+        "linkedin": "linkedin",
+    ]
+    if let exact = known[displayName.lowercased()] { return exact }
+    let source = fallback?.isEmpty == false ? fallback! : displayName
+    let scalars = source.lowercased().unicodeScalars.map { scalar -> Character in
+        CharacterSet.alphanumerics.contains(scalar) ? Character(String(scalar)) : "-"
+    }
+    return String(scalars).split(separator: "-").filter { !$0.isEmpty }.joined(separator: "-")
+}
+
+private func nativeAppsConnections<T>(_ value: T) -> [[String: Any]]? {
+    let fields = Array(Mirror(reflecting: value).children)
+    guard fields.count > 8,
+          fields[3].label == "builtInApps",
+          fields[8].label == "providerRowDisplays" else { return nil }
+    var rows: [String: [String: Any]] = [:]
+
+    for child in Mirror(reflecting: fields[3].value).children {
+        let item = child.value
+        guard let displayName = reflectedString(item, named: "displayName") else { continue }
+        let state = reflectedValue(item, named: "connectionState")
+            .map { String(describing: $0).lowercased() } ?? ""
+        let id = nativeConnectorID(displayName: displayName)
+        rows[id] = [
+            "id": id,
+            "connected": !state.contains("notconnected") && state.contains("connected"),
+            "autoConnected": state.contains("auto"),
+        ]
+    }
+
+    for child in Mirror(reflecting: fields[8].value).children {
+        let item = child.value
+        guard let displayName = reflectedString(item, named: "displayName") else { continue }
+        let fallbackID = reflectedString(item, named: "id")
+        let id = nativeConnectorID(displayName: displayName, fallback: fallbackID)
+        let connected = reflectedValue(item, named: "isConnected") as? Bool ?? false
+        var row: [String: Any] = [
+            "id": id,
+            "connected": connected,
+            "autoConnected": false,
+        ]
+        for name in ["activeGoogleEmail", "subtitle"] {
+            if let label = reflectedString(item, named: name), !label.isEmpty {
+                row["accountLabel"] = String(label.prefix(200))
+                break
+            }
+        }
+        rows[id] = row
+    }
+    return rows.values.sorted {
+        ($0["id"] as? String ?? "") < ($1["id"] as? String ?? "")
+    }
+}
+
+@_cdecl("dia_custom_swift_native_apps_connections_json")
+@MainActor
+public func diaCustomSwiftNativeAppsConnectionsJSON(
+    _ rawViewModel: UnsafeRawPointer?
+) -> UnsafeMutablePointer<CChar>? {
+    guard let rawViewModel else { return nil }
+    let viewModel = Unmanaged<AnyObject>.fromOpaque(rawViewModel).takeUnretainedValue()
+    guard let subject = Mirror(reflecting: viewModel).children
+        .first(where: { $0.label == "stateSubject" })?.value as AnyObject?,
+          let currentValue = Mirror(reflecting: subject).children
+        .first(where: { $0.label == "currentValue" })?.value else { return nil }
+    func open<T>(_ value: T) -> [[String: Any]]? { nativeAppsConnections(value) }
+    guard let connections = _openExistential(currentValue, do: open),
+          JSONSerialization.isValidJSONObject(connections),
+          let data = try? JSONSerialization.data(withJSONObject: connections),
+          let json = String(data: data, encoding: .utf8) else { return nil }
+    return strdup(json)
+}
+
+@_cdecl("dia_custom_swift_invoke_native_apps_enable")
+@MainActor
+public func diaCustomSwiftInvokeNativeAppsEnable(_ rawView: UnsafeRawPointer?) -> Bool {
+    guard let rawView else { return false }
+    let view = Unmanaged<AnyObject>.fromOpaque(rawView).takeUnretainedValue()
+    guard let candidate = Mirror(reflecting: view).children
+        .first(where: { $0.label == "onToggleClia" })?.value else {
+        appendActionProbe("apps-enable-action: onToggleClia unavailable")
+        return false
+    }
+    appendActionProbe("apps-enable-action: type=\(String(reflecting: Swift.type(of: candidate)))")
+    if let action = candidate as? @MainActor @Sendable (Bool) -> Void {
+        action(true)
+        return true
+    }
+    if let action = candidate as? (Bool) -> Void {
+        action(true)
+        return true
+    }
+    if let action = candidate as? @MainActor @Sendable () -> Void {
+        action()
+        return true
+    }
+    if let action = candidate as? () -> Void {
+        action()
+        return true
+    }
+    appendActionProbe("apps-enable-action: closure cast failed")
+    return false
 }

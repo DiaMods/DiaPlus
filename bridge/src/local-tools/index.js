@@ -12,10 +12,14 @@ import {
 import { moduleEnabled } from "../modules.js";
 
 export class LocalToolRegistry {
-  constructor(memoryStore, configStore, { webTools = new LocalWebTools() } = {}) {
+  constructor(memoryStore, configStore, {
+    webTools = new LocalWebTools(),
+    connectorRegistry = null,
+  } = {}) {
     this.memoryStore = memoryStore;
     this.configStore = configStore;
     this.webTools = webTools;
+    this.connectorRegistry = connectorRegistry;
   }
 
   async definitions(nativeTools) {
@@ -32,11 +36,16 @@ export class LocalToolRegistry {
     if (moduleEnabled("connectors") && config.localConnectors.enabled) {
       for (const tool of localConnectorTools()) byName.set(tool.name, tool);
     }
+    if (moduleEnabled("live-connectors") && config.localConnectors.enabled &&
+        this.connectorRegistry) {
+      for (const tool of await this.connectorRegistry.definitions()) byName.set(tool.name, tool);
+    }
     return [...byName.values()];
   }
 
   isLocal(name) {
-    return isLocalMemoryTool(name) || isLocalWebTool(name) || isLocalConnectorTool(name);
+    return isLocalMemoryTool(name) || isLocalWebTool(name) || isLocalConnectorTool(name) ||
+      Boolean(this.connectorRegistry?.isTool(name));
   }
 
   async execute(call, context = {}) {
@@ -57,6 +66,12 @@ export class LocalToolRegistry {
       const config = await this.configStore.load();
       if (!config.localConnectors.enabled) throw new Error("local connectors are disabled");
       return executeLocalConnectorTool(this.memoryStore, call.name, call.input);
+    }
+    if (this.connectorRegistry?.isTool(call.name)) {
+      if (!moduleEnabled("live-connectors")) throw new Error("live-connectors module is disabled");
+      const config = await this.configStore.load();
+      if (!config.localConnectors.enabled) throw new Error("local connectors are disabled");
+      return this.connectorRegistry.execute(call.name, call.input);
     }
     throw new Error(`unknown local tool: ${call.name}`);
   }
