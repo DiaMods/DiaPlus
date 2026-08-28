@@ -12,7 +12,9 @@ import {
   withReportWorkflowPolicy,
   stripLeadingProgressNarration,
   isToolContinuation,
+  latexFormattingSkillState,
   nativeToolSearchTool,
+  normalizeDiaLatexFormatting,
 } from "../src/chat-shape.js";
 
 const reportTools = [
@@ -114,6 +116,61 @@ test("inventories Dia's native on-demand tools and exposes their native schema l
   assert.deepEqual(toolSearch.input_schema.required, ["query"]);
   assert.match(buildExactToolGuide([toolSearch]), /DEFERRED DIA TOOLS/);
   assert.equal(nativeToolSearchTool({ messages: [] }), null);
+});
+
+test("requires Dia's native LaTeX skill for math and science requests", () => {
+  const payload = {
+    messages: [{
+      role: "user",
+      content: [{ type: "text", text: "<user-message>What does 350 W running all month cost?</user-message>" }],
+    }],
+  };
+  assert.deepEqual(latexFormattingSkillState(payload), {
+    active: true,
+    loaded: false,
+    requestIndex: 0,
+    requestText: "What does 350 W running all month cost?",
+    skill: "latex-formatting",
+  });
+  payload.messages.push(
+    { role: "assistant", content: [{
+      type: "tool_use",
+      id: "latex-skill",
+      name: "Skill",
+      input: { skill: "latex-formatting" },
+    }] },
+    { role: "user", content: [{
+      type: "tool_result",
+      tool_use_id: "latex-skill",
+      content: "Base directory for this skill: /native/latex-formatting\nUse inlineLatex and latexBlock.",
+    }] },
+  );
+  assert.equal(latexFormattingSkillState(payload).loaded, true);
+  assert.equal(latexFormattingSkillState(payload).active, false);
+  assert.deepEqual(latexFormattingSkillState({
+    messages: [{ role: "user", content: "Summarize this paragraph." }],
+  }), { active: false, loaded: false });
+});
+
+test("normalizes common model math dialects into Dia's native LaTeX markers", () => {
+  const input = [
+    "Cost: $42.84.",
+    "Inline: $E = mc^2$.",
+    "Alternate: \\(a^2 + b^2 = c^2\\).",
+    "Malformed: $\\{latex\\}x = \\frac{-b}{2a}\\{/latex\\}$.",
+    "$$\\int_0^1 x^2 \\, dx$$",
+    "```latex",
+    "\\sum_{n=1}^{\\infty} \\frac{1}{n^2}",
+    "```",
+  ].join("\n");
+  const output = normalizeDiaLatexFormatting(input);
+  assert.match(output, /Cost: \$42\.84\./);
+  assert.match(output, /Inline: `\{latex\}E = mc\^2`\./);
+  assert.match(output, /Alternate: `\{latex\}a\^2 \+ b\^2 = c\^2`\./);
+  assert.match(output, /Malformed: `\{latex\}x = \\frac\{-b\}\{2a\}`\./);
+  assert.match(output, /```\{latex\}\n\\int_0\^1 x\^2 \\, dx\n```/);
+  assert.match(output, /```\{latex\}\n\\sum_\{n=1\}\^\{\\infty\} \\frac\{1\}\{n\^2\}\n```/);
+  assert.equal(normalizeDiaLatexFormatting(input, { enabled: false }), input);
 });
 
 test("blocks an identical failed tool call until a new user request", () => {

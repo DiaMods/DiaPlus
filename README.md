@@ -51,6 +51,8 @@ Server-dependent tools have local replacements:
 
 The settings page records every eager and on-demand tool Dia exposes. It labels each route as native, local override, native on-demand, or blocked, so a future Dia update reveals its tool changes without a hard-coded allowlist.
 
+Chat output retains Dia's native rich formatting. Standard Markdown tables render through Dia's table view. Math and science requests deterministically load Dia's own `latex-formatting` skill, then a narrow compatibility pass repairs common `$...$`, `$$...$$`, `\\(...\\)`, `\\[...\\]`, and fenced `latex` output from local models into Dia's required inline/block markers. Dia's bundled SwiftMath views still perform the rendering; the bridge does not draw replacement tables or equations.
+
 ## Memory and connectors
 
 Local Memory is an owner-only SQLite database containing:

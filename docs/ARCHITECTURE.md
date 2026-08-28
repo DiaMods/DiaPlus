@@ -8,6 +8,7 @@
 4. The selected Codex, Apple, OpenAI Responses, or OpenAI-compatible Chat Completions adapter produces final text or typed tool calls.
 5. Local calls execute inside the bridge and their results are appended for another model decision. Native calls stream back with the original name, ID, and arguments.
 6. Dia executes native browser/file/skill/Report tools in its per-context harness and sends results through the next model turn. Deferred schemas use Dia's `ToolSearch`; premature calls from weaker models are converted into that loader step, then execute once Dia presents the real schema. Public `search_web`/`fetch_web_content` calls notify Dia's original presentation callback so its rich step cards remain native, while their actual implementation is redirected to the localhost bridge. Reasoning keeps provider token boundaries.
+7. For math/science chat, the bridge loads Dia's native `latex-formatting` skill before provider output. A final-text compatibility pass converts common model math delimiters to the exact `{latex}` inline/fenced forms expected by Dia, which then renders them using its bundled SwiftMath item views. Markdown tables pass through unchanged to Dia's native table renderer.
 
 The provider does not automate Chromium directly. Dia retains browser context, tab actions, attachments, sandboxed artifact creation, and Reports-library ownership.
 

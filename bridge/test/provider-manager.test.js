@@ -284,6 +284,94 @@ test("a deferred tool runs normally once Dia presents its loaded schema", async 
   memory.database.close();
 });
 
+test("math requests load Dia's native latex-formatting skill before provider output", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-latex-skill-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const current = await config.load();
+  await config.update({
+    ...current,
+    localMemory: { ...current.localMemory, enabled: false },
+  });
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+  manager.runProvider = async () => {
+    throw new Error("provider must not run before the native formatting skill loads");
+  };
+  const { result } = await manager.run({
+    messages: [{
+      role: "user",
+      content: [{ type: "text", text: "<user-message>Show the equation E = mc^2.</user-message>" }],
+    }],
+    tools: [{
+      name: "Skill",
+      description: "Load a native Dia skill.",
+      input_schema: { type: "object", properties: { skill: { type: "string" } } },
+    }],
+  });
+  assert.equal(result.kind, "tool_use");
+  assert.equal(result.toolCalls[0].name, "Skill");
+  assert.equal(result.toolCalls[0].input.skill, "latex-formatting");
+
+  manager.runProvider = async () => ({
+    kind: "final",
+    text: "Euler's identity is $e^{i\\pi} + 1 = 0$.\n\n```latex\n\\int_{-\\infty}^{\\infty} e^{-x^2} \\, dx = \\sqrt{\\pi}\n```",
+    toolCalls: [],
+    model: "gpt-5.6-luna",
+  });
+  const loadedPayload = {
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: "<user-message>Show Euler's identity.</user-message>" }],
+      },
+      {
+        role: "assistant",
+        content: [{
+          type: "tool_use",
+          id: "loaded-latex-skill",
+          name: "Skill",
+          input: { skill: "latex-formatting" },
+        }],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "loaded-latex-skill",
+            content: "Launching skill: latex-formatting",
+          },
+          {
+            type: "text",
+            text: "Base directory for this skill: /native/latex-formatting\nUse `{latex}...` and ```{latex} blocks.",
+          },
+        ],
+      },
+    ],
+    tools: [{
+      name: "Skill",
+      description: "Load a native Dia skill.",
+      input_schema: { type: "object", properties: { skill: { type: "string" } } },
+    }],
+  };
+  const { result: formatted } = await manager.run(loadedPayload);
+  assert.match(formatted.text, /`\{latex\}e\^\{i\\pi\} \+ 1 = 0`/);
+  assert.match(formatted.text, /```\{latex\}\n\\int_\{-\\infty\}\^\{\\infty\}/);
+  memory.database.close();
+});
+
 test("local memory toggle controls tools, retrieval, and future chat capture", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-memory-toggle-"));
   const config = new ConfigStore(resolve(directory, "config.json"));

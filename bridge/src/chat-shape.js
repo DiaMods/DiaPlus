@@ -229,6 +229,15 @@ function requestsReport(text) {
   );
 }
 
+function requestsMathOrScienceFormatting(text) {
+  if (!text) return false;
+  return (
+    /\b(?:latex|math(?:ematics|ematical)?|formula|equation|solve|calculate|calculation|derive|derivation|proof|theorem|algebra|geometry|trigonometry|calculus|integral|derivative|matrix|vector|probability|statistics|physics|chemistry|biology|astronomy|scientific)\b/i.test(text) ||
+    /\b\d+(?:\.\d+)?\s*(?:w|kw|kwh|wh|v|volts?|a|amps?|ohms?|hz|joules?|newtons?|pascals?|celsius|fahrenheit)\b/i.test(text) ||
+    /\b\d+(?:\.\d+)?\s*(?:[+*/^=]|-(?=\s*\d))\s*\d/i.test(text)
+  );
+}
+
 function continuesReportRequest(text) {
   return /^(?:please\s+)?(?:go ahead|continue|proceed|retry|try again|do it|yes|yeah|yep|finish(?: it)?|complete(?: it)?|keep going)\b/i.test(text.trim());
 }
@@ -391,6 +400,40 @@ export function reportWorkflowState(payload) {
   };
 }
 
+export function latexFormattingSkillState(payload) {
+  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+  const latestRequest = messages
+    .map((message, index) => ({ index, text: humanMessageText(message) }))
+    .filter(({ text }) => text)
+    .at(-1);
+  const callsByID = new Map();
+  const successfulSkills = new Set();
+  for (const message of messages) {
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (message.role === "assistant" && block?.type === "tool_use" && block.id) {
+        callsByID.set(block.id, block);
+      } else if (message.role === "user" && block?.type === "tool_result") {
+        const call = callsByID.get(block.tool_use_id);
+        if (call?.name === "Skill" && typeof call.input?.skill === "string" &&
+            !toolResultFailed(block.content)) {
+          successfulSkills.add(call.input.skill);
+        }
+      }
+    }
+  }
+  const loaded = successfulSkills.has("latex-formatting");
+  if (!latestRequest || (!loaded && !requestsMathOrScienceFormatting(latestRequest.text))) {
+    return { active: false, loaded };
+  }
+  return {
+    active: !loaded,
+    loaded,
+    requestIndex: latestRequest.index,
+    requestText: latestRequest.text,
+    skill: "latex-formatting",
+  };
+}
+
 export function reportWorkflowRequiresTool(payload, tools = null) {
   const state = reportWorkflowState(payload);
   if (!state.active || ["failed", "complete", "inactive"].includes(state.stage)) {
@@ -500,6 +543,8 @@ export function buildDecisionPrompt(payload, tools) {
     "When the user asks about earlier browsing or conversations that are not already present in the transcript, search local memory before saying the information is unavailable.",
     "Do not combine local memory calls and browser action calls in one decision. Finish local research first, then request browser actions in a later decision.",
     "When no tool is needed or tool results are sufficient, return kind=final with the natural-language answer in text and an empty tool_calls array.",
+    "Use standard Markdown tables when rows and columns make a comparison or compact data clearer. Include a header separator row and never wrap a table in a code fence.",
+    "For math or science, follow the loaded latex-formatting skill exactly so Dia receives its native inlineLatex and latexBlock syntax; do not substitute generic dollar-delimited LaTeX.",
     "Final text must begin with the completed answer. Never narrate current or future work such as ‘I’m gathering’, ‘I’ll search’, or ‘Let me check’; tool activity is displayed separately.",
     "A prior assistant tool_use followed by a user tool_result means the tool already ran. Use its result. If that result reports an error, do not repeat the same call during this automatic continuation; stop and explain the error.",
     "Never claim a browser action succeeded unless a corresponding tool_result says it succeeded.",
@@ -515,6 +560,46 @@ export function stripLeadingProgressNarration(text) {
   const firstSentence = match[1].trim();
   const isProgress = /^(?:(?:I(?:'|’)?m|I am|I(?:'|’)?ll|I will|Let me|We(?:'|’)?re|We are)\s+(?:now\s+)?(?:gathering|searching|looking|checking|reviewing|fetching|researching|finding|collecting|investigating|going to|about to)|(?:I|We)(?:'|’)?(?:ve|have)\s+(?:now\s+)?(?:gathered|searched|looked|checked|reviewed|fetched|researched|found|collected|investigated))\b/i.test(firstSentence);
   return isProgress ? match[2].trimStart() : text;
+}
+
+function diaInlineLatex(value) {
+  return `\`{latex}${value.trim()}\``;
+}
+
+function diaBlockLatex(value) {
+  return `\`\`\`{latex}\n${value.trim()}\n\`\`\``;
+}
+
+function looksLikeInlineMath(value) {
+  const inner = value.trim();
+  return (
+    /[\\^_=+*/{}]/.test(inner) ||
+    /^[A-Za-z](?:\s*[<>≤≥≈≠]\s*[A-Za-z0-9])?$/.test(inner)
+  );
+}
+
+export function normalizeDiaLatexFormatting(text, { enabled = true } = {}) {
+  if (!enabled || typeof text !== "string" || text.length === 0) return text;
+  let output = text;
+
+  // Dia's native skill requires `{latex}...` for inline math and a
+  // ```{latex} fence for display math. Repair the common dialects emitted by
+  // local/OpenAI-compatible models without touching currency such as $42.84.
+  output = output.replace(/```(?:latex|tex)\s*\n([\s\S]*?)```/gi,
+    (_match, body) => diaBlockLatex(body));
+  output = output.replace(
+    /\$?\\?\{latex\\?\}([\s\S]*?)\\?\{\/latex\\?\}\$?/gi,
+    (_match, body) => diaInlineLatex(body),
+  );
+  output = output.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g,
+    (_match, body) => diaBlockLatex(body));
+  output = output.replace(/\\\[\s*([\s\S]*?)\s*\\\]/g,
+    (_match, body) => diaBlockLatex(body));
+  output = output.replace(/\\\(([^\n]*?)\\\)/g,
+    (_match, body) => diaInlineLatex(body));
+  output = output.replace(/\$([^$\n]+?)\$/g, (match, body) =>
+    looksLikeInlineMath(body) ? diaInlineLatex(body) : match);
+  return output;
 }
 
 export const toolDecisionSchema = {

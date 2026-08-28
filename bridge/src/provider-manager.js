@@ -8,7 +8,9 @@ import {
   deferredAnthropicTools,
   isDiaOwnedProductKnowledgeTool,
   isToolContinuation,
+  latexFormattingSkillState,
   nativeToolSearchTool,
+  normalizeDiaLatexFormatting,
   reportWorkflowRequiresTool,
   reportWorkflowState,
   removeRepeatedFailedToolCalls,
@@ -258,6 +260,22 @@ function nativeReportDecision(state, tools, model) {
     };
   }
   return null;
+}
+
+function nativeLatexFormattingDecision(state, tools, model) {
+  if (!state?.active) return null;
+  const skillTool = tools.find((tool) => tool.name === "Skill" && tool.source === "native");
+  if (!skillTool) return null;
+  return {
+    kind: "tool_use",
+    text: "",
+    toolCalls: [{
+      id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+      name: skillTool.name,
+      input: { skill: state.skill },
+    }],
+    model,
+  };
 }
 
 function splitModelKey(key) {
@@ -662,6 +680,15 @@ export class ProviderManager {
         }
         break;
       }
+      const latexState = reportState.active
+        ? { active: false }
+        : latexFormattingSkillState(currentPayload);
+      const nativeLatexResult = nativeLatexFormattingDecision(latexState, tools, key);
+      if (nativeLatexResult) {
+        result = nativeLatexResult;
+        if (emitStatus) await emitStatus("Loading Dia's native math formatter...");
+        break;
+      }
       const providerTools = providerToolsForReportStage(
         reportState,
         tools,
@@ -757,7 +784,14 @@ export class ProviderManager {
     }
 
     if (result?.kind === "final") {
-      result = { ...result, text: stripLeadingProgressNarration(result.text) };
+      const latexState = latexFormattingSkillState(currentPayload);
+      result = {
+        ...result,
+        text: normalizeDiaLatexFormatting(
+          stripLeadingProgressNarration(result.text),
+          { enabled: latexState.loaded },
+        ),
+      };
     }
 
     const finalConfig = await this.configStore.load();

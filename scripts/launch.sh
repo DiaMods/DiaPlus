@@ -145,6 +145,7 @@ if module_enabled apple-models && [[ -x "$apple_model_helper" ]]; then
 fi
 [[ -z "${DIA_CUSTOM_CODEX_MODEL:-}" ]] || bridge_environment+=("DIA_CUSTOM_CODEX_MODEL=$DIA_CUSTOM_CODEX_MODEL")
 [[ -z "${DIA_CUSTOM_WORKSPACE:-}" ]] || bridge_environment+=("DIA_CUSTOM_WORKSPACE=$DIA_CUSTOM_WORKSPACE")
+[[ "${DIA_CUSTOM_CAPTURE:-0}" != "1" ]] || bridge_environment+=("DIA_CUSTOM_CAPTURE=1")
 /bin/launchctl submit \
   -l "$bridge_label" \
   -o "$bridge_log" \
