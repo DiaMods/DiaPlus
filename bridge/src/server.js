@@ -26,6 +26,8 @@ import {
 import { renderSettingsPage } from "./settings-page.js";
 import { isAllowedLoopbackHostHeader } from "./network-policy.js";
 import { enabledModuleIDs } from "./modules.js";
+import { AnthropicStreamWriter } from "./anthropic-stream.js";
+import { isToolContinuation } from "./chat-shape.js";
 
 const host = "127.0.0.1";
 const port = Number.parseInt(process.env.DIA_CUSTOM_BRIDGE_PORT ?? "8765", 10);
@@ -181,113 +183,9 @@ function writeOpenAIStream(response, content, sessionKey, model = "dia-custom-lo
   response.end(`data: ${encryptDiaData(sessionKey, "[DONE]")}\n\n`);
 }
 
-function anthropicTextEvents(content, startIndex = 0) {
-  return [
-    {
-      event: "content_block_start",
-      data: {
-        type: "content_block_start",
-        index: startIndex,
-        content_block: { type: "text", text: "" },
-      },
-    },
-    {
-      event: "content_block_delta",
-      data: {
-        type: "content_block_delta",
-        index: startIndex,
-        delta: { type: "text_delta", text: content },
-      },
-    },
-    {
-      event: "content_block_stop",
-      data: { type: "content_block_stop", index: startIndex },
-    },
-  ];
-}
-
-function anthropicToolEvents(toolCalls, startIndex = 0) {
-  return toolCalls.flatMap((toolCall, index) => {
-    const contentIndex = startIndex + index;
-    const id = toolCall.id ?? `toolu_dia_custom_${randomBytes(12).toString("hex")}`;
-    return [
-      {
-        event: "content_block_start",
-        data: {
-          type: "content_block_start",
-          index: contentIndex,
-          content_block: {
-            type: "tool_use",
-            id,
-            name: toolCall.name,
-            input: {},
-          },
-        },
-      },
-      {
-        event: "content_block_delta",
-        data: {
-          type: "content_block_delta",
-          index: contentIndex,
-          delta: {
-            type: "input_json_delta",
-            partial_json: JSON.stringify(toolCall.input),
-          },
-        },
-      },
-      {
-        event: "content_block_stop",
-        data: { type: "content_block_stop", index: contentIndex },
-      },
-    ];
-  });
-}
-
 function writeAnthropicEvent(response, event, data) {
   response.write(`event: ${event}\n`);
   response.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-function anthropicThinkingStartEvent(index) {
-  return {
-    event: "content_block_start",
-    data: {
-      type: "content_block_start",
-      index,
-      content_block: { type: "thinking", thinking: "", signature: "" },
-    },
-  };
-}
-
-function anthropicThinkingDeltaEvent(index, thinking) {
-  return {
-    event: "content_block_delta",
-    data: {
-      type: "content_block_delta",
-      index,
-      delta: { type: "thinking_delta", thinking },
-    },
-  };
-}
-
-function anthropicThinkingStopEvents(index) {
-  return [
-    {
-      event: "content_block_delta",
-      data: {
-        type: "content_block_delta",
-        index,
-        delta: {
-          type: "signature_delta",
-          signature: "dia-custom-local-summary-v1",
-        },
-      },
-    },
-    {
-      event: "content_block_stop",
-      data: { type: "content_block_stop", index },
-    },
-  ];
 }
 
 function classifierResponse() {
@@ -314,45 +212,36 @@ async function streamProviderAsAnthropic(response, payload) {
   const { key: model } = await providerManager.selectedProvider();
   const contextID = currentAgentContextID(payload, profileDirectory);
   const messageId = `msg_dia_custom_${randomBytes(12).toString("hex")}`;
-  const thinkingIndex = 0;
-  const outputIndex = 1;
 
   response.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-cache, no-store",
     connection: "keep-alive",
   });
-  writeAnthropicEvent(response, "message_start", {
-    type: "message_start",
-    message: {
-      id: messageId,
-      type: "message",
-      role: "assistant",
-      content: [],
-      model,
-      stop_reason: null,
-      stop_sequence: null,
-      usage: { input_tokens: 0, output_tokens: 0 },
-    },
-  });
-
-  const thinkingStart = anthropicThinkingStartEvent(thinkingIndex);
-  writeAnthropicEvent(response, thinkingStart.event, thinkingStart.data);
+  const stream = new AnthropicStreamWriter(response, { messageID: messageId, model });
+  stream.startMessage();
   const initialStatus = Array.isArray(payload.tools) && payload.tools.length > 0
     ? "Reviewing the browser context and available tools..."
     : "Reviewing the request and browser context...";
-  const initialThinking = anthropicThinkingDeltaEvent(thinkingIndex, initialStatus);
-  writeAnthropicEvent(response, initialThinking.event, initialThinking.data);
+  if (!isToolContinuation(payload)) stream.writeStatus(initialStatus);
 
   let result;
   try {
     ({ result } = await providerManager.run(payload, {
       onReasoning: async (delta) => {
-        const thinking = anthropicThinkingDeltaEvent(
-          thinkingIndex,
-          `\n\n${delta}`,
-        );
-        writeAnthropicEvent(response, thinking.event, thinking.data);
+        stream.writeReasoning(delta);
+      },
+      onStatus: async (status) => {
+        stream.writeStatus(status);
+      },
+      onLocalToolActivity: async (activity) => {
+        if (activity.phase === "start") {
+          for (const call of activity.calls) stream.writeLocalToolUse(call);
+        } else if (activity.phase === "finish") {
+          for (const { call, result: toolResult } of activity.results) {
+            stream.writeLocalToolResult(call, toolResult);
+          }
+        }
       },
     }));
   } catch (error) {
@@ -384,10 +273,6 @@ async function streamProviderAsAnthropic(response, payload) {
     }
   }
 
-  for (const item of anthropicThinkingStopEvents(thinkingIndex)) {
-    writeAnthropicEvent(response, item.event, item.data);
-  }
-
   const isToolUse = result.kind === "tool_use" && result.toolCalls.length > 0;
   if (isToolUse) {
     for (const item of await nativeToolSafetyEvents(
@@ -398,22 +283,12 @@ async function streamProviderAsAnthropic(response, payload) {
       writeAnthropicEvent(response, item.event, item.data);
     }
   }
-  const contentEvents = isToolUse
-    ? anthropicToolEvents(result.toolCalls, outputIndex)
-    : anthropicTextEvents(result.text, outputIndex);
-  for (const item of contentEvents) {
-    writeAnthropicEvent(response, item.event, item.data);
-  }
-  writeAnthropicEvent(response, "message_delta", {
-    type: "message_delta",
-    delta: {
-      stop_reason: isToolUse ? "tool_use" : "end_turn",
-      stop_sequence: null,
-    },
-    usage: { output_tokens: result.usage?.output_tokens ?? 0 },
+  if (isToolUse) stream.writeNativeToolCalls(result.toolCalls);
+  else stream.writeText(result.text);
+  stream.finish({
+    stopReason: isToolUse ? "tool_use" : "end_turn",
+    outputTokens: result.usage?.output_tokens ?? 0,
   });
-  writeAnthropicEvent(response, "message_stop", { type: "message_stop" });
-  response.end();
   return result;
 }
 
@@ -427,7 +302,6 @@ async function respondToAnthropicRequest(response, body) {
   if (!Array.isArray(payload?.messages) || payload.stream !== true) {
     return false;
   }
-
   const toolCount = Array.isArray(payload.tools) ? payload.tools.length : 0;
   const { key: selectedModel } = await providerManager.selectedProvider();
   process.stdout.write(
@@ -651,6 +525,29 @@ async function handleRequest(request, response) {
   if (request.method === "GET" && requestURL.pathname === "/api/config") {
     await providerManager.configStore.load();
     jsonResponse(response, 200, providerManager.configStore.publicValue());
+    return;
+  }
+
+  // Dia's bundled MCP proxy calls these two native tool names so the browser
+  // can retain its own activity UI. The implementation remains localhost-only
+  // and inherits LocalWebTools' public-address and Dia-domain restrictions.
+  if (request.method === "POST" && requestURL.pathname === "/t") {
+    try {
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      if (!["search_web", "fetch_web_content"].includes(payload?.n)) {
+        throw new Error("unsupported native local tool");
+      }
+      const result = await providerManager.localTools.execute(
+        {
+          name: `mcp__dia-tools__${payload.n}`,
+          input: payload.i,
+        },
+        { profileID: "Default" },
+      );
+      jsonResponse(response, 200, result);
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
     return;
   }
 

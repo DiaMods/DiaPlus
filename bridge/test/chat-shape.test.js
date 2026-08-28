@@ -10,6 +10,9 @@ import {
   removeRepeatedFailedToolCalls,
   toolDecisionSchemaForPayload,
   withReportWorkflowPolicy,
+  stripLeadingProgressNarration,
+  isToolContinuation,
+  nativeToolSearchTool,
 } from "../src/chat-shape.js";
 
 const reportTools = [
@@ -41,6 +44,37 @@ test("decision prompt places exact tool availability before the native payload",
   }, reportTools);
   assert.ok(prompt.indexOf("EXACT AVAILABLE TOOL NAMES") < prompt.indexOf("The transcript"));
   assert.match(prompt, /Every name in that list is currently callable/);
+  assert.match(prompt, /Final text must begin with the completed answer/);
+});
+
+test("removes stale progress narration only when a completed answer follows", () => {
+  assert.equal(
+    stripLeadingProgressNarration("I’m gathering the latest information on Discord. Discord added a new overlay."),
+    "Discord added a new overlay.",
+  );
+  assert.equal(
+    stripLeadingProgressNarration("I’ve gathered the latest information. Discord added profile controls."),
+    "Discord added profile controls.",
+  );
+  assert.equal(
+    stripLeadingProgressNarration("Discord is gathering feedback. More changes are expected."),
+    "Discord is gathering feedback. More changes are expected.",
+  );
+});
+
+test("recognizes only an active native tool continuation", () => {
+  assert.equal(isToolContinuation({
+    messages: [{
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "call-1", content: "done" }],
+    }],
+  }), true);
+  assert.equal(isToolContinuation({
+    messages: [
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call-1", content: "done" }] },
+      { role: "user", content: "A new request" },
+    ],
+  }), false);
 });
 
 test("filters Dia-owned knowledge tools while retaining browser tools", () => {
@@ -62,18 +96,24 @@ test("filters Dia-owned knowledge tools while retaining browser tools", () => {
   ]);
 });
 
-test("inventories Dia's native on-demand tool reminder without exposing it to providers", () => {
-  const deferred = deferredAnthropicTools({
+test("inventories Dia's native on-demand tools and exposes their native schema loader", () => {
+  const payload = {
     messages: [{
       role: "user",
       content: `<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail. Use ToolSearch before calling them:\nTodoWrite\nmcp__dia-tools__open_tabs\nmcp__dia-tools__search_dia_product_knowledge\n</system-reminder>`,
     }],
-  });
+  };
+  const deferred = deferredAnthropicTools(payload);
   assert.deepEqual(deferred.map((tool) => [tool.name, tool.source]), [
     ["TodoWrite", "deferred"],
     ["mcp__dia-tools__open_tabs", "deferred"],
     ["mcp__dia-tools__search_dia_product_knowledge", "blocked"],
   ]);
+  const toolSearch = nativeToolSearchTool(payload);
+  assert.equal(toolSearch.name, "ToolSearch");
+  assert.deepEqual(toolSearch.input_schema.required, ["query"]);
+  assert.match(buildExactToolGuide([toolSearch]), /DEFERRED DIA TOOLS/);
+  assert.equal(nativeToolSearchTool({ messages: [] }), null);
 });
 
 test("blocks an identical failed tool call until a new user request", () => {

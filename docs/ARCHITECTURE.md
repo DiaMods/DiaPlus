@@ -7,7 +7,7 @@
 3. **ProviderManager** resolves the persistent model selection, removes Dia-service-only tools, adds local tools, and records tool coverage.
 4. The selected Codex, Apple, OpenAI Responses, or OpenAI-compatible Chat Completions adapter produces final text or typed tool calls.
 5. Local calls execute inside the bridge and their results are appended for another model decision. Native calls stream back with the original name, ID, and arguments.
-6. Dia executes native browser/file/skill/Report tools in its per-context harness and sends results through the next model turn. Reasoning summaries render in Dia's existing activity UI.
+6. Dia executes native browser/file/skill/Report tools in its per-context harness and sends results through the next model turn. Deferred schemas use Dia's `ToolSearch`; premature calls from weaker models are converted into that loader step, then execute once Dia presents the real schema. Public `search_web`/`fetch_web_content` calls notify Dia's original presentation callback so its rich step cards remain native, while their actual implementation is redirected to the localhost bridge. Reasoning keeps provider token boundaries.
 
 The provider does not automate Chromium directly. Dia retains browser context, tab actions, attachments, sandboxed artifact creation, and Reports-library ownership.
 
@@ -21,7 +21,7 @@ Adapters return one shared result contract:
 - provider-authored reasoning summaries;
 - zero or more typed calls using exact supplied tool names.
 
-Codex runs as a decision engine in an empty read-only workspace. Its built-in command execution, file changes, MCP/apps, and web search are disabled; browser actions are expressed only through Dia Custom tools. Apple runs in a separate signed Swift helper using Foundation Models and NaturalLanguage. Its compact structured schema carries the selected native tool name plus JSON arguments while the complete Dia schemas stay in the decision prompt and native harness. On-device generation works without a network service; Private Cloud Compute additionally requires Apple's managed entitlement and is advertised as unavailable when the helper lacks it. OpenAI uses the Responses API. Ollama and custom servers use OpenAI-compatible Chat Completions or Responses endpoints.
+Codex runs as a decision engine in an empty read-only workspace. Its built-in command execution, file changes, MCP/apps, and web search are disabled; browser actions are expressed only through Dia Custom tools. Apple runs in a separate signed Swift helper using Foundation Models and NaturalLanguage. Its compact structured schema carries the selected native tool name plus JSON arguments while the complete Dia schemas stay in the decision prompt and native harness. On-device generation works without a network service; Private Cloud Compute additionally requires Apple's managed entitlement and is advertised as unavailable when the helper lacks it. OpenAI uses the Responses API. Ollama and custom servers use OpenAI-compatible Chat Completions or Responses endpoints. Chat Completions continuations retain the standard assistant/tool sequence and also mirror the bounded completed result into an explicit continuation message for local runtimes that otherwise ignore `role: tool` content.
 
 The localhost administration API uses an unguessable token, sends no permissive CORS headers, and never returns credentials. The settings page receives that token only from the loopback origin that serves it.
 

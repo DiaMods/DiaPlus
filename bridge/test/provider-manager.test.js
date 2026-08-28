@@ -63,18 +63,24 @@ test("provider catalog discovers Ollama and routes local memory before native to
     return { kind: "final", text: "The codeword was marigold.", toolCalls: [], model: "gpt-5.6-luna" };
   };
   const reasoning = [];
+  const activities = [];
   const { result, nativeToolCount, totalToolCount } = await manager.run({
     messages: [{ role: "user", content: "What was the local codeword?" }],
     tools: [
       { name: "open_tabs", description: "Open tabs", input_schema: { type: "object", properties: {} } },
       { name: "search_dia_product_knowledge", description: "Search Dia", input_schema: { type: "object", properties: {} } },
     ],
-  }, { onReasoning: async (value) => reasoning.push(value) });
+  }, {
+    onStatus: async (value) => reasoning.push(value),
+    onLocalToolActivity: async (activity) => activities.push(activity),
+  });
   assert.equal(result.text, "The codeword was marigold.");
   assert.equal(calls, 2);
   assert.equal(nativeToolCount, 1);
   assert.equal(totalToolCount, 9);
   assert.ok(reasoning.some((value) => /Recalled .* local Memor/i.test(value)));
+  assert.deepEqual(activities.map((activity) => activity.phase), ["start", "finish"]);
+  assert.equal(activities[0].calls[0].name, "mcp__dia-tools__memory_search");
   const coverage = await manager.toolCoverageStore.publicValue();
   assert.equal(coverage.tools.find((tool) => tool.name === "open_tabs").route, "native");
   assert.equal(coverage.tools.find((tool) =>
@@ -82,6 +88,199 @@ test("provider catalog discovers Ollama and routes local memory before native to
   assert.equal(coverage.tools.find((tool) =>
     tool.name === "search_dia_product_knowledge").route, "blocked");
   assert.equal(coverage.blocked, 1);
+  memory.database.close();
+});
+
+test("native web tools return to Dia while bridge-only local tools execute internally", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-native-web-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const current = await config.load();
+  await config.update({
+    ...current,
+    localMemory: { ...current.localMemory, enabled: false },
+  });
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+  manager.runProvider = async () => ({
+    kind: "tool_use",
+    text: "",
+    toolCalls: [{
+      id: "web-call",
+      name: "mcp__dia-tools__search_web",
+      input: { queries: ["Discord updates"] },
+    }],
+    model: "gpt-5.6-luna",
+  });
+  const activities = [];
+  const { result } = await manager.run({
+    messages: [{ role: "user", content: "Search the web" }],
+    tools: [{
+      name: "mcp__dia-tools__search_web",
+      description: "Search the web",
+      input_schema: { type: "object", properties: { queries: { type: "array" } } },
+    }],
+  }, { onLocalToolActivity: async (activity) => activities.push(activity) });
+  assert.equal(result.kind, "tool_use");
+  assert.equal(result.toolCalls[0].name, "mcp__dia-tools__search_web");
+  assert.deepEqual(activities, []);
+  memory.database.close();
+});
+
+test("ToolSearch is returned to Dia so its deferred native tools can be loaded", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-tool-search-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const current = await config.load();
+  await config.update({
+    ...current,
+    localMemory: { ...current.localMemory, enabled: false },
+  });
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+  manager.runProvider = async (_provider, { tools }) => {
+    assert.ok(tools.some((tool) => tool.name === "ToolSearch"));
+    assert.ok(!tools.some((tool) => tool.name === "mcp__dia-tools__open_tabs"));
+    return {
+      kind: "tool_use",
+      text: "",
+      toolCalls: [{
+        id: "tool-search-call",
+        name: "ToolSearch",
+        input: { query: "select:mcp__dia-tools__open_tabs" },
+      }],
+      model: "gpt-5.6-luna",
+    };
+  };
+  const { result, nativeToolCount } = await manager.run({
+    messages: [{
+      role: "user",
+      content: `<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail. Use ToolSearch before calling them:\nmcp__dia-tools__open_tabs\n</system-reminder>`,
+    }],
+    tools: [],
+  });
+  assert.equal(result.kind, "tool_use");
+  assert.equal(result.toolCalls[0].name, "ToolSearch");
+  assert.equal(nativeToolCount, 1);
+  memory.database.close();
+});
+
+test("a direct deferred tool request is deterministically converted to ToolSearch", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-deferred-rewrite-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const current = await config.load();
+  await config.update({
+    ...current,
+    localMemory: { ...current.localMemory, enabled: false },
+  });
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+  manager.runProvider = async () => ({
+    kind: "tool_use",
+    text: "",
+    toolCalls: [{
+      id: "premature-open-tabs",
+      name: "mcp__dia-tools__open_tabs",
+      input: { urls: ["https://example.com"] },
+    }],
+    model: "gpt-5.6-luna",
+  });
+  const { result } = await manager.run({
+    messages: [{
+      role: "user",
+      content: `<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail. Use ToolSearch before calling them:\nmcp__dia-tools__open_tabs\n</system-reminder>`,
+    }],
+    tools: [],
+  });
+  assert.equal(result.kind, "tool_use");
+  assert.equal(result.toolCalls[0].name, "ToolSearch");
+  assert.equal(result.toolCalls[0].input.query, "select:mcp__dia-tools__open_tabs");
+  memory.database.close();
+});
+
+test("a deferred tool runs normally once Dia presents its loaded schema", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-loaded-tool-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const current = await config.load();
+  await config.update({
+    ...current,
+    localMemory: { ...current.localMemory, enabled: false },
+  });
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+  manager.runProvider = async () => ({
+    kind: "tool_use",
+    text: "",
+    toolCalls: [{
+      id: "loaded-open-tabs",
+      name: "mcp__dia-tools__open_tabs",
+      input: { urls: ["https://example.com"] },
+    }],
+    model: "gpt-5.6-luna",
+  });
+  const { result } = await manager.run({
+    messages: [{
+      role: "user",
+      content: `<system-reminder>\nThe following deferred tools are now available via ToolSearch. Their schemas are NOT loaded — calling them directly will fail. Use ToolSearch before calling them:\nmcp__dia-tools__open_tabs\n</system-reminder>`,
+    }],
+    tools: [{
+      name: "mcp__dia-tools__open_tabs",
+      description: "Open browser tabs.",
+      input_schema: {
+        type: "object",
+        properties: { urls: { type: "array", items: { type: "string" } } },
+        required: ["urls"],
+      },
+    }],
+  });
+  assert.equal(result.kind, "tool_use");
+  assert.equal(result.toolCalls[0].name, "mcp__dia-tools__open_tabs");
   memory.database.close();
 });
 

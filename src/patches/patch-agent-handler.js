@@ -188,6 +188,39 @@ const handlerPatches = [
       after: Buffer.from(withNativeNotification.padEnd(remoteBefore.length, " ")),
     };
   })(),
+  (() => {
+    // Keep Dia's native MCP tool lifecycle—and therefore its native activity
+    // UI—but execute public web search/fetch through the localhost bridge.
+    // Other browser tools retain Dia's original in-process callback.
+    const before = `async (j$, C$) => {
+          let y = C$?._meta?.["claudecode/toolUseId"], E = typeof y === "string" ? y : undefined;
+          if (!D.has(c))
+            D.add(c), Dv6(J, T);
+          try {
+            let u = W?.();
+            return { content: [{ type: "text", text: await X.onTool(c, j$, M, u && E ? { ...u, toolUseId: E } : u) }] };
+          } catch (u) {
+            let A = u instanceof Error ? u.message : String(u);
+            return { content: [{ type: "text", text: JSON.stringify({ error: A }) }] };
+          }
+        }`;
+    const localWeb = `async(i,o)=>{if(!D.has(c))D.add(c),Dv6(J,T);try{let m=W?.(),e=o?._meta?.["claudecode/toolUseId"];if(e&&m)m={...m,toolUseId:e};if(M==="dia"&&/^(search_web|fetch_web_content)$/.test(c)){X.onTool(c,i,M,m).catch(()=>0);let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:c,i})}),t=await r.text();if(!r.ok)throw Error(t);return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await X.onTool(c,i,M,m)}]}}catch(e){return{content:[{type:"text",text:JSON.stringify({error:String(e)})}]}}}`;
+    return {
+      before: Buffer.from(before),
+      after: Buffer.from(localWeb.padEnd(Buffer.byteLength(before), " ")),
+    };
+  })(),
+  (() => {
+    // Upgrade clones whose public-web execution was already local but skipped
+    // the native callback that populates Dia's ToolUI presentation models.
+    const beforeLength = 537;
+    const legacyLocalWeb = `async(j$,C$)=>{let y=C$?._meta?.["claudecode/toolUseId"],E=typeof y==="string"?y:undefined;if(!D.has(c))D.add(c),Dv6(J,T);try{let u=W?.();if(M==="dia"&&/^(search_web|fetch_web_content)$/.test(c)){let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:c,i:j$})}),t=await r.text();if(!r.ok)throw Error(t);return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await X.onTool(c,j$,M,u&&E?{...u,toolUseId:E}:u)}]}}catch(u){return{content:[{type:"text",text:JSON.stringify({error:String(u)})}]}}}`;
+    const localWeb = `async(i,o)=>{if(!D.has(c))D.add(c),Dv6(J,T);try{let m=W?.(),e=o?._meta?.["claudecode/toolUseId"];if(e&&m)m={...m,toolUseId:e};if(M==="dia"&&/^(search_web|fetch_web_content)$/.test(c)){X.onTool(c,i,M,m).catch(()=>0);let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:c,i})}),t=await r.text();if(!r.ok)throw Error(t);return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await X.onTool(c,i,M,m)}]}}catch(e){return{content:[{type:"text",text:JSON.stringify({error:String(e)})}]}}}`;
+    return {
+      before: Buffer.from(legacyLocalWeb.padEnd(beforeLength, " ")),
+      after: Buffer.from(localWeb.padEnd(beforeLength, " ")),
+    };
+  })(),
 ];
 let handlerPatchCount = 0;
 

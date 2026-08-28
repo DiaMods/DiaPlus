@@ -40,11 +40,11 @@ Useful commands:
 
 ## Browser tools and internet access
 
-Dia still assembles browser context and runs its native harness. Schemas supplied by Dia are passed to the selected provider, and calls return through Dia's Anthropic-compatible tool stream. This preserves native tab reading, opening, closing, tab mentions, file/skill tools, calculation, attachments, and Report upload.
+Dia still assembles browser context and runs its native harness. Schemas supplied by Dia are passed to the selected provider, and calls return through Dia's Anthropic-compatible tool stream. Deferred browser tools are loaded through Dia's native `ToolSearch` handshake—even when a weaker local model tries to call one prematurely. This preserves native tab reading, opening, closing, tab mentions, file/skill tools, calculation, attachments, Report upload, and Dia's built-in step cards. Provider reasoning keeps its original token spacing, while action progress stays in Dia's Thought/tool UI instead of leaking into the final answer.
 
 Server-dependent tools have local replacements:
 
-- **search_web** and **fetch_web_content** use a bounded public-web client with redirect, DNS, private-network, and Dia-host checks;
+- **search_web** and **fetch_web_content** notify Dia's original native presentation callback—rendering its “Searched the web” and “Read link” cards—but execute through a bounded localhost public-web client with redirect, DNS, private-network, and Dia-host checks. OpenAI-compatible local models receive both the standard tool-role result and an explicit completed-result continuation so weaker runtimes do not loop while waiting for data they already have;
 - **list_recent_people** and **lookup_person** use user-imported local connector records;
 - **memory_search** and **memory_query** search the private local index;
 - Dia product-knowledge tools are intentionally unavailable because they require Dia's service.

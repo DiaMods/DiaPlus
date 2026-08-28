@@ -64,11 +64,28 @@ function anthropicMessagesToChat(payload) {
     const text = blocks.filter((block) => block?.type === "text")
       .map((block) => block.text ?? "").join("\n");
     if (text) output.push({ role: "user", content: text });
-    for (const block of blocks.filter((candidate) => candidate?.type === "tool_result")) {
+    const toolResults = blocks.filter((candidate) => candidate?.type === "tool_result");
+    for (const block of toolResults) {
       output.push({
         role: "tool",
         tool_call_id: block.tool_use_id,
         content: contentAsText(block.content),
+      });
+    }
+    if (toolResults.length > 0) {
+      const completedResults = toolResults
+        .map((block) => contentAsText(block.content))
+        .join("\n\n")
+        .slice(0, 100_000);
+      output.push({
+        role: "user",
+        content: [
+          "The preceding tool call completed. Use its exact result below now.",
+          "Do not claim it is pending or unavailable, and do not repeat the same call; request another tool only if this completed result is genuinely insufficient.",
+          "<completed-tool-result>",
+          completedResults,
+          "</completed-tool-result>",
+        ].join("\n"),
       });
     }
     const remaining = blocks.filter((block) => !["text", "tool_result"].includes(block?.type));

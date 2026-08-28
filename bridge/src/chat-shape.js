@@ -43,6 +43,13 @@ export function contentAsText(content) {
   }).filter(Boolean).join("\n\n");
 }
 
+export function isToolContinuation(payload) {
+  const lastMessage = Array.isArray(payload?.messages) ? payload.messages.at(-1) : null;
+  return lastMessage?.role === "user" &&
+    Array.isArray(lastMessage.content) &&
+    lastMessage.content.some((block) => block?.type === "tool_result");
+}
+
 export function systemAsText(system) {
   return contentAsText(system);
 }
@@ -70,6 +77,31 @@ export function deferredAnthropicTools(payload) {
   return [...tools.values()].slice(0, 100);
 }
 
+export function nativeToolSearchTool(payload) {
+  const deferred = deferredAnthropicTools(payload)
+    .filter((tool) => tool.source !== "blocked");
+  if (deferred.length === 0) return null;
+  return {
+    name: "ToolSearch",
+    description: [
+      "Load schemas for Dia native tools that are deferred in this conversation.",
+      "Use the exact query select:<tool-name>[,<tool-name>...] and wait for the loaded schemas before calling those tools.",
+    ].join(" "),
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Exact deferred Dia tool names in select:<name>[,<name>...] form.",
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    source: "native",
+  };
+}
+
 export function buildExactToolGuide(tools) {
   const names = tools
     .map((tool) => tool?.name)
@@ -84,6 +116,7 @@ export function buildExactToolGuide(tools) {
   const writeTool = names.find((name) => name === "Write");
   const connectorSearch = names.find((name) =>
     name === "connector_search" || name.endsWith("__connector_search"));
+  const toolSearch = names.find((name) => name === "ToolSearch");
 
   const guidance = [
     `EXACT AVAILABLE TOOL NAMES FOR THIS TURN: ${names.join(", ")}`,
@@ -92,6 +125,14 @@ export function buildExactToolGuide(tools) {
   if (namespacedAliases.length > 0) {
     guidance.push(
       `Native shorthand in the Dia instructions maps to these exact names: ${namespacedAliases.join(", ")}.`,
+    );
+  }
+  if (toolSearch) {
+    guidance.push(
+      "DEFERRED DIA TOOLS: a name listed only by a native system reminder, but absent from the " +
+      "EXACT AVAILABLE TOOL NAMES above, is not callable yet. First call ToolSearch with query " +
+      "select:<exact-name>[,<exact-name>...], wait for Dia to load the schemas, and only then call " +
+      "the newly presented tool. Do not merely describe the intended action.",
     );
   }
   if (uploadTool) {
@@ -459,10 +500,21 @@ export function buildDecisionPrompt(payload, tools) {
     "When the user asks about earlier browsing or conversations that are not already present in the transcript, search local memory before saying the information is unavailable.",
     "Do not combine local memory calls and browser action calls in one decision. Finish local research first, then request browser actions in a later decision.",
     "When no tool is needed or tool results are sufficient, return kind=final with the natural-language answer in text and an empty tool_calls array.",
+    "Final text must begin with the completed answer. Never narrate current or future work such as ‘I’m gathering’, ‘I’ll search’, or ‘Let me check’; tool activity is displayed separately.",
     "A prior assistant tool_use followed by a user tool_result means the tool already ran. Use its result. If that result reports an error, do not repeat the same call during this automatic continuation; stop and explain the error.",
     "Never claim a browser action succeeded unless a corresponding tool_result says it succeeded.",
     JSON.stringify({ system: payload?.system ?? null, messages, tools }),
   ].join("\n\n");
+}
+
+export function stripLeadingProgressNarration(text) {
+  if (typeof text !== "string") return text;
+  const trimmed = text.trimStart();
+  const match = trimmed.match(/^([^\n.!?]{0,240}[.!?])(?:[ \t]*\n+|[ \t]+)([\s\S]+)$/);
+  if (!match) return text;
+  const firstSentence = match[1].trim();
+  const isProgress = /^(?:(?:I(?:'|’)?m|I am|I(?:'|’)?ll|I will|Let me|We(?:'|’)?re|We are)\s+(?:now\s+)?(?:gathering|searching|looking|checking|reviewing|fetching|researching|finding|collecting|investigating|going to|about to)|(?:I|We)(?:'|’)?(?:ve|have)\s+(?:now\s+)?(?:gathered|searched|looked|checked|reviewed|fetched|researched|found|collected|investigated))\b/i.test(firstSentence);
+  return isProgress ? match[2].trimStart() : text;
 }
 
 export const toolDecisionSchema = {

@@ -94,6 +94,16 @@ fi
 /usr/bin/defaults write local.rttm.dia transientFeatureFlagOverrides -array \
   "clia-agents-chat-enabled=true" \
   "force-classic-chat-enabled=false" \
+  "agent-thinking-ui-enabled=true" \
+  "clia-thinking-enabled=true" \
+  "tools-ui-revision-enabled=true" \
+  "fetch-web-content-enabled=true" \
+  "read-calendar-step-enabled=true" \
+  "search-email-step-enabled=true" \
+  "search-github-step-enabled=true" \
+  "search-notion-step-enabled=true" \
+  "search-slack-step-enabled=true" \
+  "search-slack-bylines-enabled=true" \
   "clia-settings-toggle-always-visible-enabled=true" \
   "apps-pref-pane-redesign-enabled=true" \
   "auto-enable-clia-from-onboarding-enabled=true" \

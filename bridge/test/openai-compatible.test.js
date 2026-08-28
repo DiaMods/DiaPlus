@@ -54,6 +54,38 @@ test("OpenAI-compatible chat completions stream reasoning and native tool calls"
   }
 });
 
+test("OpenAI-compatible chat completions make completed tool results explicit", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    assert.deepEqual(body.messages.slice(-2), [
+      { role: "tool", tool_call_id: "call_1", content: "search result" },
+      {
+        role: "user",
+        content: "The preceding tool call completed. Use its exact result below now.\nDo not claim it is pending or unavailable, and do not repeat the same call; request another tool only if this completed result is genuinely insufficient.\n<completed-tool-result>\nsearch result\n</completed-tool-result>",
+      },
+    ]);
+    return sseResponse([{ data: { choices: [{ delta: { content: "Completed answer" } }] } }]);
+  };
+  try {
+    const result = await runOpenAICompatibleProvider({
+      provider: { api: "chat-completions", baseURL: "http://127.0.0.1:11434/v1", label: "Ollama", apiKeyEnv: null },
+      payload: {
+        ...payload,
+        messages: [
+          { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "open_tabs", input: {} }] },
+          { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: "search result" }] },
+        ],
+      },
+      tools,
+      model: "qwen3:8b",
+    });
+    assert.equal(result.text, "Completed answer");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("OpenAI Responses API stream maps output and reasoning summaries", async () => {
   const originalFetch = globalThis.fetch;
   const reasoning = [];

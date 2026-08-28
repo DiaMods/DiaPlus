@@ -7,10 +7,13 @@ import {
   appendToolResults,
   deferredAnthropicTools,
   isDiaOwnedProductKnowledgeTool,
+  isToolContinuation,
+  nativeToolSearchTool,
   reportWorkflowRequiresTool,
   reportWorkflowState,
   removeRepeatedFailedToolCalls,
   withReportWorkflowPolicy,
+  stripLeadingProgressNarration,
 } from "./chat-shape.js";
 import { ConfigStore, defaultCodexModel } from "./config.js";
 import { CredentialStore } from "./credentials.js";
@@ -38,6 +41,10 @@ const maximumLocalToolRounds = 6;
 const maximumReportDecisionRetries = 2;
 const historyRefreshMilliseconds = 5 * 60_000;
 const memoryDerivationDelayMilliseconds = 8_000;
+const nativeLocalToolNames = new Set([
+  "mcp__dia-tools__search_web",
+  "mcp__dia-tools__fetch_web_content",
+]);
 
 async function browserHistorySources(fallbackPath) {
   const fallback = fallbackPath
@@ -184,6 +191,38 @@ function retainPresentedToolCalls(result, tools) {
     };
   }
   return { result, rejected };
+}
+
+function loadDeferredToolSchemas(result, deferredTools, observedNativeToolNames, toolSearch, model) {
+  if (result?.kind !== "tool_use" || !toolSearch) return result;
+  const deferredNames = new Set(
+    deferredTools
+      .filter((tool) => tool.source !== "blocked")
+      .map((tool) => tool.name)
+      .filter((name) => !observedNativeToolNames.has(name)),
+  );
+  const requested = [...new Set(
+    (result.toolCalls ?? [])
+      .map((call) => call.name)
+      .filter((name) => deferredNames.has(name)),
+  )];
+  if (requested.length === 0) return result;
+  const alreadyPresented = (result.toolCalls ?? [])
+    .filter((call) => !deferredNames.has(call.name));
+  return {
+    ...result,
+    kind: "tool_use",
+    text: "",
+    toolCalls: [
+      ...alreadyPresented,
+      {
+        id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+        name: toolSearch.name,
+        input: { query: `select:${requested.join(",")}` },
+      },
+    ],
+    model: result.model ?? model,
+  };
 }
 
 function nativeReportDecision(state, tools, model) {
@@ -555,17 +594,24 @@ export class ProviderManager {
     return runOpenAICompatibleProvider({ ...options, provider });
   }
 
-  async run(payload, { onReasoning } = {}) {
+  async run(payload, { onReasoning, onStatus, onLocalToolActivity } = {}) {
+    const emitStatus = onStatus ?? onReasoning;
     const { config, provider, model, key } = await this.selectedProvider();
     const profileID = profileIDFromPayload(payload);
     const observedNativeTools = normalizeAnthropicTools(payload, { includeBlocked: true });
+    const observedNativeToolNames = new Set(observedNativeTools.map((tool) => tool.name));
+    const deferredTools = deferredAnthropicTools(payload);
     const observedForCoverage = new Map(
-      deferredAnthropicTools(payload).map((tool) => [tool.name, tool]),
+      deferredTools.map((tool) => [tool.name, tool]),
     );
     for (const tool of observedNativeTools) observedForCoverage.set(tool.name, tool);
     const nativeTools = observedNativeTools.filter((tool) =>
       !isDiaOwnedProductKnowledgeTool(tool.name) &&
       (moduleEnabled("reports") || !isReportUploadTool(tool.name)));
+    const toolSearch = nativeToolSearchTool(payload);
+    if (toolSearch && !nativeTools.some((tool) => tool.name === toolSearch.name)) {
+      nativeTools.push(toolSearch);
+    }
     const tools = await this.localTools.definitions(nativeTools);
     await this.toolCoverageStore.record([...observedForCoverage.values()], tools).catch((error) => {
       process.stderr.write(`Tool coverage write failed: ${String(error?.message ?? error)}\n`);
@@ -578,6 +624,7 @@ export class ProviderManager {
       moduleEnabled("native-memory") &&
       config.localMemory.enabled &&
       config.localMemory.automaticRecall &&
+      !isToolContinuation(payload) &&
       !isPrivateMemoryPayload(payload)
     ) {
       try {
@@ -587,8 +634,8 @@ export class ProviderManager {
         );
         if (context.memories.length > 0) {
           currentPayload = withAutomaticMemoryContext(currentPayload, context);
-          if (onReasoning) {
-            await onReasoning(
+          if (emitStatus) {
+            await emitStatus(
               `Recalled ${context.memories.length} relevant local ${context.memories.length === 1 ? "Memory" : "Memories"}...`,
             );
           }
@@ -608,8 +655,8 @@ export class ProviderManager {
       const nativeReportResult = nativeReportDecision(reportState, tools, key);
       if (nativeReportResult) {
         result = nativeReportResult;
-        if (onReasoning) {
-          await onReasoning(reportState.stage === "load_skills"
+        if (emitStatus) {
+          await emitStatus(reportState.stage === "load_skills"
             ? "Loading Dia's native report design tools..."
             : "Adding the finished report to Dia's Reports library...");
         }
@@ -632,10 +679,17 @@ export class ProviderManager {
       });
       result.model = key;
       result = normalizeReportWriteCalls(reportState, result);
+      result = loadDeferredToolSchemas(
+        result,
+        deferredTools,
+        observedNativeToolNames,
+        toolSearch,
+        key,
+      );
       const presented = retainPresentedToolCalls(result, providerTools);
       result = presented.result;
-      if (presented.rejected.length > 0 && onReasoning) {
-        await onReasoning(
+      if (presented.rejected.length > 0 && emitStatus) {
+        await emitStatus(
           `Correcting an unavailable tool request (${presented.rejected.map((call) => call.name).join(", ")})...`,
         );
       }
@@ -644,8 +698,8 @@ export class ProviderManager {
           currentPayload,
           result.toolCalls,
         );
-        if (blocked.length > 0 && onReasoning) {
-          await onReasoning(
+        if (blocked.length > 0 && emitStatus) {
+          await emitStatus(
             `Stopped ${blocked.map(({ call }) => call.name).join(", ")} after its previous error.`,
           );
         }
@@ -661,7 +715,9 @@ export class ProviderManager {
         }
       }
       const localCalls = result.kind === "tool_use"
-        ? result.toolCalls.filter((call) => this.localTools.isLocal(call.name))
+        ? result.toolCalls.filter((call) =>
+          this.localTools.isLocal(call.name) &&
+          !(nativeLocalToolNames.has(call.name) && observedNativeToolNames.has(call.name)))
         : [];
       if (localCalls.length === 0) {
         if (
@@ -670,8 +726,8 @@ export class ProviderManager {
           reportDecisionRetries < maximumReportDecisionRetries
         ) {
           reportDecisionRetries += 1;
-          if (onReasoning) {
-            await onReasoning("Continuing the native report workflow before answering...");
+          if (emitStatus) {
+            await emitStatus("Continuing the native report workflow before answering...");
           }
           continue;
         }
@@ -682,7 +738,11 @@ export class ProviderManager {
       }
       localToolRounds += 1;
       reportDecisionRetries = 0;
-      if (onReasoning) await onReasoning(`Running ${localCalls.map((call) => call.name).join(", ")} locally...`);
+      if (onLocalToolActivity) {
+        await onLocalToolActivity({ phase: "start", calls: localCalls });
+      } else if (emitStatus) {
+        await emitStatus(`Running ${localCalls.map((call) => call.name).join(", ")} locally...`);
+      }
       const localResults = await Promise.all(localCalls.map(async (call) => {
         try {
           return { call, result: await this.localTools.execute(call, { profileID }) };
@@ -690,7 +750,14 @@ export class ProviderManager {
           return { call, result: { error: String(error?.message ?? error) } };
         }
       }));
+      if (onLocalToolActivity) {
+        await onLocalToolActivity({ phase: "finish", results: localResults });
+      }
       currentPayload = appendToolResults(currentPayload, localCalls, localResults);
+    }
+
+    if (result?.kind === "final") {
+      result = { ...result, text: stripLeadingProgressNarration(result.text) };
     }
 
     const finalConfig = await this.configStore.load();
