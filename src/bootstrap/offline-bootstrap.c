@@ -588,7 +588,26 @@ static DiaCustomViewForRowIMP dia_custom_mods_original_view_for_row;
 static DiaCustomSelectionChangedIMP dia_custom_mods_original_selection_changed;
 static id dia_custom_mods_data_source;
 static id dia_custom_mods_delegate;
+static Class dia_custom_mods_data_source_class;
+static Class dia_custom_mods_delegate_class;
 static BOOL dia_custom_mods_table_hooks_installed = NO;
+
+static void dia_custom_set_mods_table_objects(NSTableView *table,
+                                               id dataSource,
+                                               id delegate) {
+    if (dia_custom_mods_native_table != table) {
+        [dia_custom_mods_native_table release];
+        dia_custom_mods_native_table = [table retain];
+    }
+    if (dia_custom_mods_data_source != dataSource) {
+        [dia_custom_mods_data_source release];
+        dia_custom_mods_data_source = [dataSource retain];
+    }
+    if (dia_custom_mods_delegate != delegate) {
+        [dia_custom_mods_delegate release];
+        dia_custom_mods_delegate = [delegate retain];
+    }
+}
 
 static NSTableView *dia_custom_find_settings_table(NSView *view) {
     if ([view isKindOfClass:[NSTableView class]] &&
@@ -841,9 +860,22 @@ static void dia_custom_mods_selection_changed(id delegate, SEL selector,
 }
 
 static BOOL dia_custom_install_mods_table_hooks(NSTableView *table) {
-    if (dia_custom_mods_table_hooks_installed) return YES;
     id dataSource = table.dataSource;
     id delegate = table.delegate;
+    Class dataSourceClass = object_getClass(dataSource);
+    Class delegateClass = object_getClass(delegate);
+    if (dia_custom_mods_table_hooks_installed) {
+        if (dataSourceClass != dia_custom_mods_data_source_class ||
+            delegateClass != dia_custom_mods_delegate_class) {
+            dia_custom_log_status(
+                @"mod-manager-disabled-incompatible-recreated-sidebar");
+            return NO;
+        }
+        // Settings windows are destroyed and recreated. The method hooks live
+        // on their shared classes, while these receiver objects do not.
+        dia_custom_set_mods_table_objects(table, dataSource, delegate);
+        return YES;
+    }
     SEL countSelector = @selector(numberOfRowsInTableView:);
     SEL viewSelector = @selector(tableView:viewForTableColumn:row:);
     SEL selectionSelector = @selector(tableViewSelectionDidChange:);
@@ -864,8 +896,6 @@ static BOOL dia_custom_install_mods_table_hooks(NSTableView *table) {
         (DiaCustomViewForRowIMP)method_getImplementation(viewMethod);
     dia_custom_mods_original_selection_changed =
         (DiaCustomSelectionChangedIMP)method_getImplementation(selectionMethod);
-    Class dataSourceClass = object_getClass(dataSource);
-    Class delegateClass = object_getClass(delegate);
     const char *countTypes = method_getTypeEncoding(countMethod);
     const char *viewTypes = method_getTypeEncoding(viewMethod);
     const char *selectionTypes = method_getTypeEncoding(selectionMethod);
@@ -884,8 +914,9 @@ static BOOL dia_custom_install_mods_table_hooks(NSTableView *table) {
         method_setImplementation(selectionMethod,
             (IMP)dia_custom_mods_selection_changed);
     }
-    dia_custom_mods_data_source = dataSource;
-    dia_custom_mods_delegate = delegate;
+    dia_custom_mods_data_source_class = dataSourceClass;
+    dia_custom_mods_delegate_class = delegateClass;
+    dia_custom_set_mods_table_objects(table, dataSource, delegate);
     dia_custom_mods_table_hooks_installed = YES;
     return YES;
 }
@@ -897,6 +928,7 @@ static void dia_custom_install_mod_manager(id target) {
         NSTableView *table = dia_custom_find_settings_table(window.contentView);
         NSSplitView *split = dia_custom_settings_split_for_table(table);
         NSView *sidebar = dia_custom_direct_child(table, split);
+        BOOL tableChanged = dia_custom_mods_native_table != table;
         if (table == nil || split == nil || sidebar == nil ||
             !dia_custom_install_mods_table_hooks(table)) continue;
         NSView *content = nil;
@@ -907,9 +939,7 @@ static void dia_custom_install_mod_manager(id target) {
             }
         }
         if (content == nil) continue;
-        BOOL tableChanged = dia_custom_mods_native_table != table;
         dia_custom_mods_settings_window = window;
-        dia_custom_mods_native_table = table;
         dia_custom_mods_content_host = content;
         if (tableChanged) [table reloadData];
         dia_custom_log_status(@"mod-manager-tab-installed");
