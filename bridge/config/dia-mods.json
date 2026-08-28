@@ -47,24 +47,13 @@
       "description": "Uses Dia's anonymous dependency path so local chat can run without a Dia account."
     },
     {
-      "id": "official-dia-sync",
-      "label": "Official Dia Sync",
+      "id": "dia-import",
+      "label": "Import from official Dia",
       "scope": ["build", "runtime", "launch"],
-      "defaultEnabled": false,
+      "defaultEnabled": true,
       "required": false,
       "rebuildOnChange": true,
-      "requiresStableSignature": true,
-      "requires": ["identity-isolation", "network-isolation", "local-ai-routing"],
-      "conflicts": ["account-bypass"],
-      "replaces": ["account-bypass"],
-      "serviceAccess": [
-        "https://account.diabrowser.engineering",
-        "https://dia-sync.diabrowser.engineering",
-        "https://id.atlassian.com",
-        "https://auth.atlassian.com"
-      ],
-      "privacyNotice": "Allows Dia account identity and end-to-end encrypted Sync traffic. Dia and Atlassian can observe account and connection metadata, but custom AI traffic remains local or with the selected provider.",
-      "description": "Uses Dia's shipped account, encryption, Recovery Kit, and Sync clients while every non-Sync Dia service remains blocked."
+      "description": "Adds official Dia to the native browser importer through a sanitized, owner-only local staging copy."
     },
     {
       "id": "model-picker",

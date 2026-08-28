@@ -9,7 +9,7 @@
 | `update-blocker` | `install.sh`, `launch.sh`, `supported-dia-builds.json` | Sparkle/feed checks and pre-copy build audit; required |
 | `local-ai-routing` | `patch-endpoint.js`, `patch-agent-handler.js`, bridge server/providers | Protocol/provider tests and bridge health; required |
 | `account-bypass` | `patch-no-account.js`, anonymous launch defaults | Per-build ARM64 layout check; clean rebuild to remove |
-| `official-dia-sync` | native account/Sync clients, isolated Keychain groups, exact-host network exception | Off by default; stable signature and clean rebuild required; atomically replaces `account-bypass` |
+| `dia-import` | `prepare-dia-import.js`, `patch-dia-import.js`, native importer runtime hook | Owner-only sanitized staging; no account, password, cookie, Keychain, or service access |
 | `model-picker` | native bootstrap model catalog/toolbar functions | Runtime-discovered toolbar plus View-menu fallback |
 | `developer-tools` | native bootstrap, local routing/tool pages, browser inspector | Native inspector is webpage-only; local diagnostics fail closed |
 | `mod-manager` | native Settings sidebar/content view, authenticated Mods API | Optional mods can be toggled; required safety/core mods remain locked |
@@ -46,4 +46,4 @@ Runtime and bridge mods take effect after restarting Dia Custom. Build mods must
 
 This makes incompatibility explicit. A failed Report audit, for example, does not imply that Memory or the model picker needs to be rewritten.
 
-`official-dia-sync` is intentionally stricter than an ordinary optional mod. It preserves the source build's native client metadata and cryptography, uses clone-owned Keychain access groups, and opens only the two exact Dia account/Sync hosts. It never adds a custom client marker. Because a separately signed app cannot be guaranteed indistinguishable to a remote authentication service, rejection stops the flow; this project does not copy official credentials or impersonate Dia's official signature.
+`dia-import` repurposes Dia's bundled Arc importer as an official-Dia source. A guarded binary patch points that importer at an owner-only sanitized staging directory; a runtime hook supplies the Dia name and app icon. The staging builder retains browser profiles, bookmarks, history, favicons, extensions, and local tab/group data while excluding account state, cookies, passwords, sessions, chats, Memory, Reports, extension site data, and Keychain material. The native import view and callbacks remain Dia's.

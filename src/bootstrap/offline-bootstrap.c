@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include "prompt-tools-offsets.h"
 
@@ -122,14 +121,6 @@ static BOOL dia_custom_should_block_request_url(NSURL *url) {
         return NO;
     }
 
-    BOOL isOfficialSyncHost =
-        [host isEqualToString:@"account.diabrowser.engineering"] ||
-        [host isEqualToString:@"dia-sync.diabrowser.engineering"];
-    if (isOfficialSyncHost) {
-        return !dia_custom_mod_enabled("official-dia-sync") ||
-            ![[[url scheme] lowercaseString] isEqualToString:@"https"];
-    }
-
     NSArray<NSString *> *blockedHosts = @[
         @"api.segment.io",
         @"cdn-settings.segment.com",
@@ -160,116 +151,6 @@ static BOOL dia_custom_should_block_request_url(NSURL *url) {
            [host hasSuffix:@".browserinternalstaging.com"];
 }
 
-static BOOL dia_custom_request_exposes_custom_identity(
-    NSURLRequest *request) {
-    NSString *host = request.URL.host.lowercaseString;
-    if (!([host isEqualToString:@"account.diabrowser.engineering"] ||
-          [host isEqualToString:@"dia-sync.diabrowser.engineering"])) {
-        return NO;
-    }
-    NSMutableArray<NSString *> *visibleValues = [NSMutableArray array];
-    if (request.URL.absoluteString != nil) {
-        [visibleValues addObject:request.URL.absoluteString];
-    }
-    [visibleValues addObjectsFromArray:request.allHTTPHeaderFields.allValues];
-    NSMutableArray<NSString *> *markers = [NSMutableArray arrayWithArray:@[
-        @"dia custom",
-        @"local.rttm.dia",
-    ]];
-    const char *rawTeamID = getenv("DIA_CUSTOM_TEAM_ID");
-    if (rawTeamID != NULL && rawTeamID[0] != '\0') {
-        [markers addObject:[[NSString stringWithUTF8String:rawTeamID]
-            lowercaseString]];
-    }
-    for (NSString *value in visibleValues) {
-        NSString *lower = value.lowercaseString;
-        for (NSString *marker in markers) {
-            if (marker.length > 0 && [lower containsString:marker]) {
-                return YES;
-            }
-        }
-    }
-    NSData *body = request.HTTPBody;
-    if (body.length > 0 && body.length <= 1024 * 1024) {
-        NSMutableArray<NSData *> *bodyMarkers = [NSMutableArray arrayWithArray:@[
-            [@"Dia Custom" dataUsingEncoding:NSUTF8StringEncoding],
-            [@"dia custom" dataUsingEncoding:NSUTF8StringEncoding],
-            [@"local.rttm.dia" dataUsingEncoding:NSUTF8StringEncoding],
-        ]];
-        if (rawTeamID != NULL && rawTeamID[0] != '\0') {
-            [bodyMarkers addObject:[[NSString stringWithUTF8String:rawTeamID]
-                dataUsingEncoding:NSUTF8StringEncoding]];
-        }
-        for (NSData *marker in bodyMarkers) {
-            if ([body rangeOfData:marker
-                          options:0
-                            range:NSMakeRange(0, body.length)].location !=
-                NSNotFound) {
-                return YES;
-            }
-        }
-    }
-    return NO;
-}
-
-static void dia_custom_record_sync_success(NSInteger statusCode) {
-    const char *rawProfile = getenv("DIA_CUSTOM_PROFILE");
-    if (rawProfile == NULL || rawProfile[0] == '\0') return;
-    NSString *profile = [NSString stringWithUTF8String:rawProfile];
-    NSString *stateDirectory = [profile
-        stringByAppendingPathComponent:@"Bridge/.state"];
-    NSError *error = nil;
-    if (![NSFileManager.defaultManager
-            createDirectoryAtPath:stateDirectory
-      withIntermediateDirectories:YES
-                       attributes:@{NSFilePosixPermissions: @0700}
-                            error:&error]) {
-        return;
-    }
-    NSDictionary *state = @{
-        @"lastSuccessfulServiceResponse": @([[NSDate date]
-            timeIntervalSince1970]),
-        @"statusCode": @(statusCode),
-    };
-    NSData *data = [NSJSONSerialization dataWithJSONObject:state
-                                                   options:0
-                                                     error:&error];
-    NSString *path = [stateDirectory
-        stringByAppendingPathComponent:@"official-sync-status.json"];
-    if (data != nil && [data writeToFile:path
-                                 options:NSDataWritingAtomic
-                                   error:&error]) {
-        chmod(path.fileSystemRepresentation, 0600);
-        dia_custom_log_status(@"official-sync-service-response-success");
-    }
-}
-
-static void dia_custom_observe_sync_task(id task, NSUInteger attempt) {
-    if (task == nil || attempt >= 240) return;
-    [task retain];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC),
-                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        NSURLRequest *request = [task currentRequest] ?: [task originalRequest];
-        NSString *host = request.URL.host.lowercaseString;
-        NSInteger state = [task state];
-        if (state == NSURLSessionTaskStateCompleted ||
-            state == NSURLSessionTaskStateCanceling) {
-            NSURLResponse *response = [(NSURLSessionTask *)task response];
-            if ([host isEqualToString:@"dia-sync.diabrowser.engineering"] &&
-                [response isKindOfClass:[NSHTTPURLResponse class]]) {
-                NSInteger statusCode = [(NSHTTPURLResponse *)response
-                    statusCode];
-                if (statusCode >= 200 && statusCode < 300) {
-                    dia_custom_record_sync_success(statusCode);
-                }
-            }
-        } else {
-            dia_custom_observe_sync_task(task, attempt + 1);
-        }
-        [task release];
-    });
-}
-
 typedef void (*DiaCustomTaskResumeIMP)(id, SEL);
 
 typedef struct {
@@ -285,14 +166,7 @@ static void dia_custom_task_resume(id task, SEL command) {
     if (request == nil) {
         request = [task originalRequest];
     }
-    BOOL exposedCustomIdentity =
-        dia_custom_mod_enabled("official-dia-sync") &&
-        dia_custom_request_exposes_custom_identity(request);
-    BOOL blocked = dia_custom_should_block_request_url(request.URL) ||
-        exposedCustomIdentity;
-    if (exposedCustomIdentity) {
-        dia_custom_log_status(@"official-sync-blocked-custom-client-marker");
-    }
+    BOOL blocked = dia_custom_should_block_request_url(request.URL);
     dia_custom_log_request_url(request.URL, blocked ? "BLOCKED" : "ALLOW");
     if (blocked) {
         [task cancel];
@@ -304,11 +178,6 @@ static void dia_custom_task_resume(id task, SEL command) {
         for (size_t i = 0; i < dia_custom_task_resume_entry_count; ++i) {
             if (dia_custom_task_resume_entries[i].cls == cls) {
                 dia_custom_task_resume_entries[i].original(task, command);
-                if (dia_custom_mod_enabled("official-dia-sync") &&
-                    [request.URL.host.lowercaseString
-                        isEqualToString:@"dia-sync.diabrowser.engineering"]) {
-                    dia_custom_observe_sync_task(task, 0);
-                }
                 return;
             }
         }
@@ -401,9 +270,6 @@ static void dia_custom_schedule_network_log(void) {
     dia_custom_install_task_resume_log();
 }
 
-static NSTableView *dia_custom_find_settings_table(NSView *view);
-static BOOL dia_custom_is_settings_window(NSWindow *window);
-
 static void dia_custom_close_account_window(void) {
     if (getenv("DIA_CUSTOM_SKIP_ACCOUNT_UI") == NULL) {
         return;
@@ -437,38 +303,103 @@ static NSMenuItem *dia_custom_find_menu_item(NSMenu *menu,
     return nil;
 }
 
-static void dia_custom_open_native_account_settings(void) {
-    if (!dia_custom_mod_enabled("official-dia-sync") ||
-        getenv("DIA_CUSTOM_OPEN_ACCOUNT_AFTER_LAUNCH") == NULL) {
+typedef id (*DiaCustomObjectGetterIMP)(id, SEL);
+static DiaCustomObjectGetterIMP dia_custom_arc_import_original_name;
+static DiaCustomObjectGetterIMP dia_custom_arc_import_original_app_path;
+
+static id dia_custom_arc_import_name(id object, SEL selector) {
+    return @"Dia";
+}
+
+static id dia_custom_arc_import_app_path(id object, SEL selector) {
+    id original = dia_custom_arc_import_original_app_path != NULL
+        ? dia_custom_arc_import_original_app_path(object, selector) : nil;
+    NSString *path = @"/Applications/Dia.app";
+    if ([original isKindOfClass:[NSURL class]]) {
+        return [NSURL fileURLWithPath:path];
+    }
+    return path;
+}
+
+static Class dia_custom_find_runtime_class(NSString *suffix) {
+    int count = objc_getClassList(NULL, 0);
+    if (count <= 0) return Nil;
+    Class *classes = calloc((size_t)count, sizeof(Class));
+    count = objc_getClassList(classes, count);
+    Class match = Nil;
+    for (int index = 0; index < count; ++index) {
+        NSString *name = NSStringFromClass(classes[index]);
+        if ([name isEqualToString:suffix] ||
+            [name hasSuffix:[@"." stringByAppendingString:suffix]]) {
+            match = classes[index];
+            break;
+        }
+    }
+    free(classes);
+    return match;
+}
+
+static void dia_custom_install_dia_import_source_override(NSUInteger attempt) {
+    if (!dia_custom_mod_enabled("dia-import") || attempt >= 30 ||
+        dia_custom_arc_import_original_name != NULL) return;
+    Class cls = dia_custom_find_runtime_class(@"ArcImportSourceProfile");
+    Method nameMethod = cls != Nil
+        ? class_getInstanceMethod(cls, @selector(name)) : NULL;
+    Method pathMethod = cls != Nil
+        ? class_getInstanceMethod(cls, @selector(appPath)) : NULL;
+    if (nameMethod != NULL && pathMethod != NULL) {
+        dia_custom_arc_import_original_name =
+            (DiaCustomObjectGetterIMP)method_getImplementation(nameMethod);
+        dia_custom_arc_import_original_app_path =
+            (DiaCustomObjectGetterIMP)method_getImplementation(pathMethod);
+        if (!class_addMethod(cls, @selector(name),
+                (IMP)dia_custom_arc_import_name,
+                method_getTypeEncoding(nameMethod))) {
+            method_setImplementation(nameMethod, (IMP)dia_custom_arc_import_name);
+        }
+        if (!class_addMethod(cls, @selector(appPath),
+                (IMP)dia_custom_arc_import_app_path,
+                method_getTypeEncoding(pathMethod))) {
+            method_setImplementation(pathMethod,
+                (IMP)dia_custom_arc_import_app_path);
+        }
+        dia_custom_log_status(@"official-dia-import-source-installed");
         return;
     }
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1800 * NSEC_PER_MSEC),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
                    dispatch_get_main_queue(), ^{
-        NSMenuItem *settingsItem = dia_custom_find_menu_item(
-            NSApp.mainMenu, @[@"Settings…", @"Settings...", @"Preferences…"]);
-        if (settingsItem == nil || settingsItem.action == NULL) {
-            dia_custom_log_status(@"official-sync-account-settings-unavailable");
-            return;
+        dia_custom_install_dia_import_source_override(attempt + 1);
+    });
+}
+
+static NSString *dia_custom_import_request_path(void) {
+    const char *rawProfile = getenv("DIA_CUSTOM_PROFILE");
+    if (rawProfile == NULL || rawProfile[0] == '\0') return nil;
+    return [[NSString stringWithUTF8String:rawProfile]
+        stringByAppendingPathComponent:@"Bridge/.state/open-dia-import"];
+}
+
+static void dia_custom_poll_dia_import_request(void) {
+    if (!dia_custom_mod_enabled("dia-import")) return;
+    NSString *requestPath = dia_custom_import_request_path();
+    if (requestPath != nil &&
+        [NSFileManager.defaultManager fileExistsAtPath:requestPath]) {
+        NSMenuItem *item = dia_custom_find_menu_item(NSApp.mainMenu, @[
+            @"Import from Another Browser",
+            @"Import from Another Browser…",
+            @"Import from Another Browser...",
+            @"Import from another browser",
+        ]);
+        if (item != nil && item.action != NULL) {
+            [NSApp activateIgnoringOtherApps:YES];
+            [NSApp sendAction:item.action to:item.target from:item];
+            [NSFileManager.defaultManager removeItemAtPath:requestPath error:nil];
+            dia_custom_log_status(@"official-dia-native-import-opened");
         }
-        [NSApp sendAction:settingsItem.action
-                       to:settingsItem.target
-                     from:settingsItem];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 700 * NSEC_PER_MSEC),
-                       dispatch_get_main_queue(), ^{
-            for (NSWindow *window in NSApp.windows) {
-                if (!dia_custom_is_settings_window(window)) continue;
-                NSTableView *table =
-                    dia_custom_find_settings_table(window.contentView);
-                if (table.numberOfRows > 0) {
-                    [table selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
-                      byExtendingSelection:NO];
-                    [table scrollRowToVisible:0];
-                }
-                [window makeKeyAndOrderFront:nil];
-                dia_custom_log_status(@"official-sync-account-settings-opened");
-                break;
-            }
-        });
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
+                   dispatch_get_main_queue(), ^{
+        dia_custom_poll_dia_import_request();
     });
 }
 
@@ -3403,8 +3334,11 @@ static void dia_custom_install_runtime_overrides(void) {
     if (dia_custom_mod_enabled("account-bypass")) {
         dia_custom_close_account_window();
     }
-    if (dia_custom_mod_enabled("official-dia-sync")) {
-        dia_custom_open_native_account_settings();
+    if (dia_custom_mod_enabled("dia-import")) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            dia_custom_install_dia_import_source_override(0);
+            dia_custom_poll_dia_import_request();
+        });
     }
     if (dia_custom_mod_enabled("model-picker") ||
         dia_custom_mod_enabled("developer-tools") ||

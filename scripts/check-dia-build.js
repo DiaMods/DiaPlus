@@ -47,24 +47,16 @@ const unsupported = [...requested].filter((id) => !supportedMods.has(id));
 if (unsupported.length > 0) {
   throw new Error(`Dia build ${build} has not been audited for: ${unsupported.join(", ")}`);
 }
-if (requested.has("official-dia-sync")) {
-  const executable = await readFile(resolve(app, "Contents/MacOS/Dia"));
-  const requiredSyncSurface = [
-    "https://dia-sync.diabrowser.engineering",
-    "X-Dia-Sync-Token",
-    "sync-encryption-enabled",
-    "Aes256Gcm",
-    "SyncClientInfo",
-    "BookmarksSyncAdapter",
-    "ProfilesSyncAdapter",
-    "SettingsSyncAdapter",
-    "TabTreeSyncAdapter",
-  ];
-  const missing = requiredSyncSurface.filter((value) =>
-    !executable.includes(Buffer.from(value)));
-  if (missing.length > 0) {
+if (requested.has("dia-import")) {
+  const arcCore = await readFile(resolve(
+    app,
+    "Contents/Frameworks/ArcCore.framework/Versions/A/ArcCore",
+  ));
+  const original = Buffer.from("Application Support/Arc/User Data");
+  const patched = Buffer.from("Application Support/DiaImport");
+  if (!arcCore.includes(original) && !arcCore.includes(patched)) {
     throw new Error(
-      `Dia build ${build} is missing audited native Sync components: ${missing.join(", ")}`,
+      `Dia build ${build} is missing the audited native browser importer path`,
     );
   }
 }

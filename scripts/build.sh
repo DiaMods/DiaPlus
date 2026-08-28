@@ -31,9 +31,6 @@ mod_enabled() {
   esac
 }
 node "$script_dir/check-dia-build.js" "$source_app" --mods "$enabled_mods"
-if mod_enabled official-dia-sync; then
-  "$script_dir/signing-identity.sh" >/dev/null
-fi
 
 if [[ -e "$clone_app" && "$replace" != true ]]; then
   print -u2 "Dia Custom already exists at $clone_app"
@@ -52,14 +49,7 @@ trap '[[ ! -e "$temporary_app" ]] || /bin/rm -rf "$temporary_app"' EXIT
 
 info="$temporary_app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_id" "$info"
-# Sync client metadata derives its stock client name from CFBundleName. Keep
-# that wire-visible value equal to the audited Dia build while Finder and the
-# app UI continue to use the separate custom display name and bundle path.
-if mod_enabled official-dia-sync; then
-  /usr/libexec/PlistBuddy -c "Set :CFBundleName 'Dia'" "$info"
-else
-  /usr/libexec/PlistBuddy -c "Set :CFBundleName 'Dia Custom RTTM'" "$info"
-fi
+/usr/libexec/PlistBuddy -c "Set :CFBundleName 'Dia Custom RTTM'" "$info"
 /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Dia Custom RTTM'" "$info" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Dia Custom RTTM'" "$info"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$info" 2>/dev/null || true
@@ -78,9 +68,7 @@ trap - EXIT
 
 /usr/bin/defaults write "$bundle_id" shouldShareUsageData -bool false
 /usr/bin/defaults write "$bundle_id" firebaseSyncEnabled -bool false
-if ! mod_enabled official-dia-sync; then
-  /usr/bin/defaults write "$bundle_id" cloudKitSyncEnabled -bool false
-fi
+/usr/bin/defaults write "$bundle_id" cloudKitSyncEnabled -bool false
 /usr/bin/defaults write "$bundle_id" shouldAutomaticallyUpdate -bool false
 /usr/bin/defaults write "$bundle_id" automaticallyUpdateArc -bool false
 /usr/bin/defaults write "$bundle_id" shouldAutomaticallyUpdateArc -bool false

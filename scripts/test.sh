@@ -9,11 +9,7 @@ enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$project_dir/scripts/mods.js
 
 node "$project_dir/scripts/check-dia-build.js" "$source_app" --mods "$enabled_mods"
 node "$project_dir/src/patches/patch-no-account.js" --check "$source_app"
-signing_details="$("$project_dir/scripts/signing-identity.sh")"
-signing_remainder="${signing_details#*$'\t'}"
-sync_test_team_id="${signing_remainder%%$'\t'*}"
-node "$project_dir/src/patches/patch-account-keychain-groups.js" \
-  --check "$source_app" "$sync_test_team_id"
+node "$project_dir/src/patches/patch-dia-import.js" --check "$source_app"
 node "$project_dir/src/patches/patch-report-controller.js" --check "$source_app"
 node "$project_dir/src/patches/patch-report-upload.js" --check "$source_app"
 source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$source_app/Contents/Info.plist")"
@@ -43,24 +39,6 @@ if /usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES node "$project_dir/scri
   print -u2 "required network-isolation mod was incorrectly disableable"
   exit 1
 fi
-/usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES node "$project_dir/scripts/mods.js" \
-  enable official-dia-sync --profile "$mod_test_profile" >/dev/null
-sync_mods="$(/usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES \
-  node "$project_dir/scripts/mods.js" resolved --profile "$mod_test_profile")"
-if [[ ",$sync_mods," != *",official-dia-sync,"* ||
-      ",$sync_mods," == *",account-bypass,"* ]]; then
-  print -u2 "Official Sync did not atomically replace anonymous account mode"
-  exit 1
-fi
-/usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES node "$project_dir/scripts/mods.js" \
-  disable official-dia-sync --profile "$mod_test_profile" >/dev/null
-restored_mods="$(/usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES \
-  node "$project_dir/scripts/mods.js" resolved --profile "$mod_test_profile")"
-if [[ ",$restored_mods," != *",account-bypass,"* ||
-      ",$restored_mods," == *",official-dia-sync,"* ]]; then
-  print -u2 "Disabling Official Sync did not restore anonymous account mode"
-  exit 1
-fi
 /bin/rm -rf "$mod_test_profile"
 trap - EXIT
 print "ok    Dia Mods are independently gated and required safety mods fail closed"
@@ -74,18 +52,17 @@ if ! /usr/bin/grep -q 'DiaCustomModsPaneContext' \
   exit 1
 fi
 print "ok    Mod Manager Settings state is scoped to each live window"
-if ! /usr/bin/grep -q 'official-dia-sync' \
+if /usr/bin/grep -q 'official-dia-sync' \
     "$project_dir/bridge/config/dia-mods.json" || \
-   ! /usr/bin/grep -q 'official-sync-blocked-custom-client-marker' \
+   ! /usr/bin/grep -q 'dia_custom_install_dia_import_source_override' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
-   ! /usr/bin/grep -q 'lastSuccessfulServiceResponse' \
-    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
-   ! /usr/bin/grep -q 'sync-encryption-enabled=true' \
-    "$project_dir/scripts/launch.sh"; then
-  print -u2 "Official Dia Sync safety boundary is incomplete"
+   ! /usr/bin/grep -q 'patch-dia-import.js' \
+    "$project_dir/scripts/install.sh"; then
+  print -u2 "Official Dia migration boundary is incomplete"
   exit 1
 fi
-print "ok    Official Dia Sync is separately gated and encryption-required"
+print "ok    Official Dia migration uses the native importer without Sync access"
+node "$project_dir/scripts/test-dia-import.js"
 zsh -n "$project_dir/dia-custom" "$project_dir"/scripts/*.sh
 "$script_dir/build-bootstrap.sh" "$source_app" >/dev/null
 if ! /usr/bin/grep -q 'onEnableMorningBriefTapped' \

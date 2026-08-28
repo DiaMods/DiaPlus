@@ -127,7 +127,7 @@ The browser is not globally offline. User navigation, public web tools, and sele
 
 The runtime network log strips paths for external browsing origins. The custom Sparkle feed is an empty loopback appcast and automatic update preferences are disabled. Official Dia retains normal updates.
 
-The optional `official-dia-sync` mod is the only controlled exception. When enabled, exact HTTPS requests to `account.diabrowser.engineering` and `dia-sync.diabrowser.engineering` precede the wildcard denial; every other Dia-owned destination remains blocked. Dia's native Sync client, encryption gate, Recovery Kit, and Bookmarks/Profiles/Settings/TabTree adapters remain intact. No custom wire header or protocol field is introduced, stock source-build client metadata is retained, and visible request URLs, headers, and bounded bodies are cancelled if they expose the custom bundle name, identifier, or signing Team ID. A successful Sync-service response records only its local timestamp and status code. Remote rejection fails closed instead of reusing official Dia credentials or signature.
+There is no Dia-owned network exception. Official Sync is research-only because modifying the bundle invalidates Dia's official Apple signature; the project neither impersonates that identity nor submits requests meant to conceal the clone. Local migration instead uses Dia's native browser importer against a sanitized staging profile and requires no service access.
 
 ## Sandboxes
 
@@ -141,7 +141,7 @@ The public web client and selected remote providers run in the bridge because th
 
 ## Isolation and upgrades
 
-The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL/document registration. No account token is copied from official Dia. When Official Dia Sync is enabled, the main account and WebAuthn access-group strings and signed entitlements are both moved to Team-qualified Dia Custom groups of the same binary length, preventing either app from opening the other's credentials.
+The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL/document registration. No account token, cookie, saved password, Keychain item, chat, Memory, or open session is copied from official Dia. The optional local importer stages only explicitly supported browser data with owner-only permissions.
 
 Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report controller gate and its setup target, Report validator, and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. Prompt Tools offsets are retained for compatibility research, but the current production controller is not constructed because its initializer requires Dia's unavailable task-local dependency context. The anonymous account/capability patch still has a small audited table for builds 85660, 85823, and 86064.
 
