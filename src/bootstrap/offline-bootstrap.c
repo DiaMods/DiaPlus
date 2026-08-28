@@ -306,6 +306,90 @@ static NSMenuItem *dia_custom_find_menu_item(NSMenu *menu,
 typedef id (*DiaCustomObjectGetterIMP)(id, SEL);
 static DiaCustomObjectGetterIMP dia_custom_arc_import_original_name;
 static DiaCustomObjectGetterIMP dia_custom_arc_import_original_app_path;
+typedef NSString *(*DiaCustomLocalizedStringIMP)(id, SEL, NSString *,
+                                                 NSString *, NSString *);
+typedef NSImage *(*DiaCustomImageResourceIMP)(id, SEL, NSString *);
+static DiaCustomLocalizedStringIMP dia_custom_original_localized_string;
+static DiaCustomImageResourceIMP dia_custom_original_image_resource;
+
+static NSString *dia_custom_import_profile_count_label(void) {
+    NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:
+        @"Library/Application Support/DiaImport/.dia-custom-import.json"];
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    NSDictionary *manifest = data != nil
+        ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+        : nil;
+    NSArray *profiles = [manifest[@"profiles"] isKindOfClass:[NSArray class]]
+        ? manifest[@"profiles"] : nil;
+    if (profiles.count == 1) return @"1 profile";
+    if (profiles.count > 1) {
+        return [NSString stringWithFormat:@"%lu profiles",
+            (unsigned long)profiles.count];
+    }
+    return @"Profiles";
+}
+
+static NSString *dia_custom_localized_string(id bundle, SEL selector,
+                                              NSString *key,
+                                              NSString *value,
+                                              NSString *table) {
+    NSString *result = dia_custom_original_localized_string != NULL
+        ? dia_custom_original_localized_string(bundle, selector, key, value, table)
+        : value;
+    NSString *lowerKey = key.lowercaseString;
+    if ([result isEqualToString:@"Arc"] ||
+        [lowerKey isEqualToString:@"arc"] ||
+        [lowerKey containsString:@"import browser item view arc title"]) {
+        return @"Dia";
+    }
+    NSString *lowerResult = result.lowercaseString;
+    BOOL spacesCountFormat =
+        ([lowerKey containsString:@"spaces"] &&
+         ([lowerKey containsString:@"%"] ||
+          [lowerKey containsString:@"button format"])) ||
+        ([lowerResult containsString:@"spaces"] &&
+         [lowerResult containsString:@"%"]);
+    if (spacesCountFormat) {
+        dia_custom_log_status(@"official-dia-import-profile-count-label");
+        return dia_custom_import_profile_count_label();
+    }
+    return result;
+}
+
+static NSImage *dia_custom_image_resource(id bundle, SEL selector,
+                                           NSString *resourceName) {
+    if ([resourceName caseInsensitiveCompare:@"ArcLogo"] == NSOrderedSame) {
+        NSImage *icon = [NSWorkspace.sharedWorkspace
+            iconForFile:@"/Applications/Dia.app"];
+        if (icon != nil) return icon;
+    }
+    return dia_custom_original_image_resource != NULL
+        ? dia_custom_original_image_resource(bundle, selector, resourceName)
+        : nil;
+}
+
+static void dia_custom_install_dia_import_presentation_override(void) {
+    if (!dia_custom_mod_enabled("dia-import") ||
+        dia_custom_original_localized_string != NULL) return;
+    Class bundleClass = [NSBundle class];
+    Method localizedMethod = class_getInstanceMethod(bundleClass,
+        @selector(localizedStringForKey:value:table:));
+    Method imageMethod = class_getInstanceMethod(bundleClass,
+        @selector(imageForResource:));
+    if (localizedMethod == NULL || imageMethod == NULL) {
+        dia_custom_log_status(@"official-dia-import-presentation-unavailable");
+        return;
+    }
+    dia_custom_original_localized_string = (DiaCustomLocalizedStringIMP)
+        method_getImplementation(localizedMethod);
+    dia_custom_original_image_resource = (DiaCustomImageResourceIMP)
+        method_getImplementation(imageMethod);
+    method_setImplementation(localizedMethod,
+        (IMP)dia_custom_localized_string);
+    method_setImplementation(imageMethod,
+        (IMP)dia_custom_image_resource);
+    dia_custom_log_status(@"official-dia-import-presentation-installed");
+}
 
 static id dia_custom_arc_import_name(id object, SEL selector) {
     return @"Dia";
@@ -3335,6 +3419,7 @@ static void dia_custom_install_runtime_overrides(void) {
         dia_custom_close_account_window();
     }
     if (dia_custom_mod_enabled("dia-import")) {
+        dia_custom_install_dia_import_presentation_override();
         dispatch_async(dispatch_get_main_queue(), ^{
             dia_custom_install_dia_import_source_override(0);
             dia_custom_poll_dia_import_request();

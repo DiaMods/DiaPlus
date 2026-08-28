@@ -56,6 +56,8 @@ if /usr/bin/grep -q 'official-dia-sync' \
     "$project_dir/bridge/config/dia-mods.json" || \
    ! /usr/bin/grep -q 'dia_custom_install_dia_import_source_override' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q 'dia_custom_install_dia_import_presentation_override' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
    ! /usr/bin/grep -q 'patch-dia-import.js' \
     "$project_dir/scripts/install.sh"; then
   print -u2 "Official Dia migration boundary is incomplete"
