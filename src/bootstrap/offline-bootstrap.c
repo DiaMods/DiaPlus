@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <WebKit/WebKit.h>
 #include <objc/runtime.h>
 #include <dispatch/dispatch.h>
 #include <mach-o/dyld.h>
@@ -27,13 +28,16 @@ extern void dia_custom_call_platform_window_prompt_tools_presenter(
     const void *platformWindow,
     const void *promptToolsController);
 
-static BOOL dia_custom_module_enabled(const char *moduleID) {
-    const char *raw = getenv("DIA_CUSTOM_MODULES");
+static BOOL dia_custom_mod_enabled(const char *modID) {
+    const char *raw = getenv("DIA_CUSTOM_MODS");
     if (raw == NULL || raw[0] == '\0') {
-        // Launchers from before the module manifest enabled every integration.
+        raw = getenv("DIA_CUSTOM_MODULES");
+    }
+    if (raw == NULL || raw[0] == '\0') {
+        // Launchers from before the Dia Mods manifest enabled every integration.
         return YES;
     }
-    NSString *wanted = [NSString stringWithUTF8String:moduleID];
+    NSString *wanted = [NSString stringWithUTF8String:modID];
     NSString *value = [NSString stringWithUTF8String:raw];
     for (NSString *candidate in [value componentsSeparatedByString:@","]) {
         candidate = [candidate stringByTrimmingCharactersInSet:
@@ -560,6 +564,354 @@ static NSURL *dia_custom_local_api_url(NSString *path) {
     return components.URL;
 }
 
+// Dia has no extension point for third-party preference panes. The Mod Manager
+// therefore adds one guarded sidebar item to the existing Settings split view
+// and presents its loopback-only configuration surface inside that same window.
+// Native panes and their controllers remain untouched.
+static WKWebView *dia_custom_mods_content_view;
+static NSWindow *dia_custom_mods_settings_window;
+static NSView *dia_custom_mods_content_host;
+static NSTableView *dia_custom_mods_native_table;
+static NSString *dia_custom_mods_previous_window_title;
+static NSTextField *dia_custom_mods_toolbar_title;
+static NSAttributedString *dia_custom_mods_previous_toolbar_title;
+typedef NSInteger (*DiaCustomNumberOfRowsIMP)(id, SEL, NSTableView *);
+typedef NSView *(*DiaCustomViewForRowIMP)(id, SEL, NSTableView *,
+                                         NSTableColumn *, NSInteger);
+typedef void (*DiaCustomSelectionChangedIMP)(id, SEL, NSNotification *);
+static DiaCustomNumberOfRowsIMP dia_custom_mods_original_number_of_rows;
+static DiaCustomViewForRowIMP dia_custom_mods_original_view_for_row;
+static DiaCustomSelectionChangedIMP dia_custom_mods_original_selection_changed;
+static id dia_custom_mods_data_source;
+static id dia_custom_mods_delegate;
+static BOOL dia_custom_mods_table_hooks_installed = NO;
+
+static NSTableView *dia_custom_find_settings_table(NSView *view) {
+    if ([view isKindOfClass:[NSTableView class]] &&
+        [(NSTableView *)view numberOfRows] >= 5) {
+        return (NSTableView *)view;
+    }
+    for (NSView *child in view.subviews) {
+        NSTableView *table = dia_custom_find_settings_table(child);
+        if (table != nil) return table;
+    }
+    return nil;
+}
+
+static NSSplitView *dia_custom_settings_split_for_table(NSTableView *table) {
+    for (NSView *view = table; view != nil; view = view.superview) {
+        if ([view isKindOfClass:[NSSplitView class]] &&
+            view.subviews.count >= 2) {
+            return (NSSplitView *)view;
+        }
+    }
+    return nil;
+}
+
+static NSView *dia_custom_direct_child(NSView *view, NSView *ancestor) {
+    NSView *candidate = view;
+    while (candidate.superview != nil && candidate.superview != ancestor) {
+        candidate = candidate.superview;
+    }
+    return candidate.superview == ancestor ? candidate : nil;
+}
+
+static BOOL dia_custom_is_settings_window(NSWindow *window) {
+    NSString *identifier = window.identifier;
+    return [identifier isEqualToString:@"preferencesWindow"] ||
+        dia_custom_find_settings_table(window.contentView) != nil;
+}
+
+static NSTextField *dia_custom_find_toolbar_title(NSView *view) {
+    if ([view isKindOfClass:[NSTextField class]] &&
+        [(NSTextField *)view stringValue].length > 0) {
+        return (NSTextField *)view;
+    }
+    for (NSView *child in view.subviews) {
+        NSTextField *label = dia_custom_find_toolbar_title(child);
+        if (label != nil) return label;
+    }
+    return nil;
+}
+
+static void dia_custom_set_mods_toolbar_title(NSString *title) {
+    if (dia_custom_mods_settings_window == nil) return;
+    if (dia_custom_mods_toolbar_title == nil) {
+        for (NSToolbarItem *item in dia_custom_mods_settings_window.toolbar.items) {
+            NSTextField *label = dia_custom_find_toolbar_title(item.view);
+            if (label != nil) {
+                dia_custom_mods_toolbar_title = label;
+                break;
+            }
+        }
+    }
+    if (dia_custom_mods_toolbar_title != nil) {
+        if (dia_custom_mods_previous_toolbar_title == nil) {
+            dia_custom_mods_previous_toolbar_title =
+                [dia_custom_mods_toolbar_title.attributedStringValue copy];
+        }
+        dia_custom_mods_toolbar_title.stringValue = title;
+    }
+}
+
+static NSInteger dia_custom_native_settings_row_count(void) {
+    if (dia_custom_mods_original_number_of_rows == NULL ||
+        dia_custom_mods_data_source == nil ||
+        dia_custom_mods_native_table == nil) return NSNotFound;
+    return dia_custom_mods_original_number_of_rows(
+        dia_custom_mods_data_source,
+        @selector(numberOfRowsInTableView:),
+        dia_custom_mods_native_table);
+}
+
+static NSColor *dia_custom_native_sidebar_icon_tint(void) {
+    NSInteger nativeRows = dia_custom_native_settings_row_count();
+    if (nativeRows == NSNotFound || nativeRows <= 0) return nil;
+    NSInteger referenceRow = dia_custom_mods_native_table.selectedRow == 0 &&
+        nativeRows > 1 ? 1 : 0;
+    NSTableCellView *reference = (NSTableCellView *)[dia_custom_mods_native_table
+        viewAtColumn:0 row:referenceRow makeIfNecessary:NO];
+    return reference.imageView.contentTintColor;
+}
+
+static void dia_custom_set_mods_sidebar_selected(BOOL selected) {
+    NSInteger rowIndex = dia_custom_native_settings_row_count();
+    if (rowIndex == NSNotFound) return;
+    NSTableRowView *row = [dia_custom_mods_native_table
+        rowViewAtRow:rowIndex makeIfNecessary:NO];
+    row.emphasized = selected;
+    NSView *cell = [dia_custom_mods_native_table
+        viewAtColumn:0 row:rowIndex makeIfNecessary:NO];
+    for (NSView *child in cell.subviews) {
+        if ([child isKindOfClass:[NSTextField class]]) {
+            [(NSTextField *)child setTextColor:selected
+                ? NSColor.whiteColor : NSColor.labelColor];
+        } else if ([child isKindOfClass:[NSImageView class]]) {
+            [(NSImageView *)child setContentTintColor:
+                (selected ? NSColor.whiteColor :
+                    dia_custom_native_sidebar_icon_tint())];
+        }
+    }
+}
+
+static void dia_custom_hide_mods_pane(void) {
+    if (dia_custom_mods_content_view != nil) {
+        dia_custom_mods_content_view.hidden = YES;
+    }
+    dia_custom_set_mods_sidebar_selected(NO);
+    if (dia_custom_mods_settings_window != nil &&
+        dia_custom_mods_previous_window_title != nil) {
+        dia_custom_mods_settings_window.title =
+            dia_custom_mods_previous_window_title;
+    }
+    if (dia_custom_mods_toolbar_title != nil &&
+        dia_custom_mods_previous_toolbar_title != nil) {
+        dia_custom_mods_toolbar_title.attributedStringValue =
+            dia_custom_mods_previous_toolbar_title;
+    }
+}
+
+static void dia_custom_show_mods_pane(void) {
+    if (dia_custom_mods_settings_window == nil ||
+        dia_custom_mods_content_host == nil) return;
+    [dia_custom_mods_previous_window_title release];
+    dia_custom_mods_previous_window_title =
+        [dia_custom_mods_settings_window.title copy];
+    [dia_custom_mods_previous_toolbar_title release];
+    dia_custom_mods_previous_toolbar_title = nil;
+    if (dia_custom_mods_content_view == nil ||
+        dia_custom_mods_content_view.superview != dia_custom_mods_content_host) {
+        [dia_custom_mods_content_view removeFromSuperview];
+        [dia_custom_mods_content_view release];
+        WKWebViewConfiguration *configuration =
+            [[WKWebViewConfiguration alloc] init];
+        dia_custom_mods_content_view = [[WKWebView alloc]
+            initWithFrame:dia_custom_mods_content_host.bounds
+            configuration:configuration];
+        [configuration release];
+        dia_custom_mods_content_view.autoresizingMask =
+            NSViewWidthSizable | NSViewHeightSizable;
+        dia_custom_mods_content_view.accessibilityLabel = @"Dia Mods";
+        [dia_custom_mods_content_host addSubview:dia_custom_mods_content_view
+                                      positioned:NSWindowAbove
+                                      relativeTo:nil];
+    }
+    dia_custom_mods_content_view.frame = dia_custom_mods_content_host.bounds;
+    dia_custom_mods_content_view.hidden = NO;
+    NSURL *url = dia_custom_local_api_url(@"/mods");
+    if (url != nil) {
+        NSURLRequest *request = [NSURLRequest
+            requestWithURL:url
+               cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+           timeoutInterval:10.0];
+        [dia_custom_mods_content_view loadRequest:request];
+    }
+    dia_custom_mods_settings_window.title = @"Mods";
+    dia_custom_set_mods_toolbar_title(@"Mods");
+    dia_custom_set_mods_sidebar_selected(YES);
+    dia_custom_log_status(@"mod-manager-pane-presented");
+}
+
+static NSInteger dia_custom_mods_number_of_rows(id dataSource, SEL selector,
+                                                 NSTableView *table) {
+    NSInteger count = dia_custom_mods_original_number_of_rows != NULL
+        ? dia_custom_mods_original_number_of_rows(dataSource, selector, table)
+        : 0;
+    return table == dia_custom_mods_native_table ? count + 1 : count;
+}
+
+static NSView *dia_custom_mods_sidebar_cell(NSTableView *table) {
+    NSUserInterfaceItemIdentifier identifier = @"DiaCustomModsCell";
+    NSTableCellView *cell = [table makeViewWithIdentifier:identifier owner:nil];
+    if (cell != nil) return cell;
+    NSTableCellView *nativeCell = (NSTableCellView *)[table
+        viewAtColumn:0 row:0 makeIfNecessary:NO];
+    NSRect nativeFrame = nativeCell != nil
+        ? nativeCell.frame : NSMakeRect(0, 0, 180, 28);
+    cell = [[[NSTableCellView alloc] initWithFrame:nativeFrame]
+        autorelease];
+    cell.identifier = identifier;
+    cell.accessibilityLabel = @"Mods";
+    NSImageView *icon = [[[NSImageView alloc] initWithFrame:NSZeroRect] autorelease];
+    if ([NSImage respondsToSelector:
+            @selector(imageWithSystemSymbolName:accessibilityDescription:)]) {
+        NSImage *image = [NSImage imageWithSystemSymbolName:@"puzzlepiece.extension"
+                                  accessibilityDescription:@"Mods"];
+        image.template = YES;
+        icon.image = image;
+    }
+    // A nil tint is meaningful here: native sidebar cells let AppKit resolve
+    // their template-image color from the table's active/unselected state.
+    // Copying the native value avoids double-dimming the SF Symbol.
+    icon.contentTintColor = nativeCell.imageView.contentTintColor;
+    icon.frame = nativeCell.imageView != nil
+        ? nativeCell.imageView.frame : NSMakeRect(5, 6, 16, 16);
+    icon.autoresizingMask = NSViewMaxXMargin;
+    NSTextField *label = [NSTextField labelWithString:@"Mods"];
+    label.font = nativeCell.textField.font ?:
+        [NSFont systemFontOfSize:13.0 weight:NSFontWeightMedium];
+    label.frame = nativeCell.textField != nil
+        ? nativeCell.textField.frame : NSMakeRect(33, 5, 135, 18);
+    label.autoresizingMask = NSViewWidthSizable;
+    cell.imageView = icon;
+    cell.textField = label;
+    [cell addSubview:icon];
+    [cell addSubview:label];
+    return cell;
+}
+
+static NSView *dia_custom_mods_view_for_row(id delegate, SEL selector,
+                                             NSTableView *table,
+                                             NSTableColumn *column,
+                                             NSInteger row) {
+    NSInteger nativeRows = table == dia_custom_mods_native_table
+        ? dia_custom_native_settings_row_count() : NSNotFound;
+    if (nativeRows != NSNotFound && row == nativeRows) {
+        return dia_custom_mods_sidebar_cell(table);
+    }
+    return dia_custom_mods_original_view_for_row != NULL
+        ? dia_custom_mods_original_view_for_row(
+            delegate, selector, table, column, row)
+        : nil;
+}
+
+static void dia_custom_mods_selection_changed(id delegate, SEL selector,
+                                               NSNotification *notification) {
+    NSTableView *table = [notification.object isKindOfClass:[NSTableView class]]
+        ? notification.object : nil;
+    NSInteger modsRow = table == dia_custom_mods_native_table
+        ? dia_custom_native_settings_row_count() : NSNotFound;
+    if (modsRow != NSNotFound && table.selectedRow == modsRow) {
+        dia_custom_show_mods_pane();
+        return;
+    }
+    if (table == dia_custom_mods_native_table &&
+        dia_custom_mods_content_view != nil &&
+        !dia_custom_mods_content_view.hidden) {
+        dia_custom_hide_mods_pane();
+    }
+    if (dia_custom_mods_original_selection_changed != NULL) {
+        dia_custom_mods_original_selection_changed(
+            delegate, selector, notification);
+    }
+}
+
+static BOOL dia_custom_install_mods_table_hooks(NSTableView *table) {
+    if (dia_custom_mods_table_hooks_installed) return YES;
+    id dataSource = table.dataSource;
+    id delegate = table.delegate;
+    SEL countSelector = @selector(numberOfRowsInTableView:);
+    SEL viewSelector = @selector(tableView:viewForTableColumn:row:);
+    SEL selectionSelector = @selector(tableViewSelectionDidChange:);
+    Method countMethod = class_getInstanceMethod(
+        object_getClass(dataSource), countSelector);
+    Method viewMethod = class_getInstanceMethod(
+        object_getClass(delegate), viewSelector);
+    Method selectionMethod = class_getInstanceMethod(
+        object_getClass(delegate), selectionSelector);
+    if (dataSource == nil || delegate == nil || countMethod == NULL ||
+        viewMethod == NULL || selectionMethod == NULL) {
+        dia_custom_log_status(@"mod-manager-disabled-incompatible-sidebar");
+        return NO;
+    }
+    dia_custom_mods_original_number_of_rows =
+        (DiaCustomNumberOfRowsIMP)method_getImplementation(countMethod);
+    dia_custom_mods_original_view_for_row =
+        (DiaCustomViewForRowIMP)method_getImplementation(viewMethod);
+    dia_custom_mods_original_selection_changed =
+        (DiaCustomSelectionChangedIMP)method_getImplementation(selectionMethod);
+    Class dataSourceClass = object_getClass(dataSource);
+    Class delegateClass = object_getClass(delegate);
+    const char *countTypes = method_getTypeEncoding(countMethod);
+    const char *viewTypes = method_getTypeEncoding(viewMethod);
+    const char *selectionTypes = method_getTypeEncoding(selectionMethod);
+    if (!class_addMethod(dataSourceClass, countSelector,
+            (IMP)dia_custom_mods_number_of_rows, countTypes)) {
+        method_setImplementation(countMethod,
+            (IMP)dia_custom_mods_number_of_rows);
+    }
+    if (!class_addMethod(delegateClass, viewSelector,
+            (IMP)dia_custom_mods_view_for_row, viewTypes)) {
+        method_setImplementation(viewMethod,
+            (IMP)dia_custom_mods_view_for_row);
+    }
+    if (!class_addMethod(delegateClass, selectionSelector,
+            (IMP)dia_custom_mods_selection_changed, selectionTypes)) {
+        method_setImplementation(selectionMethod,
+            (IMP)dia_custom_mods_selection_changed);
+    }
+    dia_custom_mods_data_source = dataSource;
+    dia_custom_mods_delegate = delegate;
+    dia_custom_mods_table_hooks_installed = YES;
+    return YES;
+}
+
+static void dia_custom_install_mod_manager(id target) {
+    if (!dia_custom_mod_enabled("mod-manager") || target == nil) return;
+    for (NSWindow *window in NSApp.windows) {
+        if (!dia_custom_is_settings_window(window)) continue;
+        NSTableView *table = dia_custom_find_settings_table(window.contentView);
+        NSSplitView *split = dia_custom_settings_split_for_table(table);
+        NSView *sidebar = dia_custom_direct_child(table, split);
+        if (table == nil || split == nil || sidebar == nil ||
+            !dia_custom_install_mods_table_hooks(table)) continue;
+        NSView *content = nil;
+        for (NSView *candidate in split.subviews) {
+            if (candidate != sidebar) {
+                content = candidate;
+                break;
+            }
+        }
+        if (content == nil) continue;
+        BOOL tableChanged = dia_custom_mods_native_table != table;
+        dia_custom_mods_settings_window = window;
+        dia_custom_mods_native_table = table;
+        dia_custom_mods_content_host = content;
+        if (tableChanged) [table reloadData];
+        dia_custom_log_status(@"mod-manager-tab-installed");
+    }
+}
+
 static NSString *dia_custom_memory_retention_title(NSInteger days) {
     if (days <= 0) {
         return @"Forever";
@@ -831,7 +1183,7 @@ static void dia_custom_fetch_local_memory_state(id target,
 }
 
 static void dia_custom_install_local_memory_controls(id target, SEL action) {
-    if (!dia_custom_module_enabled("native-memory")) {
+    if (!dia_custom_mod_enabled("native-memory")) {
         return;
     }
     BOOL found = dia_custom_refresh_memory_controls(target, action);
@@ -946,7 +1298,7 @@ static void dia_custom_configure_native_apps_descendants(NSView *view, id target
 }
 
 static void dia_custom_sync_native_apps_connections(id viewModel) {
-    if (!dia_custom_module_enabled("live-connectors") || viewModel == nil ||
+    if (!dia_custom_mod_enabled("live-connectors") || viewModel == nil ||
         dia_custom_native_apps_connections_request_in_flight) return;
     char *raw = dia_custom_swift_native_apps_connections_json(
         (__bridge const void *)viewModel);
@@ -1059,14 +1411,14 @@ static BOOL dia_custom_apply_native_apps_state_in_view(NSView *view, id target) 
 }
 
 static void dia_custom_refresh_native_apps_controls(id target) {
-    if (!dia_custom_module_enabled("native-apps")) return;
+    if (!dia_custom_mod_enabled("native-apps")) return;
     for (NSWindow *window in NSApp.windows) {
         dia_custom_apply_native_apps_state_in_view(window.contentView, target);
     }
 }
 
 static void dia_custom_fetch_native_apps_state(id target, BOOL force) {
-    if (!dia_custom_module_enabled("native-apps") ||
+    if (!dia_custom_mod_enabled("native-apps") ||
         !dia_custom_local_apps_compatible || target == nil ||
         dia_custom_local_apps_request_in_flight) return;
     if (!force && dia_custom_local_apps_last_refresh != nil &&
@@ -1440,7 +1792,7 @@ static void dia_custom_position_model_picker(id toolbar,
 }
 
 static void dia_custom_install_custom_model_picker(id target, SEL action) {
-    if (!dia_custom_module_enabled("model-picker") || target == nil) {
+    if (!dia_custom_mod_enabled("model-picker") || target == nil) {
         return;
     }
     for (NSWindow *window in [NSApp windows]) {
@@ -1527,10 +1879,10 @@ static void dia_custom_request_interface_refresh(id target,
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 150 * NSEC_PER_MSEC),
                    dispatch_get_main_queue(), ^{
         dia_custom_interface_refresh_pending = NO;
-        if (dia_custom_module_enabled("model-picker")) {
+        if (dia_custom_mod_enabled("model-picker")) {
             dia_custom_install_custom_model_picker(target, modelAction);
         }
-        if (dia_custom_module_enabled("native-memory")) {
+        if (dia_custom_mod_enabled("native-memory")) {
             dia_custom_install_local_memory_controls(target, memoryAction);
         }
     });
@@ -1539,7 +1891,7 @@ static void dia_custom_request_interface_refresh(id target,
 static void dia_custom_schedule_model_picker_attempts(id target,
                                                        SEL action,
                                                        unsigned attempt) {
-    if (!dia_custom_module_enabled("model-picker") ||
+    if (!dia_custom_mod_enabled("model-picker") ||
         target == nil || attempt >= 30) {
         return;
     }
@@ -1561,6 +1913,7 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 - (void)toggleLocalMorningBrief:(id)sender;
 - (void)checkLocalMorningBriefSchedule;
 - (void)openModelSettings:(id)sender;
+- (void)showDiaMods:(id)sender;
 - (BOOL)openLocalSettingsFragment:(NSString *)fragment;
 - (void)windowBecameKey:(NSNotification *)notification;
 - (void)windowDidUpdate:(NSNotification *)notification;
@@ -1644,6 +1997,11 @@ static void dia_custom_schedule_model_picker_attempts(id target,
     [self openLocalSettingsFragment:nil];
 }
 
+- (void)showDiaMods:(id)sender {
+    (void)sender;
+    dia_custom_show_mods_pane();
+}
+
 - (BOOL)openLocalSettingsFragment:(NSString *)fragment {
     const char *rawURL = getenv("DIA_CUSTOM_SETTINGS_URL");
     NSString *value = rawURL != NULL
@@ -1678,19 +2036,22 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 - (void)windowBecameKey:(NSNotification *)notification {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
                    dispatch_get_main_queue(), ^{
-        if (dia_custom_module_enabled("model-picker")) {
+        if (dia_custom_mod_enabled("model-picker")) {
             dia_custom_install_custom_model_picker(self,
                 @selector(selectCustomModel:));
         }
-        if (dia_custom_module_enabled("native-memory")) {
+        if (dia_custom_mod_enabled("native-memory")) {
             dia_custom_install_local_memory_controls(self,
                 @selector(toggleLocalMemory:));
         }
-        if (dia_custom_module_enabled("native-apps")) {
+        if (dia_custom_mod_enabled("native-apps")) {
             dia_custom_fetch_native_apps_state(self, YES);
         }
-        if (dia_custom_module_enabled("morning-brief")) {
+        if (dia_custom_mod_enabled("morning-brief")) {
             [self checkLocalMorningBriefSchedule];
+        }
+        if (dia_custom_mod_enabled("mod-manager")) {
+            dia_custom_install_mod_manager(self);
         }
     });
 }
@@ -1699,8 +2060,11 @@ static void dia_custom_schedule_model_picker_attempts(id target,
     dia_custom_request_interface_refresh(self,
         @selector(selectCustomModel:),
         @selector(toggleLocalMemory:));
-    if (dia_custom_module_enabled("native-apps")) {
+    if (dia_custom_mod_enabled("native-apps")) {
         dia_custom_fetch_native_apps_state(self, NO);
+    }
+    if (dia_custom_mod_enabled("mod-manager")) {
+        dia_custom_install_mod_manager(self);
     }
 }
 
@@ -1765,7 +2129,7 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 }
 
 - (void)checkLocalMorningBriefSchedule {
-    if (!dia_custom_module_enabled("morning-brief")) return;
+    if (!dia_custom_mod_enabled("morning-brief")) return;
     if (dia_custom_local_apps_state == nil) {
         dia_custom_fetch_native_apps_state(self, YES);
         return;
@@ -2119,7 +2483,7 @@ static IMP dia_custom_native_enable_morning_action;
 static IMP dia_custom_native_disable_morning_action;
 
 static void dia_custom_install_native_apps_action_hooks(void) {
-    if (!dia_custom_module_enabled("native-apps") ||
+    if (!dia_custom_mod_enabled("native-apps") ||
         dia_custom_native_apps_actions_installed) return;
     Class appsView = NSClassFromString(@"Preferences.AppsPreferencePaneView");
     if (appsView == Nil) {
@@ -2150,7 +2514,7 @@ static void dia_custom_install_native_apps_action_hooks(void) {
 }
 
 static void dia_custom_install_native_apps_event_monitor(void) {
-    if (!dia_custom_module_enabled("native-apps") ||
+    if (!dia_custom_mod_enabled("native-apps") ||
         dia_custom_native_apps_event_monitor != nil) return;
     dia_custom_native_apps_event_monitor = [[NSEvent
         addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp
@@ -2187,12 +2551,13 @@ static void dia_custom_install_native_apps_event_monitor(void) {
 static void dia_custom_install_developer_menu(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8000 * NSEC_PER_MSEC),
                    dispatch_get_main_queue(), ^{
-        BOOL modelPickerEnabled = dia_custom_module_enabled("model-picker");
-        BOOL developerToolsEnabled = dia_custom_module_enabled("developer-tools");
-        BOOL memoryEnabled = dia_custom_module_enabled("native-memory");
-        BOOL nativeAppsEnabled = dia_custom_module_enabled("native-apps");
-        BOOL morningBriefEnabled = dia_custom_module_enabled("morning-brief");
-        if (!modelPickerEnabled && !developerToolsEnabled && !memoryEnabled &&
+        BOOL modelPickerEnabled = dia_custom_mod_enabled("model-picker");
+        BOOL developerToolsEnabled = dia_custom_mod_enabled("developer-tools");
+        BOOL modManagerEnabled = dia_custom_mod_enabled("mod-manager");
+        BOOL memoryEnabled = dia_custom_mod_enabled("native-memory");
+        BOOL nativeAppsEnabled = dia_custom_mod_enabled("native-apps");
+        BOOL morningBriefEnabled = dia_custom_mod_enabled("morning-brief");
+        if (!modelPickerEnabled && !developerToolsEnabled && !modManagerEnabled && !memoryEnabled &&
             !nativeAppsEnabled && !morningBriefEnabled) {
             return;
         }
@@ -2307,6 +2672,10 @@ static void dia_custom_install_developer_menu(void) {
         if (morningBriefEnabled) {
             [dia_custom_developer_menu_controller checkLocalMorningBriefSchedule];
         }
+        if (modManagerEnabled) {
+            dia_custom_install_mod_manager(
+                dia_custom_developer_menu_controller);
+        }
         [[NSNotificationCenter defaultCenter]
             addObserver:dia_custom_developer_menu_controller
                selector:@selector(windowBecameKey:)
@@ -2329,17 +2698,18 @@ static void dia_custom_install_runtime_overrides(void) {
         return;
     }
 
-    if (dia_custom_module_enabled("network-isolation")) {
+    if (dia_custom_mod_enabled("network-isolation")) {
         dia_custom_schedule_network_log();
     }
-    if (dia_custom_module_enabled("account-bypass")) {
+    if (dia_custom_mod_enabled("account-bypass")) {
         dia_custom_close_account_window();
     }
-    if (dia_custom_module_enabled("model-picker") ||
-        dia_custom_module_enabled("developer-tools") ||
-        dia_custom_module_enabled("native-memory") ||
-        dia_custom_module_enabled("native-apps") ||
-        dia_custom_module_enabled("morning-brief")) {
+    if (dia_custom_mod_enabled("model-picker") ||
+        dia_custom_mod_enabled("developer-tools") ||
+        dia_custom_mod_enabled("mod-manager") ||
+        dia_custom_mod_enabled("native-memory") ||
+        dia_custom_mod_enabled("native-apps") ||
+        dia_custom_mod_enabled("morning-brief")) {
         dia_custom_install_developer_menu();
     }
 }

@@ -33,9 +33,9 @@ model_catalog="$bridge_state_dir/models.json"
 tool_coverage="$bridge_state_dir/tool-coverage.json"
 provider_config="$bridge_state_dir/config.json"
 memory_database="$bridge_state_dir/memory.sqlite3"
-enabled_modules="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/modules.js" resolved)"
-module_enabled() {
-  case ",${enabled_modules}," in
+enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
+mod_enabled() {
+  case ",${enabled_mods}," in
     *",${1},"*) return 0 ;;
     *) return 1 ;;
   esac
@@ -45,7 +45,7 @@ if [[ ! -d "$app" ]]; then
   print -u2 "Dia Custom is not installed. Run './dia-custom build' first."
   exit 1
 fi
-node "$script_dir/check-dia-build.js" "$app" --modules "$enabled_modules" >/dev/null
+node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" >/dev/null
 if [[ ! -f "$embedded_bootstrap" ]]; then
   "$script_dir/install.sh" "$app"
 fi
@@ -78,7 +78,7 @@ fi
 /bin/chmod 600 "$network_log"
 
 # Complete the local anonymous setup and explicitly select New Chat flags.
-if module_enabled account-bypass; then
+if mod_enabled account-bypass; then
   /usr/bin/defaults write local.rttm.dia onboardingForceCompleteFlowEnabled -bool false
   /usr/bin/defaults write local.rttm.dia hasPresentedOnboardingIntro -bool true
   /usr/bin/defaults write local.rttm.dia hasUserAuthenticated -bool true
@@ -113,10 +113,10 @@ feature_flags=( \
   "external-qa-access-for-developer-menu-enabled=true" \
   "enable-llm-debugger=true" \
 )
-if module_enabled native-apps; then
+if mod_enabled native-apps; then
   feature_flags+=("apps-pref-pane-redesign-enabled=true")
 fi
-if module_enabled morning-brief; then
+if mod_enabled morning-brief; then
   feature_flags+=(
     "clia-morning-brief-settings-enabled=true"
     "clia-morning-brief-allow-gmail-gcal-enabled=true"
@@ -155,9 +155,9 @@ bridge_environment=(
   "DIA_CUSTOM_MODEL_CATALOG_PATH=$model_catalog"
   "DIA_CUSTOM_TOOL_COVERAGE_PATH=$tool_coverage"
   "DIA_CUSTOM_MEMORY_PATH=$memory_database"
-  "DIA_CUSTOM_MODULES=$enabled_modules"
+  "DIA_CUSTOM_MODS=$enabled_mods"
 )
-if module_enabled apple-models && [[ -x "$apple_model_helper" ]]; then
+if mod_enabled apple-models && [[ -x "$apple_model_helper" ]]; then
   bridge_environment+=("DIA_CUSTOM_APPLE_MODEL_HELPER=$apple_model_helper")
 fi
 [[ -z "${DIA_CUSTOM_CODEX_MODEL:-}" ]] || bridge_environment+=("DIA_CUSTOM_CODEX_MODEL=$DIA_CUSTOM_CODEX_MODEL")
@@ -214,7 +214,7 @@ launch_env=(
   --env "DIA_CUSTOM_PROFILE=$profile"
   --env "DIA_CUSTOM_MODEL_CATALOG_PATH=$model_catalog"
   --env "DIA_CUSTOM_SETTINGS_URL=http://127.0.0.1:8765/settings"
-  --env "DIA_CUSTOM_MODULES=$enabled_modules"
+  --env "DIA_CUSTOM_MODS=$enabled_mods"
 )
 if [[ "${DIA_CUSTOM_DEBUG_AGENT_MESSAGES:-0}" == "1" ]]; then
   launch_env+=(--env "MESSAGE_LOG_PAYLOADS=1")

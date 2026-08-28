@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "modules": [
+  "mods": [
     {
       "id": "identity-isolation",
       "label": "App & Keychain isolation",
@@ -63,6 +63,15 @@
       "required": false,
       "rebuildOnChange": false,
       "description": "Exposes local routing and tool diagnostics plus Dia's native webpage developer tools."
+    },
+    {
+      "id": "mod-manager",
+      "label": "Native Mod Manager",
+      "scope": ["runtime", "bridge"],
+      "defaultEnabled": true,
+      "required": false,
+      "rebuildOnChange": false,
+      "description": "Adds a dedicated Mods tab to Dia Settings for configuring optional Dia Mods."
     },
     {
       "id": "native-memory",

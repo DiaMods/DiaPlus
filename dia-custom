@@ -13,7 +13,8 @@ case "$command" in
   doctor) exec "$project_dir/scripts/doctor.sh" "$@" ;;
   test) exec "$project_dir/scripts/test.sh" "$@" ;;
   update) exec "$project_dir/scripts/build.sh" --replace "$@" ;;
-  modules) exec node "$project_dir/scripts/modules.js" "$@" ;;
+  mods) exec node "$project_dir/scripts/mods.js" "$@" ;;
+  modules) exec node "$project_dir/scripts/mods.js" "$@" ;;
   models)
     exec /usr/bin/curl --silent --show-error --fail \
       http://127.0.0.1:8765/api/models
@@ -41,7 +42,7 @@ case "$command" in
     print '  ./dia-custom install            Refresh patches in an existing clone'
     print '  ./dia-custom build [--replace]  Create a clone from /Applications/Dia.app'
     print '  ./dia-custom update             Rebuild only from an audited Dia app'
-    print '  ./dia-custom modules            List or toggle compatibility modules'
+    print '  ./dia-custom mods               List or configure Dia Mods'
     print '  ./dia-custom status             Show implemented and remaining work'
     ;;
   *)

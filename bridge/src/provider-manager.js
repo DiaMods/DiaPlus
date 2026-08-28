@@ -29,7 +29,7 @@ import {
   profileIDFromPayload,
 } from "./local-tools/memory.js";
 import { assertAllowedProviderURL } from "./network-policy.js";
-import { moduleEnabled } from "./modules.js";
+import { modEnabled } from "./mods.js";
 import { modelCatalogPath, profileDirectory } from "./paths.js";
 import { ToolCoverageStore } from "./tool-coverage.js";
 import {
@@ -413,14 +413,14 @@ export class ProviderManager {
     const selectedProviderID = splitModelKey(config.selectedModel).providerID;
     const selectedProvider = config.providers.find((provider) => provider.id === selectedProviderID);
     if (selectedProvider?.type === "apple-foundation-models" &&
-        !moduleEnabled("apple-models")) {
+        !modEnabled("apple-models")) {
       config = await this.configStore.select(`codex:${defaultCodexModel}`);
     }
     await this.memoryStore.open();
     await this.appsStateStore.load();
-    if (moduleEnabled("live-connectors")) await this.connectorRegistry.initialize();
+    if (modEnabled("live-connectors")) await this.connectorRegistry.initialize();
     this.memoryStore.setPrivacyFilters(config.localMemory.excludedHosts);
-    if (moduleEnabled("native-memory") &&
+    if (modEnabled("native-memory") &&
         config.localMemory.enabled && config.localMemory.importBrowserHistory) {
       this.historyImportPromise = this.refreshLocalMemory(config)
         .then((count) => {
@@ -444,7 +444,7 @@ export class ProviderManager {
 
   async refreshLocalMemory(config) {
     this.memoryStore.setPrivacyFilters(config.localMemory.excludedHosts);
-    if (!moduleEnabled("native-memory") ||
+    if (!modEnabled("native-memory") ||
         !config.localMemory.enabled || !config.localMemory.importBrowserHistory) return 0;
     let count = 0;
     const refreshedProfiles = [];
@@ -540,7 +540,7 @@ export class ProviderManager {
       return provider.models.map((model) => modelRecord(provider, model));
     }
     if (provider.type === "apple-foundation-models") {
-      if (!moduleEnabled("apple-models")) return [];
+      if (!modEnabled("apple-models")) return [];
       const status = provider.mode === "on-device"
         ? appleStatus?.onDevice
         : appleStatus?.privateCloud;
@@ -618,7 +618,7 @@ export class ProviderManager {
   }
 
   async setLocalMemoryEnabled(enabled) {
-    if (!moduleEnabled("native-memory")) throw new Error("native-memory module is disabled");
+    if (!modEnabled("native-memory")) throw new Error("native-memory mod is disabled");
     if (typeof enabled !== "boolean") {
       throw new Error("enabled must be a boolean");
     }
@@ -632,7 +632,7 @@ export class ProviderManager {
   }
 
   async setLocalMemoryRetention(retentionDays, profileID = null) {
-    if (!moduleEnabled("native-memory")) throw new Error("native-memory module is disabled");
+    if (!modEnabled("native-memory")) throw new Error("native-memory mod is disabled");
     if (!Number.isInteger(retentionDays) || retentionDays < 0 || retentionDays > 3_650) {
       throw new Error("retentionDays must be an integer from 0 to 3650");
     }
@@ -677,7 +677,7 @@ export class ProviderManager {
     const emitStatus = onStatus ?? onReasoning;
     const { config, provider, model, key } = await this.selectedProvider();
     const profileID = profileIDFromPayload(payload);
-    const morningBriefRun = moduleEnabled("morning-brief") && isMorningBriefPayload(payload);
+    const morningBriefRun = modEnabled("morning-brief") && isMorningBriefPayload(payload);
     if (morningBriefRun) {
       await this.appsStateStore.recordMorningBrief({
         profileID,
@@ -687,7 +687,7 @@ export class ProviderManager {
     const observedNativeTools = normalizeAnthropicTools(payload, { includeBlocked: true });
     const observedNativeToolNames = new Set(observedNativeTools.map((tool) => tool.name));
     const deferredTools = deferredAnthropicTools(payload);
-    if (moduleEnabled("live-connectors")) {
+    if (modEnabled("live-connectors")) {
       await this.connectorRegistry.observeNativeTools(
         profileID,
         [...observedNativeTools, ...deferredTools],
@@ -701,7 +701,7 @@ export class ProviderManager {
     for (const tool of observedNativeTools) observedForCoverage.set(tool.name, tool);
     const nativeTools = observedNativeTools.filter((tool) =>
       !isDiaOwnedProductKnowledgeTool(tool.name) &&
-      (moduleEnabled("reports") || !isReportUploadTool(tool.name)));
+      (modEnabled("reports") || !isReportUploadTool(tool.name)));
     const toolSearch = nativeToolSearchTool(payload);
     if (toolSearch && !nativeTools.some((tool) => tool.name === toolSearch.name)) {
       nativeTools.push(toolSearch);
@@ -715,7 +715,7 @@ export class ProviderManager {
       : null;
     let currentPayload = payload;
     if (
-      moduleEnabled("native-memory") &&
+      modEnabled("native-memory") &&
       config.localMemory.enabled &&
       config.localMemory.automaticRecall &&
       !isToolContinuation(payload) &&
@@ -744,7 +744,7 @@ export class ProviderManager {
     let streamedReportWrite = null;
 
     while (true) {
-      const reportState = moduleEnabled("reports")
+      const reportState = modEnabled("reports")
         ? reportWorkflowState(currentPayload)
         : { active: false };
       const nativeReportResult = nativeReportDecision(reportState, tools, key);
@@ -927,7 +927,7 @@ export class ProviderManager {
 
     const finalConfig = await this.configStore.load();
     if (
-      moduleEnabled("native-memory") &&
+      modEnabled("native-memory") &&
       finalConfig.localMemory.enabled &&
       finalConfig.localMemory.captureChats &&
       result?.kind === "final"

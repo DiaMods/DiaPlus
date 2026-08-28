@@ -26,6 +26,11 @@ export function renderSettingsPage(adminToken) {
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .provider { padding: 14px 0; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
     .provider:last-child { border-bottom: 0; }
+    .mod { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+    .mod:last-child { border-bottom: 0; }
+    .mod-title { font-weight: 600; margin-bottom: 4px; }
+    .mod-meta { font-size: 12px; margin-top: 5px; }
+    .mod input[type="checkbox"] { width: 38px; height: 22px; accent-color: #5b5ce2; }
     .provider-title { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
     .provider .row { margin-top: 8px; }
     .provider input { flex: 1; }
@@ -49,6 +54,14 @@ export function renderSettingsPage(adminToken) {
       <button id="refresh" class="secondary">Refresh</button>
     </div>
     <div id="status" class="muted"></div>
+  </div>
+
+  <h2 id="dia-mods">Dia Mods</h2>
+  <div class="muted">Each browser change is an independent Dia Mod. Optional mods can be configured here; isolation, update, and local-routing protections stay locked on.</div>
+  <div class="card">
+    <div id="modNotice" class="muted"></div>
+    <div id="modList"></div>
+    <div id="modStatus" class="muted" style="margin-top:10px"></div>
   </div>
 
   <h2 id="local-memory">Local memory</h2>
@@ -129,6 +142,9 @@ export function renderSettingsPage(adminToken) {
     const connectorStatus = document.querySelector('#connectorStatus');
     const toolSummary = document.querySelector('#toolSummary');
     const toolList = document.querySelector('#toolList');
+    const modList = document.querySelector('#modList');
+    const modNotice = document.querySelector('#modNotice');
+    const modStatus = document.querySelector('#modStatus');
 
     async function request(path, options = {}) {
       const response = await fetch(path, {
@@ -144,13 +160,14 @@ export function renderSettingsPage(adminToken) {
       status.textContent = 'Discovering available models…';
       status.className = 'muted';
       try {
-        const [catalog, config, memory, credentials, connectorData, toolData] = await Promise.all([
+        const [catalog, config, memory, credentials, connectorData, toolData, modData] = await Promise.all([
           request('/api/models' + (force ? '?refresh=1' : '')),
           request('/api/config'),
           request('/api/memory'),
           request('/api/credentials'),
           request('/api/connectors'),
           request('/api/tools'),
+          request('/api/mods'),
         ]);
         modelSelect.replaceChildren();
         for (const provider of catalog.providers) {
@@ -196,6 +213,57 @@ export function renderSettingsPage(adminToken) {
           memoryStats.append(box);
         }
         memoryStatus.textContent = memory.semanticError || '';
+        modNotice.textContent = modData.rebuildRequired
+          ? 'A clean Dia Custom rebuild is required to apply pending changes.'
+          : modData.restartRequired
+            ? 'Restart Dia Custom to apply pending changes.'
+            : 'All configured mods are active.';
+        modList.replaceChildren();
+        for (const mod of modData.mods) {
+          const row = document.createElement('div');
+          row.className = 'mod';
+          const copy = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'mod-title';
+          title.textContent = mod.label;
+          const description = document.createElement('div');
+          description.className = 'muted';
+          description.textContent = mod.description;
+          const meta = document.createElement('div');
+          meta.className = 'muted mod-meta';
+          meta.textContent = mod.required
+            ? 'Required safety/core mod'
+            : (mod.rebuildOnChange ? 'Changes require a rebuild' : 'Changes apply after restart') +
+              (mod.pending ? ' · change pending' : '');
+          copy.append(title, description, meta);
+          const toggle = document.createElement('input');
+          toggle.type = 'checkbox';
+          toggle.checked = mod.configuredEnabled;
+          toggle.disabled = mod.required;
+          toggle.setAttribute('role', 'switch');
+          toggle.setAttribute('aria-label', 'Enable ' + mod.label);
+          toggle.addEventListener('change', async () => {
+            const wanted = toggle.checked;
+            toggle.disabled = true;
+            modStatus.textContent = 'Saving ' + mod.label + '…';
+            try {
+              await request('/api/mods/' + encodeURIComponent(mod.id), {
+                method: 'PUT', body: JSON.stringify({ enabled: wanted }),
+              });
+              modStatus.textContent = mod.rebuildOnChange
+                ? 'Saved. Rebuild Dia Custom to apply this change.'
+                : 'Saved. Restart Dia Custom to apply this change.';
+              await load();
+            } catch (error) {
+              toggle.checked = !wanted;
+              toggle.disabled = mod.required;
+              modStatus.textContent = error.message;
+              modStatus.className = 'error';
+            }
+          });
+          row.append(copy, toggle);
+          modList.append(row);
+        }
         toolSummary.textContent = toolData.total + ' seen · ' + toolData.native + ' native · ' + toolData.local + ' local · ' + toolData.deferred + ' on-demand · ' + toolData.blocked + ' blocked';
         toolList.replaceChildren();
         for (const tool of toolData.tools) {
@@ -403,6 +471,100 @@ export function renderSettingsPage(adminToken) {
       });
     }
     load();
+  </script>
+</body>
+</html>`;
+}
+
+export function renderModsPage(adminToken) {
+  const token = JSON.stringify(adminToken).replaceAll("<", "\\u003c");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dia Mods</title>
+  <style>
+    :root { color-scheme: light dark; font: 13px -apple-system, BlinkMacSystemFont, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 54px 26px 36px; background: Canvas; color: CanvasText; }
+    body::before { content: ''; position: fixed; z-index: 100; inset: 0 0 auto 0; height: 45px; background: Canvas; }
+    h1 { display: none; }
+    .intro, #notice, .description, .meta { color: color-mix(in srgb, CanvasText 58%, transparent); line-height: 1.4; }
+    #notice { margin: 16px 0 8px; }
+    .list { border-radius: 10px; background: color-mix(in srgb, Canvas 94%, CanvasText 6%); padding: 0 12px; }
+    .mod { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; min-height: 67px; padding: 11px 2px; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+    .mod:last-child { border-bottom: 0; }
+    .title { font-weight: 600; margin-bottom: 2px; }
+    .meta { font-size: 11px; margin-top: 3px; }
+    input { width: 36px; height: 21px; accent-color: #0a84ff; }
+    input:disabled { opacity: .55; }
+    #status { min-height: 18px; margin-top: 10px; }
+    .error { color: #e5484d; }
+  </style>
+</head>
+<body>
+  <h1>Dia Mods</h1>
+  <div class="intro">Configure the independent changes that make Dia Custom work. Required isolation and routing protections stay locked on.</div>
+  <div id="notice"></div>
+  <div id="list" class="list"></div>
+  <div id="status" class="intro"></div>
+  <script>
+    const token = ${token};
+    const list = document.querySelector('#list');
+    const notice = document.querySelector('#notice');
+    const status = document.querySelector('#status');
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: { 'content-type': 'application/json', 'x-dia-custom-token': token, ...(options.headers || {}) },
+      });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value.error || ('HTTP ' + response.status));
+      return value;
+    }
+    async function load() {
+      const value = await request('/api/mods');
+      notice.textContent = value.rebuildRequired
+        ? 'Rebuild Dia Custom to apply pending build changes.'
+        : value.restartRequired
+          ? 'Restart Dia Custom to apply pending changes.'
+          : 'All configured mods are active.';
+      list.replaceChildren();
+      for (const mod of value.mods) {
+        const row = document.createElement('div'); row.className = 'mod';
+        const copy = document.createElement('div');
+        const title = document.createElement('div'); title.className = 'title'; title.textContent = mod.label;
+        const description = document.createElement('div'); description.className = 'description'; description.textContent = mod.description;
+        const meta = document.createElement('div'); meta.className = 'meta';
+        meta.textContent = mod.required ? 'Required safety/core mod' :
+          (mod.rebuildOnChange ? 'Rebuild after changes' : 'Restart after changes') +
+          (mod.pending ? ' · change pending' : '');
+        copy.append(title, description, meta);
+        const toggle = document.createElement('input');
+        toggle.type = 'checkbox'; toggle.role = 'switch';
+        toggle.checked = mod.configuredEnabled; toggle.disabled = mod.required;
+        toggle.setAttribute('aria-label', 'Enable ' + mod.label);
+        toggle.addEventListener('change', async () => {
+          const enabled = toggle.checked; toggle.disabled = true;
+          status.className = 'intro'; status.textContent = 'Saving ' + mod.label + '…';
+          try {
+            await request('/api/mods/' + encodeURIComponent(mod.id), {
+              method: 'PUT', body: JSON.stringify({ enabled }),
+            });
+            status.textContent = mod.rebuildOnChange
+              ? 'Saved. Rebuild Dia Custom to apply it.'
+              : 'Saved. Restart Dia Custom to apply it.';
+            await load();
+          } catch (error) {
+            toggle.checked = !enabled; toggle.disabled = mod.required;
+            status.className = 'error'; status.textContent = error.message;
+          }
+        });
+        row.append(copy, toggle); list.append(row);
+      }
+    }
+    load().catch(error => { status.className = 'error'; status.textContent = error.message; });
   </script>
 </body>
 </html>`;

@@ -8,26 +8,26 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectDirectory = dirname(scriptDirectory);
 const buildsPath = resolve(projectDirectory, "src/config/supported-dia-builds.json");
-const modulesPath = resolve(projectDirectory, "src/config/compatibility-modules.json");
+const modsPath = resolve(projectDirectory, "bridge/config/dia-mods.json");
 
 const args = process.argv.slice(2);
 const json = args.includes("--json");
-const modulesIndex = args.indexOf("--modules");
-const selectedModules = modulesIndex >= 0
-  ? new Set((args[modulesIndex + 1] ?? "").split(",").filter(Boolean))
+const modsIndex = args.includes("--mods") ? args.indexOf("--mods") : args.indexOf("--modules");
+const selectedMods = modsIndex >= 0
+  ? new Set((args[modsIndex + 1] ?? "").split(",").filter(Boolean))
   : null;
 const app = args.find((value, index) =>
-  !value.startsWith("--") && (modulesIndex < 0 || index !== modulesIndex + 1));
-if (!app) throw new Error("usage: check-dia-build.js /path/to/Dia.app [--modules comma,list] [--json]");
+  !value.startsWith("--") && (modsIndex < 0 || index !== modsIndex + 1));
+if (!app) throw new Error("usage: check-dia-build.js /path/to/Dia.app [--mods comma,list] [--json]");
 
 const build = execFileSync(
   "/usr/libexec/PlistBuddy",
   ["-c", "Print :CFBundleVersion", resolve(app, "Contents/Info.plist")],
   { encoding: "utf8" },
 ).trim();
-const [buildManifest, moduleManifest] = await Promise.all([
+const [buildManifest, modManifest] = await Promise.all([
   readFile(buildsPath, "utf8").then(JSON.parse),
-  readFile(modulesPath, "utf8").then(JSON.parse),
+  readFile(modsPath, "utf8").then(JSON.parse),
 ]);
 const record = buildManifest.builds?.[build];
 if (!record || record.status !== "audited") {
@@ -36,14 +36,14 @@ if (!record || record.status !== "audited") {
   );
 }
 
-const knownModules = new Set(moduleManifest.modules.map((module) => module.id));
-const supportedModules = new Set(record.modules ?? []);
-const requested = selectedModules ?? new Set(
-  moduleManifest.modules.filter((module) => module.defaultEnabled !== false).map((module) => module.id),
+const knownMods = new Set(modManifest.mods.map((mod) => mod.id));
+const supportedMods = new Set(record.mods ?? record.modules ?? []);
+const requested = selectedMods ?? new Set(
+  modManifest.mods.filter((mod) => mod.defaultEnabled !== false).map((mod) => mod.id),
 );
-const unknown = [...requested].filter((id) => !knownModules.has(id));
-if (unknown.length > 0) throw new Error(`unknown compatibility modules: ${unknown.join(", ")}`);
-const unsupported = [...requested].filter((id) => !supportedModules.has(id));
+const unknown = [...requested].filter((id) => !knownMods.has(id));
+if (unknown.length > 0) throw new Error(`unknown Dia Mods: ${unknown.join(", ")}`);
+const unsupported = [...requested].filter((id) => !supportedMods.has(id));
 if (unsupported.length > 0) {
   throw new Error(`Dia build ${build} has not been audited for: ${unsupported.join(", ")}`);
 }
@@ -52,8 +52,8 @@ const result = {
   build,
   version: record.version ?? null,
   status: record.status,
-  modules: [...requested],
+    mods: [...requested],
   notes: record.notes ?? "",
 };
 if (json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-else process.stdout.write(`Dia build ${build} is audited for ${requested.size} enabled compatibility modules.\n`);
+else process.stdout.write(`Dia build ${build} is audited for ${requested.size} enabled Dia Mods.\n`);

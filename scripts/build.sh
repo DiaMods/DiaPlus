@@ -23,8 +23,8 @@ if [[ ! -d "$source_app" ]]; then
   exit 1
 fi
 
-enabled_modules="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/modules.js" resolved)"
-node "$script_dir/check-dia-build.js" "$source_app" --modules "$enabled_modules"
+enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
+node "$script_dir/check-dia-build.js" "$source_app" --mods "$enabled_mods"
 
 if [[ -e "$clone_app" && "$replace" != true ]]; then
   print -u2 "Dia Custom already exists at $clone_app"
@@ -49,7 +49,7 @@ info="$temporary_app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$info" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c "Delete :CFBundleDocumentTypes" "$info" 2>/dev/null || true
 
-DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODULES="$enabled_modules" \
+DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" \
   "$script_dir/install.sh" "$temporary_app"
 
 if [[ -e "$clone_app" ]]; then
@@ -73,4 +73,4 @@ trap - EXIT
 
 print "Built $clone_app"
 print "Profile: $profile"
-print "Modules: $enabled_modules"
+print "Dia Mods: $enabled_mods"

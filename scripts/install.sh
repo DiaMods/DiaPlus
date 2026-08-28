@@ -16,22 +16,23 @@ if /usr/bin/pgrep -f "$app/Contents/MacOS/Dia" >/dev/null; then
   exit 1
 fi
 
-enabled_modules="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/modules.js" resolved)"
-enabled_build_modules="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/modules.js" resolved --scope build)"
-node "$script_dir/check-dia-build.js" "$app" --modules "$enabled_modules"
-module_enabled() {
-  case ",${enabled_modules}," in
+enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
+enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build)"
+node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods"
+mod_enabled() {
+  case ",${enabled_mods}," in
     *",${1},"*) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 info="$app/Contents/Info.plist"
-previous_modules="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomEnabledModules' "$info" 2>/dev/null || true)"
-for irreversible_module in account-bypass reports apple-models; do
-  if [[ ",$previous_modules," == *",$irreversible_module,"* ]] && \
-     ! module_enabled "$irreversible_module"; then
-    print -u2 "$irreversible_module is already patched into this app. Run './dia-custom build --replace' to disable it from a clean Dia copy."
+previous_mods="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomEnabledMods' "$info" 2>/dev/null || \
+  /usr/libexec/PlistBuddy -c 'Print :DiaCustomEnabledModules' "$info" 2>/dev/null || true)"
+for irreversible_mod in account-bypass reports apple-models; do
+  if [[ ",$previous_mods," == *",$irreversible_mod,"* ]] && \
+     ! mod_enabled "$irreversible_mod"; then
+    print -u2 "$irreversible_mod is already patched into this app. Run './dia-custom build --replace' to disable it from a clean Dia copy."
     exit 1
   fi
 done
@@ -45,16 +46,16 @@ done
 /usr/libexec/PlistBuddy -c "Set :SUFeedURL http://127.0.0.1:8765/updates-disabled.xml" "$info"
 
 bootstrap="$($script_dir/build-bootstrap.sh "$app")"
-module_enabled identity-isolation && \
+mod_enabled identity-isolation && \
   node "$project_dir/src/patches/patch-keychain-label.js" "$app"
-module_enabled local-ai-routing && \
+mod_enabled local-ai-routing && \
   node "$project_dir/src/patches/patch-endpoint.js" "$app"
-module_enabled account-bypass && \
+mod_enabled account-bypass && \
   node "$project_dir/src/patches/patch-no-account.js" "$app"
 node "$project_dir/src/patches/embed-bootstrap.js" "$app" "$bootstrap"
-module_enabled local-ai-routing && \
+mod_enabled local-ai-routing && \
   node "$project_dir/src/patches/patch-agent-handler.js" "$app"
-if module_enabled reports; then
+if mod_enabled reports; then
   node "$project_dir/src/patches/patch-report-controller.js" "$app"
   node "$project_dir/src/patches/patch-report-upload.js" "$app"
 fi
@@ -63,7 +64,7 @@ fi
 # installed we embed a small signed helper in the clone. Keeping this outside
 # Dia's executable makes the provider independent of Dia's private ABI.
 apple_helper_target="$app/Contents/Helpers/DiaCustomAppleModel"
-if module_enabled apple-models; then
+if mod_enabled apple-models; then
   if apple_helper="$($script_dir/build-apple-model-helper.sh)"; then
     mkdir -p "${apple_helper_target:h}"
     /usr/bin/ditto "$apple_helper" "$apple_helper_target"
@@ -73,10 +74,10 @@ if module_enabled apple-models; then
   fi
 fi
 
-/usr/libexec/PlistBuddy -c "Add :DiaCustomEnabledModules string '$enabled_modules'" "$info" 2>/dev/null || \
-  /usr/libexec/PlistBuddy -c "Set :DiaCustomEnabledModules '$enabled_modules'" "$info"
-/usr/libexec/PlistBuddy -c "Add :DiaCustomBuildModules string '$enabled_build_modules'" "$info" 2>/dev/null || \
-  /usr/libexec/PlistBuddy -c "Set :DiaCustomBuildModules '$enabled_build_modules'" "$info"
+/usr/libexec/PlistBuddy -c "Add :DiaCustomEnabledMods string '$enabled_mods'" "$info" 2>/dev/null || \
+  /usr/libexec/PlistBuddy -c "Set :DiaCustomEnabledMods '$enabled_mods'" "$info"
+/usr/libexec/PlistBuddy -c "Add :DiaCustomBuildMods string '$enabled_build_mods'" "$info" 2>/dev/null || \
+  /usr/libexec/PlistBuddy -c "Set :DiaCustomBuildMods '$enabled_build_mods'" "$info"
 
 # A certificate-backed designated requirement stays stable across rebuilds, so
 # macOS can retain the user's TCC and Keychain decisions. Prefer Developer ID

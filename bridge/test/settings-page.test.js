@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderSettingsPage } from "../src/settings-page.js";
+import { renderModsPage, renderSettingsPage } from "../src/settings-page.js";
 
 test("local settings page keeps provider, memory, connector, and tool controls parseable", () => {
   const html = renderSettingsPage("local-test-token");
@@ -8,10 +8,22 @@ test("local settings page keeps provider, memory, connector, and tool controls p
   assert.match(html, /Local connectors/);
   assert.match(html, /Local memory/);
   assert.match(html, /Tool coverage/);
+  assert.match(html, /Dia Mods/);
+  assert.match(html, /id="dia-mods"/);
   assert.match(html, /id="tool-coverage"/);
   assert.match(html, /id="advanced-json"/);
   assert.match(html, /local-test-token/);
 
+  const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+  assert.ok(script);
+  assert.doesNotThrow(() => new Function(script));
+});
+
+test("native Mods pane payload contains only the authenticated local manager", () => {
+  const html = renderModsPage("mods-test-token");
+  assert.match(html, /Dia Mods/);
+  assert.match(html, /\/api\/mods/);
+  assert.match(html, /mods-test-token/);
   const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
   assert.ok(script);
   assert.doesNotThrow(() => new Function(script));

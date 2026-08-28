@@ -23,9 +23,10 @@ import {
   toolCacheDirectory,
   profileDirectory,
 } from "./paths.js";
-import { renderSettingsPage } from "./settings-page.js";
+import { renderModsPage, renderSettingsPage } from "./settings-page.js";
 import { isAllowedLoopbackHostHeader } from "./network-policy.js";
-import { enabledModuleIDs, moduleEnabled } from "./modules.js";
+import { enabledModIDs, modEnabled } from "./mods.js";
+import { ModConfigStore } from "./mod-config.js";
 import { AnthropicStreamWriter } from "./anthropic-stream.js";
 import { isToolContinuation } from "./chat-shape.js";
 
@@ -49,6 +50,7 @@ const toolCacheFiles = new Set([
   "zoom.json",
 ]);
 const providerManager = new ProviderManager();
+const modConfigStore = new ModConfigStore();
 const sessions = new Map();
 const { privateKey: signaturePrivateKey } = generateKeyPairSync("ec", {
   namedCurve: "prime256v1",
@@ -522,7 +524,7 @@ async function handleRequest(request, response) {
       ok: true,
       mode: captureEnabled ? "capture" : "bridge",
       selectedModel,
-      enabledModules: enabledModuleIDs(),
+      enabledMods: enabledModIDs(),
     }));
     return;
   }
@@ -530,6 +532,12 @@ async function handleRequest(request, response) {
   if (request.method === "GET" && ["/", "/settings"].includes(requestURL.pathname)) {
     const config = await providerManager.configStore.load();
     htmlResponse(response, renderSettingsPage(config.adminToken));
+    return;
+  }
+
+  if (request.method === "GET" && requestURL.pathname === "/mods") {
+    const config = await providerManager.configStore.load();
+    htmlResponse(response, renderModsPage(config.adminToken));
     return;
   }
 
@@ -550,11 +558,38 @@ async function handleRequest(request, response) {
     return;
   }
 
+  if (request.method === "GET" && requestURL.pathname === "/api/mods") {
+    try {
+      jsonResponse(response, 200, await modConfigStore.publicState());
+    } catch (error) {
+      jsonResponse(response, 500, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
+  const modAction = requestURL.pathname.match(/^\/api\/mods\/([^/]+)$/);
+  if (request.method === "PUT" && modAction) {
+    try {
+      if (!await hasAdminToken(request)) {
+        jsonResponse(response, 403, { error: "invalid local administration token" });
+        return;
+      }
+      const payload = JSON.parse((await readBody(request)).toString("utf8"));
+      jsonResponse(response, 200, await modConfigStore.setEnabled(
+        decodeURIComponent(modAction[1]),
+        payload.enabled,
+      ));
+    } catch (error) {
+      jsonResponse(response, 400, { error: String(error?.message ?? error) });
+    }
+    return;
+  }
+
   if (request.method === "GET" && requestURL.pathname === "/api/apps/state") {
     try {
       const profileID = requestURL.searchParams.get("profileID") ?? "Default";
       const state = await providerManager.appsStateStore.publicState(profileID);
-      const connectors = moduleEnabled("live-connectors")
+      const connectors = modEnabled("live-connectors")
         ? await providerManager.connectorRegistry.status(profileID)
         : [];
       jsonResponse(response, 200, { ...state, connectors });
@@ -570,7 +605,7 @@ async function handleRequest(request, response) {
         jsonResponse(response, 403, { error: "invalid local administration token" });
         return;
       }
-      if (!moduleEnabled("morning-brief")) throw new Error("morning-brief module is disabled");
+      if (!modEnabled("morning-brief")) throw new Error("morning-brief mod is disabled");
       const payload = JSON.parse((await readBody(request)).toString("utf8"));
       await providerManager.appsStateStore.setMorningBrief(payload);
       jsonResponse(
@@ -605,7 +640,7 @@ async function handleRequest(request, response) {
         jsonResponse(response, 403, { error: "invalid local administration token" });
         return;
       }
-      if (!moduleEnabled("native-apps")) throw new Error("native-apps module is disabled");
+      if (!modEnabled("native-apps")) throw new Error("native-apps mod is disabled");
       const payload = JSON.parse((await readBody(request)).toString("utf8"));
       await providerManager.appsStateStore.updateNativeState(payload);
       jsonResponse(response, 200, await providerManager.appsStateStore.publicState(payload.profileID));
@@ -624,7 +659,7 @@ async function handleRequest(request, response) {
         jsonResponse(response, 403, { error: "invalid local administration token" });
         return;
       }
-      if (!moduleEnabled("live-connectors")) throw new Error("live-connectors module is disabled");
+      if (!modEnabled("live-connectors")) throw new Error("live-connectors mod is disabled");
       const connectorID = decodeURIComponent(connectorAction[1]);
       const action = connectorAction[2];
       const value = action === "disconnect"

@@ -38,6 +38,7 @@ xcrun swiftc -emit-library -O \
   "$output_dir/offline-bootstrap-arm64.o" \
   -framework Foundation \
   -framework AppKit \
+  -framework WebKit \
   -o "$output_dir/offline-bootstrap.dylib"
 
 codesign --force --sign - "$output_dir/offline-bootstrap.dylib"

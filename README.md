@@ -34,7 +34,7 @@ Useful commands:
 ./dia-custom openai-key         Save or clear the OpenAI key privately
 ./dia-custom test               Run provider, tool, patch, and build checks
 ./dia-custom update             Rebuild only from an audited /Applications/Dia.app
-./dia-custom modules            List independently gated compatibility modules
+./dia-custom mods               List or configure Dia Mods
 ./dia-custom status             Print the exact verified/remaining status
 ~~~
 
@@ -102,17 +102,17 @@ Browser internet access happens through native/local browser tools. Report files
 
 The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. That command checks **src/config/supported-dia-builds.json before copying or replacing anything**; an unknown build leaves the working clone untouched. Rebuilds preserve provider state and also fail closed if a private integration point changes shape. Builds 85660, 85823, and 86064 are currently audited on Apple silicon. A newly released upstream build needs one compatibility audit in this project; once listed, the update itself remains a single command.
 
-## Compatibility modules
+## Dia Mods
 
-Every integration has a stable ID in **src/config/compatibility-modules.json**. Run:
+Every browser change is an independently gated Dia Mod with a stable ID in **bridge/config/dia-mods.json**. Optional mods can be configured from Dia's native **Settings → Mods** tab or from the command line:
 
 ~~~sh
-./dia-custom modules
-./dia-custom modules disable developer-tools
-./dia-custom modules enable developer-tools
+./dia-custom mods
+./dia-custom mods disable developer-tools
+./dia-custom mods enable developer-tools
 ~~~
 
-Runtime/bridge modules apply after a restart. Binary modules report that a clean **./dia-custom build --replace** is required, so disabling a Report or account patch never pretends to undo bytes in place. The current resolved build-module snapshot is sealed into the clone and checked by **doctor**. Safety/core modules—identity isolation, Dia-service network isolation, controlled updates, and localhost AI routing—are required and deliberately cannot be switched off through the normal module command.
+Runtime/bridge mods apply after a restart. Binary mods report that a clean **./dia-custom build --replace** is required, so disabling a Report or account patch never pretends to undo bytes in place. The current resolved build-mod snapshot is sealed into the clone and checked by **doctor**. Safety/core mods—identity isolation, Dia-service network isolation, controlled updates, and localhost AI routing—are required and deliberately cannot be switched off.
 
 When a Developer ID Application certificate is available, installs use it automatically so Dia Custom keeps one stable macOS code requirement across rebuilds. This prevents repeated Documents, microphone, and similar permission prompts caused by changing ad-hoc CDHashes. `DIA_CUSTOM_SIGN_IDENTITY=-` explicitly selects the portable ad-hoc fallback; that fallback can require permissions again after a rebuild. Chromium also uses its mock keychain and the clone's patched **Dia Custom Store** label, so it does not reuse official Dia's **Dia Safe Storage** item.
 
@@ -130,12 +130,12 @@ When a Developer ID Application certificate is available, installs use it automa
 | **bridge/src/server.js** | Dia protocols, streaming, and local administration API |
 | **src/bootstrap/** | Native picker, Developer menu, and service-host blocking |
 | **src/patches/** | Guarded identity, endpoint, account, handler, and Report patches |
-| **src/config/compatibility-modules.json** | Toggleable integration manifest and rebuild policy |
+| **bridge/config/dia-mods.json** | Dia Mods manifest, defaults, scope, and rebuild policy |
 | **src/config/supported-dia-builds.json** | Audited Dia-build allowlist used before install/update |
 | **scripts/** | Build, install, launch, update, doctor, and test workflows |
 | **research/** | Build-analysis tools and notes; never runtime code |
 
-See [Architecture](docs/ARCHITECTURE.md), [Compatibility modules](docs/MODULES.md), and [Status](docs/STATUS.md) for exact boundaries.
+See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), and [Status](docs/STATUS.md) for exact boundaries.
 
 ## Runtime locations
 

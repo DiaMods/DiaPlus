@@ -5,7 +5,7 @@
     "85660": {
       "status": "audited",
       "notes": "Legacy guarded ARM64 layout retained for reproducible rebuilds.",
-      "modules": [
+      "mods": [
         "identity-isolation",
         "network-isolation",
         "update-blocker",
@@ -13,6 +13,7 @@
         "account-bypass",
         "model-picker",
         "developer-tools",
+        "mod-manager",
         "native-memory",
         "reports",
         "local-web",
@@ -27,7 +28,7 @@
       "status": "audited",
       "version": "1.46.0",
       "notes": "Current live-tested Dia Custom compatibility baseline.",
-      "modules": [
+      "mods": [
         "identity-isolation",
         "network-isolation",
         "update-blocker",
@@ -35,6 +36,7 @@
         "account-bypass",
         "model-picker",
         "developer-tools",
+        "mod-manager",
         "native-memory",
         "reports",
         "local-web",
@@ -49,7 +51,7 @@
       "status": "audited",
       "version": "1.46.0",
       "notes": "Current live-tested Dia Custom compatibility baseline.",
-      "modules": [
+      "mods": [
         "identity-isolation",
         "network-isolation",
         "update-blocker",
@@ -57,6 +59,7 @@
         "account-bypass",
         "model-picker",
         "developer-tools",
+        "mod-manager",
         "native-memory",
         "reports",
         "local-web",
