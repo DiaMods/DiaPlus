@@ -495,7 +495,11 @@ test("Report requests reject premature uploads, normalize Write paths, and uploa
   };
 
   let providerCalls = 0;
-  manager.runProvider = async (_provider, { payload: providerPayload, tools }) => {
+  manager.runProvider = async (_provider, {
+    payload: providerPayload,
+    tools,
+    onToolInputDelta,
+  }) => {
     providerCalls += 1;
     assert.match(JSON.stringify(providerPayload), /dia-custom-report-policy/);
     assert.deepEqual(tools.map((tool) => tool.name), ["Write"]);
@@ -511,6 +515,19 @@ test("Report requests reject premature uploads, normalize Write paths, and uploa
         model: "gpt-5.6-luna",
       };
     }
+    const streamedArguments = '{"file_path":"/tmp/wrong-context/work/artifacts/saturn/index.html","content":"<html></html>"}';
+    await onToolInputDelta({
+      id: "write-report",
+      name: "Write",
+      delta: streamedArguments.slice(0, 86),
+      accumulated: streamedArguments.slice(0, 86),
+    });
+    await onToolInputDelta({
+      id: "write-report",
+      name: "Write",
+      delta: streamedArguments.slice(86),
+      accumulated: streamedArguments,
+    });
     return {
       kind: "tool_use",
       text: "",
@@ -549,11 +566,20 @@ test("Report requests reject premature uploads, normalize Write paths, and uploa
     },
   );
 
-  const writeTurn = await manager.run(payload);
+  const expectedReport = reportWorkflowState(payload);
+  const reportStream = [];
+  const writeTurn = await manager.run(payload, {
+    onReportWriteStream: async (event) => reportStream.push(event),
+  });
   assert.equal(providerCalls, 2);
   assert.equal(writeTurn.result.toolCalls[0].name, "Write");
-  const expectedReport = reportWorkflowState(payload);
   assert.equal(writeTurn.result.toolCalls[0].input.file_path, expectedReport.reportFilePath);
+  assert.deepEqual(reportStream.map((event) => event.phase), ["start", "delta", "delta", "delta"]);
+  assert.equal(
+    reportStream.filter((event) => event.phase === "delta")
+      .map((event) => event.partialJSON).join(""),
+    `{"file_path":${JSON.stringify(expectedReport.reportFilePath)},"content":"<html></html>`,
+  );
   payload.messages.push(
     {
       role: "assistant",

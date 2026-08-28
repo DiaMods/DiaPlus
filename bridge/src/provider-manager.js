@@ -170,6 +170,25 @@ function normalizeReportWriteCalls(state, result) {
   };
 }
 
+function rawJSONStringField(input, field) {
+  if (typeof input !== "string") return null;
+  const match = new RegExp(`"${field}"\\s*:\\s*"`).exec(input);
+  if (!match) return null;
+  const start = match.index + match[0].length;
+  let escaped = false;
+  for (let index = start; index < input.length; index += 1) {
+    const character = input[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (character === '"') {
+      return { raw: input.slice(start, index), complete: true };
+    }
+  }
+  return { raw: input.slice(start), complete: false };
+}
+
 function retainPresentedToolCalls(result, tools) {
   if (result?.kind !== "tool_use") return { result, rejected: [] };
   const presentedNames = new Set(tools.map((tool) => tool.name));
@@ -612,7 +631,12 @@ export class ProviderManager {
     return runOpenAICompatibleProvider({ ...options, provider });
   }
 
-  async run(payload, { onReasoning, onStatus, onLocalToolActivity } = {}) {
+  async run(payload, {
+    onReasoning,
+    onStatus,
+    onLocalToolActivity,
+    onReportWriteStream,
+  } = {}) {
     const emitStatus = onStatus ?? onReasoning;
     const { config, provider, model, key } = await this.selectedProvider();
     const profileID = profileIDFromPayload(payload);
@@ -665,6 +689,7 @@ export class ProviderManager {
     let result;
     let localToolRounds = 0;
     let reportDecisionRetries = 0;
+    let streamedReportWrite = null;
 
     while (true) {
       const reportState = moduleEnabled("reports")
@@ -707,6 +732,44 @@ export class ProviderManager {
           if (emitStatus && call?.name === "Write" && reportState.active) {
             await emitStatus("Generating the Report in Dia...");
           }
+        },
+        onToolInputDelta: async (call) => {
+          if (
+            !onReportWriteStream || streamedReportWrite?.complete ||
+            call?.name !== "Write" || !call.id ||
+            !reportState.active || reportState.stage !== "create_report" ||
+            !reportState.reportFilePath
+          ) {
+            return;
+          }
+          const content = rawJSONStringField(call.accumulated, "content");
+          if (!content) return;
+          if (!streamedReportWrite) {
+            streamedReportWrite = {
+              id: call.id,
+              emitted: 0,
+              complete: false,
+            };
+            await onReportWriteStream({
+              phase: "start",
+              call: { id: call.id, name: "Write" },
+            });
+            await onReportWriteStream({
+              phase: "delta",
+              call: { id: call.id, name: "Write" },
+              partialJSON: `{"file_path":${JSON.stringify(reportState.reportFilePath)},"content":"`,
+            });
+          }
+          if (streamedReportWrite.id !== call.id) return;
+          if (content.raw.length > streamedReportWrite.emitted) {
+            await onReportWriteStream({
+              phase: "delta",
+              call: { id: call.id, name: "Write" },
+              partialJSON: content.raw.slice(streamedReportWrite.emitted),
+            });
+            streamedReportWrite.emitted = content.raw.length;
+          }
+          streamedReportWrite.complete = content.complete;
         },
       });
       result.model = key;

@@ -86,6 +86,8 @@ User Data/Default/AgentServer/contexts/<context UUID>/work/artifacts/<report fol
 
 and then calls native `upload_artifact`. During the creation stage, the provider does not receive the upload schema. Dia Custom derives a deterministic report folder from an explicit Report request, normalizes native `Write` to that exact path, and advances to upload only after the matching tool result succeeds. When the model itself selects `report-kit` for a broader request, the coordinator adopts that committed native workflow and the successful safe artifact path chosen by Dia's tools. A provider that answers early or invents an unavailable tool is retried with `Write` as its sole available action.
 
+OpenAI-compatible providers expose their streamed function arguments to the bridge. Once a Report `Write` begins its `content` field, the Anthropic-compatible response opens Dia's native tool block and forwards encoded HTML deltas top-down. The block remains open until the complete provider decision passes tool/path authorization; its final JSON delimiter and `content_block_stop` are emitted only then. Codex and Apple structured decisions retain their buffered path until their adapters expose equivalent safe argument streaming.
+
 Official Dia normally tears down its Artifacts controller when the profile lacks a server-derived account capability, even though all local persistence dependencies exist. A structural patch selects Dia's original async setup continuation for the anonymous clone.
 
 Dia also validates `site_root` against a registry associated with the official profile. That registry cannot recognize a separately bundled clone even when the path is correct. The second native Report patch semantically locates only this duplicate registry-error branch and sends it to the existing success continuation. Folder validation and native ingestion remain unchanged.
@@ -99,7 +101,7 @@ Before that patched branch is reachable, the bridge independently requires:
 - at most 8 MiB of inspectable HTML/CSS/JS/JSON/SVG/XML;
 - only resolvable public, non-Dia outbound HTTP(S) URLs.
 
-Dia's native Report Kit defines a blank/root `relative_path` as the site's `index.html`; the bridge canonicalizes that value before the path checks. Its exact approved `artifactcdn.diabrowser.engineering` Chart.js reference is never requested: the bridge copies a pinned Chart.js bundle into `.dia-custom-libs/` and rewrites the artifact to that relative file before scanning outbound URLs. All other Dia-owned artifact URLs remain blocked.
+Dia's native Report Kit defines a blank/root `relative_path` as the site's `index.html`; the bridge canonicalizes that value before the path checks. Before ingestion, a Report Kit-marked body fragment is reconstructed as a complete HTML document with Dia's required UTF-8/viewport metadata and `style.css` link. Its exact approved `artifactcdn.diabrowser.engineering` Chart.js reference is never requested: the bridge copies a pinned Chart.js bundle into `.dia-custom-libs/` and rewrites the artifact to that relative file before scanning outbound URLs. All other Dia-owned artifact URLs remain blocked.
 
 The bridge then emits Dia's proprietary `tool_safety_check_result` with the same tool-use ID and approved outbound URL list. Dia's native permission controller is notified, while the patched handler resolves the unavailable proprietary Watchtower decision locally.
 

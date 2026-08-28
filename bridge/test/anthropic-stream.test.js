@@ -53,3 +53,40 @@ test("reasoning deltas preserve token spacing and local tools become server acti
     .map((entry) => entry.data.index);
   assert.deepEqual(indexes, [0, 1, 2, 3, 4, 5]);
 });
+
+test("native Report Write input can stream top-down before the tool block closes", () => {
+  const recorder = responseRecorder();
+  const stream = new AnthropicStreamWriter(recorder.response, {
+    messageID: "message-report",
+    model: "rchat:gemma4:e4b",
+  });
+  stream.startMessage();
+  stream.writeStatus("Generating the Report in Dia...");
+  stream.startNativeToolCall({ id: "write-report", name: "Write" });
+  stream.writeNativeToolInput(
+    "write-report",
+    '{"file_path":"/context/work/artifacts/report/index.html","content":"<!DOCTYPE html>\\n',
+  );
+  stream.writeNativeToolInput(
+    "write-report",
+    '<head><link rel=\\"stylesheet\\" href=\\"style.css\\"></head>',
+  );
+  assert.equal(stream.hasNativeToolStream("write-report"), true);
+  stream.writeNativeToolInput("write-report", '"}');
+  stream.finishNativeToolCall("write-report");
+  stream.finish({ stopReason: "tool_use" });
+
+  const events = recorder.events();
+  const start = events.find((entry) => entry.data?.content_block?.id === "write-report");
+  assert.equal(start.data.content_block.name, "Write");
+  const input = events
+    .filter((entry) => entry.data?.index === start.data.index &&
+      entry.data?.delta?.type === "input_json_delta")
+    .map((entry) => entry.data.delta.partial_json)
+    .join("");
+  assert.deepEqual(JSON.parse(input), {
+    file_path: "/context/work/artifacts/report/index.html",
+    content: '<!DOCTYPE html>\n<head><link rel="stylesheet" href="style.css"></head>',
+  });
+  assert.equal(stream.hasNativeToolStream("write-report"), false);
+});

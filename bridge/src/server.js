@@ -219,6 +219,7 @@ async function streamProviderAsAnthropic(response, payload) {
     connection: "keep-alive",
   });
   const stream = new AnthropicStreamWriter(response, { messageID: messageId, model });
+  const streamedReportWrites = new Set();
   stream.startMessage();
   const initialStatus = Array.isArray(payload.tools) && payload.tools.length > 0
     ? "Reviewing the browser context and available tools..."
@@ -241,6 +242,14 @@ async function streamProviderAsAnthropic(response, payload) {
           for (const { call, result: toolResult } of activity.results) {
             stream.writeLocalToolResult(call, toolResult);
           }
+        }
+      },
+      onReportWriteStream: async (activity) => {
+        if (activity.phase === "start") {
+          streamedReportWrites.add(activity.call.id);
+          stream.startNativeToolCall(activity.call);
+        } else if (activity.phase === "delta") {
+          stream.writeNativeToolInput(activity.call.id, activity.partialJSON);
         }
       },
     }));
@@ -283,7 +292,20 @@ async function streamProviderAsAnthropic(response, payload) {
       writeAnthropicEvent(response, item.event, item.data);
     }
   }
-  if (isToolUse) stream.writeNativeToolCalls(result.toolCalls);
+  if (isToolUse) {
+    const remainingCalls = [];
+    for (const call of result.toolCalls) {
+      if (streamedReportWrites.has(call.id) && stream.hasNativeToolStream(call.id)) {
+        // The provider streamed the encoded content string but deliberately
+        // left the JSON object open until path/tool authorization succeeded.
+        stream.writeNativeToolInput(call.id, '"}');
+        stream.finishNativeToolCall(call.id);
+      } else {
+        remainingCalls.push(call);
+      }
+    }
+    stream.writeNativeToolCalls(remainingCalls);
+  }
   else stream.writeText(result.text);
   stream.finish({
     stopReason: isToolUse ? "tool_use" : "end_turn",

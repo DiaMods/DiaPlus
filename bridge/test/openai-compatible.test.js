@@ -28,6 +28,7 @@ test("OpenAI-compatible chat completions stream reasoning and native tool calls"
   const originalFetch = globalThis.fetch;
   const reasoning = [];
   const startedTools = [];
+  const toolInput = [];
   globalThis.fetch = async (url, options) => {
     assert.equal(String(url), "http://127.0.0.1:11434/v1/chat/completions");
     const body = JSON.parse(options.body);
@@ -48,11 +49,13 @@ test("OpenAI-compatible chat completions stream reasoning and native tool calls"
       model: "qwen3:8b",
       onReasoning: (value) => reasoning.push(value),
       onToolStart: (call) => startedTools.push(call.name),
+      onToolInputDelta: (call) => toolInput.push(call),
     });
     assert.equal(result.kind, "tool_use");
     assert.deepEqual(result.toolCalls[0].input, { urls: ["https://example.com"] });
     assert.match(reasoning.join(""), /browser action/);
     assert.deepEqual(startedTools, ["open_tabs"]);
+    assert.equal(toolInput.at(-1).accumulated, '{"urls":["https://example.com"]}');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -123,6 +126,7 @@ test("OpenAI Responses API stream maps output and reasoning summaries", async ()
 test("OpenAI Responses API stream maps function calls back to Dia tools", async () => {
   const originalFetch = globalThis.fetch;
   const startedTools = [];
+  const toolInput = [];
   globalThis.fetch = async () => sseResponse([
     {
       event: "response.output_item.added",
@@ -130,6 +134,15 @@ test("OpenAI Responses API stream maps function calls back to Dia tools", async 
         type: "response.output_item.added",
         output_index: 0,
         item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "open_tabs", arguments: "" },
+      },
+    },
+    {
+      event: "response.function_call_arguments.delta",
+      data: {
+        type: "response.function_call_arguments.delta",
+        output_index: 0,
+        call_id: "call_1",
+        delta: "{\"urls\":[\"https://example.com\"]}",
       },
     },
     {
@@ -151,11 +164,13 @@ test("OpenAI Responses API stream maps function calls back to Dia tools", async 
       tools,
       model: "gpt-test",
       onToolStart: (call) => startedTools.push(call.name),
+      onToolInputDelta: (call) => toolInput.push(call),
     });
     assert.equal(result.kind, "tool_use");
     assert.equal(result.toolCalls[0].name, "open_tabs");
     assert.deepEqual(result.toolCalls[0].input, { urls: ["https://example.com"] });
     assert.deepEqual(startedTools, ["open_tabs"]);
+    assert.equal(toolInput.at(-1).accumulated, '{"urls":["https://example.com"]}');
   } finally {
     globalThis.fetch = originalFetch;
   }

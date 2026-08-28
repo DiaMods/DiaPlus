@@ -149,6 +149,7 @@ async function runChatCompletions({
   apiKey,
   onReasoning,
   onToolStart,
+  onToolInputDelta,
 }) {
   const body = {
     model,
@@ -196,7 +197,17 @@ async function runChatCompletions({
           if (onToolStart) await onToolStart(existing);
         }
       }
-      if (partial.function?.arguments) existing.arguments += partial.function.arguments;
+      if (partial.function?.arguments) {
+        existing.arguments += partial.function.arguments;
+        if (onToolInputDelta) {
+          await onToolInputDelta({
+            id: existing.id,
+            name: existing.name,
+            delta: partial.function.arguments,
+            accumulated: existing.arguments,
+          });
+        }
+      }
       calls.set(key, existing);
     }
   }
@@ -226,6 +237,7 @@ async function runResponses({
   apiKey,
   onReasoning,
   onToolStart,
+  onToolInputDelta,
 }) {
   const body = {
     model,
@@ -275,6 +287,14 @@ async function runResponses({
       const existing = calls.get(key) ?? { id: item.call_id ?? item.item_id, name: "", arguments: "" };
       existing.arguments += item.delta ?? "";
       calls.set(key, existing);
+      if (item.delta && onToolInputDelta) {
+        await onToolInputDelta({
+          id: existing.id,
+          name: existing.name,
+          delta: item.delta,
+          accumulated: existing.arguments,
+        });
+      }
     }
     if (type === "response.function_call_arguments.done") {
       const key = item.output_index ?? 0;

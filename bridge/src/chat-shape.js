@@ -478,6 +478,7 @@ export function withReportWorkflowPolicy(payload, state, attempt = 0) {
   const directions = state.stage === "create_report"
     ? "Return the next exact tool call now. Research with an available tool if needed; otherwise call Write to create a complete index.html " +
       `${state.reportFilePath ? `with file_path exactly ${JSON.stringify(state.reportFilePath)}` : "under the current context's work/artifacts directory"}. ` +
+      "Write the complete document, not a body fragment: preserve <!DOCTYPE html>, html, head, body, UTF-8 and viewport metadata, and <link rel=\"stylesheet\" href=\"style.css\">. " +
       "Do not call upload_artifact yet: Dia Custom will reject upload until Write succeeds."
     : state.stage === "upload_report"
       ? `Call the available upload_artifact tool now with ${JSON.stringify(state.uploadInput)}.`

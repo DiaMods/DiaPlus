@@ -23,6 +23,65 @@ const localArtifactLibraries = new Map([
     },
   ],
 ]);
+const reportKitMarker = /<!--\s*report-kit\s*-->/i;
+
+function requiredReportHead(head) {
+  const additions = [];
+  if (!/<meta\b[^>]*charset\s*=\s*["']?utf-8/i.test(head)) {
+    additions.push('<meta charset="UTF-8">');
+  }
+  if (!/<meta\b[^>]*name\s*=\s*["']viewport["']/i.test(head)) {
+    additions.push('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
+  }
+  if (!/<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*href\s*=\s*["']style\.css["']/i.test(head) &&
+      !/<link\b[^>]*href\s*=\s*["']style\.css["'][^>]*rel\s*=\s*["']stylesheet["']/i.test(head)) {
+    additions.push('<link rel="stylesheet" href="style.css">');
+  }
+  return additions.length > 0
+    ? `${additions.join("\n")}\n${head.trim()}`
+    : head.trim();
+}
+
+/**
+ * Report Kit's upload post-processor supplies style.css/app.js, but it does
+ * not reconstruct a missing HTML head. Some smaller models revise a Report by
+ * writing only the body fragment. Canonicalize that fragment before upload so
+ * the native design system remains attached without inventing custom styles.
+ */
+export function normalizeReportKitHTML(input) {
+  if (typeof input !== "string" || !reportKitMarker.test(input)) return input;
+  const hasCompleteShell = /<!doctype\s+html\b/i.test(input) &&
+    /<html\b[^>]*>/i.test(input) && /<\/html\s*>/i.test(input) &&
+    /<head\b[^>]*>[\s\S]*<\/head\s*>/i.test(input) &&
+    /<body\b[^>]*>[\s\S]*<\/body\s*>/i.test(input);
+  const headMatch = /<head\b[^>]*>([\s\S]*?)<\/head\s*>/i.exec(input);
+  const normalizedHead = requiredReportHead(headMatch?.[1] ?? "");
+  const headIsComplete = normalizedHead === (headMatch?.[1] ?? "").trim();
+  if (hasCompleteShell && headIsComplete) return input;
+
+  const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body\s*>/i.exec(input);
+  let body = bodyMatch?.[1] ?? input;
+  if (!bodyMatch) {
+    body = body
+      .replace(/<!doctype\s+html\s*>/ig, "")
+      .replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/i, "")
+      .replace(/<\/?html\b[^>]*>/ig, "")
+      .replace(/<\/?body\b[^>]*>/ig, "")
+      .trim();
+  }
+  return [
+    "<!DOCTYPE html>",
+    '<html lang="en">',
+    "<head>",
+    normalizedHead,
+    "</head>",
+    "<body>",
+    body.trim(),
+    "</body>",
+    "</html>",
+    "",
+  ].join("\n");
+}
 
 function isInside(parent, child) {
   const path = relative(parent, child);
@@ -163,6 +222,17 @@ async function localizeKnownArtifactLibraries(root) {
   return copied.size;
 }
 
+async function normalizeReportKitDocument(root) {
+  const indexPath = resolve(root, "index.html");
+  const contents = await readFile(indexPath);
+  if (contents.includes(0)) return false;
+  const text = contents.toString("utf8");
+  const normalized = normalizeReportKitHTML(text);
+  if (normalized === text) return false;
+  await writeFile(indexPath, normalized);
+  return true;
+}
+
 export async function authorizeArtifactUpload(
   toolCall,
   profileDirectory,
@@ -212,6 +282,7 @@ export async function authorizeArtifactUpload(
     if (!isInside(realRoot, realEntry) || !entryStat.isFile() || entryStat.isSymbolicLink()) {
       return { allowed: false, reason: "relative_path must resolve to a regular file inside site_root" };
     }
+    await normalizeReportKitDocument(realRoot);
     await localizeKnownArtifactLibraries(realRoot);
     const tree = await inspectArtifactTree(realRoot);
     const outbound = await inspectArtifactOutboundURLs(realRoot, { lookupImplementation });

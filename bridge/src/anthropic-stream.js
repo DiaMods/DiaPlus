@@ -126,6 +126,7 @@ export class AnthropicStreamWriter {
     this.thinkingHasContent = false;
     this.reasoningNeedsSeparator = false;
     this.localActivities = new Map();
+    this.nativeToolStreams = new Map();
   }
 
   startMessage() {
@@ -268,34 +269,55 @@ export class AnthropicStreamWriter {
     });
   }
 
+  startNativeToolCall(call) {
+    if (!call?.id || this.nativeToolStreams.has(call.id)) return;
+    this.stopThinking();
+    const index = this.nextIndex;
+    this.nextIndex += 1;
+    this.nativeToolStreams.set(call.id, index);
+    writeEvent(this.response, "content_block_start", {
+      type: "content_block_start",
+      index,
+      content_block: {
+        type: "tool_use",
+        id: call.id,
+        name: call.name,
+        input: {},
+      },
+    });
+  }
+
+  writeNativeToolInput(id, partialJSON) {
+    const index = this.nativeToolStreams.get(id);
+    if (index === undefined || typeof partialJSON !== "string" || !partialJSON) return;
+    writeEvent(this.response, "content_block_delta", {
+      type: "content_block_delta",
+      index,
+      delta: { type: "input_json_delta", partial_json: partialJSON },
+    });
+  }
+
+  finishNativeToolCall(id) {
+    const index = this.nativeToolStreams.get(id);
+    if (index === undefined) return;
+    writeEvent(this.response, "content_block_stop", {
+      type: "content_block_stop",
+      index,
+    });
+    this.nativeToolStreams.delete(id);
+  }
+
+  hasNativeToolStream(id) {
+    return this.nativeToolStreams.has(id);
+  }
+
   writeNativeToolCalls(toolCalls) {
     for (const toolCall of toolCalls) this.writeStatus(nativeToolStatus(toolCall));
     this.stopThinking();
     for (const toolCall of toolCalls) {
-      const index = this.nextIndex;
-      this.nextIndex += 1;
-      writeEvent(this.response, "content_block_start", {
-        type: "content_block_start",
-        index,
-        content_block: {
-          type: "tool_use",
-          id: toolCall.id,
-          name: toolCall.name,
-          input: {},
-        },
-      });
-      writeEvent(this.response, "content_block_delta", {
-        type: "content_block_delta",
-        index,
-        delta: {
-          type: "input_json_delta",
-          partial_json: JSON.stringify(toolCall.input ?? {}),
-        },
-      });
-      writeEvent(this.response, "content_block_stop", {
-        type: "content_block_stop",
-        index,
-      });
+      this.startNativeToolCall(toolCall);
+      this.writeNativeToolInput(toolCall.id, JSON.stringify(toolCall.input ?? {}));
+      this.finishNativeToolCall(toolCall.id);
     }
   }
 

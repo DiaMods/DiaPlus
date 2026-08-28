@@ -11,6 +11,7 @@ import {
   inspectArtifactOutboundURLs,
   isTrustedArtifactSiteRoot,
   nativeToolSafetyEvents,
+  normalizeReportKitHTML,
 } from "../src/artifact-safety.js";
 
 const contextID = "E53B9BE3-F23C-4C0E-987B-30921F6BA109";
@@ -84,6 +85,34 @@ test("Report upload treats a blank root path as index.html and localizes Report 
   }, profile, { contextID, requireContext: true, lookupImplementation });
   assert.equal(rootAuthorization.allowed, true);
   assert.equal(rootAuthorization.entryPath, await realpath(resolve(root, "index.html")));
+});
+
+test("Report upload restores Report Kit's native shell after a fragment-only revision", async () => {
+  const { profile, root } = await fixture();
+  await writeFile(resolve(root, "index.html"), `
+    <!-- report-kit -->
+    <div class="report"><div class="report-wrap"><h1>Revised report</h1></div></div>
+  `);
+  const authorization = await authorizeArtifactUpload({
+    name: "mcp__dia-tools__upload_artifact",
+    input: { site_root: root, relative_path: "index.html" },
+  }, profile, {
+    contextID,
+    requireContext: true,
+    lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+  });
+  assert.equal(authorization.allowed, true);
+  const normalized = await readFile(resolve(root, "index.html"), "utf8");
+  assert.match(normalized, /^<!DOCTYPE html>/);
+  assert.match(normalized, /<head>[\s\S]*<meta charset="UTF-8">/);
+  assert.match(normalized, /<meta name="viewport"/);
+  assert.match(normalized, /<link rel="stylesheet" href="style\.css">/);
+  assert.match(normalized, /<body>[\s\S]*<!-- report-kit -->/);
+  assert.match(normalized, /<\/body>\n<\/html>\n$/);
+
+  assert.equal(normalizeReportKitHTML(normalized), normalized);
+  assert.equal(normalizeReportKitHTML("<html>ordinary artifact</html>"),
+    "<html>ordinary artifact</html>");
 });
 
 test("Report upload must match the native request's current agent context", async () => {
