@@ -182,6 +182,136 @@ public func diaCustomSwiftSetNativeMemoryEnabled(
     return _openExistential(currentValue, do: open)
 }
 
+private func newTabPageViewModel(from rootObject: AnyObject) -> AnyObject? {
+    let rootType = String(reflecting: Swift.type(of: rootObject))
+    if rootType == "NewTabPage.NewTabPageViewModel" {
+        return rootObject
+    }
+    guard rootType == "NewTabPage.NewTabPageViewController",
+          let candidate = Mirror(reflecting: rootObject).children
+            .first(where: { $0.label == "viewModel" })?.value else {
+        return nil
+    }
+    let unwrapped = unwrappedOptional(candidate)
+    guard let unwrapped,
+          String(reflecting: Swift.type(of: unwrapped)) ==
+            "NewTabPage.NewTabPageViewModel" else {
+        return nil
+    }
+    return unwrapped as AnyObject
+}
+
+@MainActor
+private func sendAdvancedNewTabStateCopy<T>(
+    _ value: T,
+    subject: AnyObject,
+    implementation: UnsafeRawPointer
+) -> Bool {
+    let fields = Array(Mirror(reflecting: value).children)
+    let expectedLabels = [
+        "windowID",
+        "displayDefaultBrowserUpsell",
+        "displayReleaseNotesPostcard",
+        "displayWelcomePostcardTeaser",
+        "displayTrialGuideStampCard",
+        "displayAppsUpsellBar",
+        "displayNewSingleAppUpsell",
+        "themePalette",
+        "skillOverridePalette",
+        "profileCustomizationPermitted",
+        "displayTryForAWeek",
+        "greeting",
+        "bookmarkBarMode",
+        "konamiCodeOnboardingIntroTriggerEnabled",
+        "diaProBackgroundButtonState",
+        "lightConfiguration",
+        "areAnimationsEnabled",
+        "isPersonalizeButtonEnabled",
+        "showParticlesLogo",
+        "isPresentingCliaOnboardingView",
+    ]
+    guard String(reflecting: T.self) == "NewTabPage.NewTabPageViewModel.State",
+          fields.count == expectedLabels.count,
+          fields.count == recursiveFieldCount(T.self),
+          zip(fields, expectedLabels).allSatisfy({ $0.label == $1 }),
+          fields[17].value is Bool,
+          fields[18].value is Bool,
+          fields[19].value is Bool else {
+        if !didLogUnexpectedAdvancedNewTabState {
+            didLogUnexpectedAdvancedNewTabState = true
+            let fieldLayout = fields.enumerated().map { index, field in
+                "\(index):\(field.label ?? "<unnamed>")=" +
+                    String(reflecting: Swift.type(of: field.value))
+            }.joined(separator: ",")
+            appendActionProbe(
+                "advanced-new-tab-state: refusing native layout " +
+                "type=\(String(reflecting: T.self)) " +
+                "count=\(fields.count)/\(recursiveFieldCount(T.self)) " +
+                "fields=[\(fieldLayout)]")
+        }
+        return false
+    }
+    let personalizeEnabled = fields[17].value as! Bool
+    let particlesVisible = fields[18].value as! Bool
+    if !personalizeEnabled && particlesVisible {
+        return true
+    }
+
+    var copy = value
+    return withUnsafeMutableBytes(of: &copy) { bytes -> Bool in
+        let personalizeOffset = recursiveFieldOffset(T.self, index: 17)
+        let particlesOffset = recursiveFieldOffset(T.self, index: 18)
+        guard let base = bytes.baseAddress,
+              personalizeOffset >= 0,
+              particlesOffset >= 0,
+              personalizeOffset + MemoryLayout<Bool>.size <= bytes.count,
+              particlesOffset + MemoryLayout<Bool>.size <= bytes.count else {
+            return false
+        }
+        base.advanced(by: personalizeOffset).storeBytes(of: false, as: Bool.self)
+        base.advanced(by: particlesOffset).storeBytes(of: true, as: Bool.self)
+        callCurrentValueSubjectSend(
+            implementation,
+            Unmanaged.passUnretained(subject).toOpaque(),
+            UnsafeRawPointer(base))
+        appendActionProbe(
+            "advanced-new-tab-state: enabled particles and disabled legacy personalization")
+        return true
+    }
+}
+
+@MainActor
+private var didLogUnexpectedAdvancedNewTabState = false
+
+@_cdecl("dia_custom_swift_enable_advanced_new_tab_surface")
+@MainActor
+public func diaCustomSwiftEnableAdvancedNewTabSurface(
+    _ rawRootObject: UnsafeRawPointer?
+) -> Bool {
+    guard let rawRootObject else { return false }
+    let rootObject = Unmanaged<AnyObject>
+        .fromOpaque(rawRootObject)
+        .takeUnretainedValue()
+    guard let viewModel = newTabPageViewModel(from: rootObject),
+          let subject = Mirror(reflecting: viewModel).children
+            .first(where: { $0.label == "stateSubject" })?.value as AnyObject?,
+          let currentValue = Mirror(reflecting: subject).children
+            .first(where: { $0.label == "currentValue" })?.value,
+          let symbol = dlsym(
+            UnsafeMutableRawPointer(bitPattern: -2),
+            "$s7Combine19CurrentValueSubjectC4sendyyxF") else {
+        appendActionProbe("advanced-new-tab-state: native view model unavailable")
+        return false
+    }
+    func open<T>(_ value: T) -> Bool {
+        sendAdvancedNewTabStateCopy(
+            value,
+            subject: subject,
+            implementation: UnsafeRawPointer(symbol))
+    }
+    return _openExistential(currentValue, do: open)
+}
+
 private func sendAppsLocalStateCopy<T>(
     _ value: T,
     morningBriefEnabled: Bool,

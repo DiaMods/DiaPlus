@@ -55,6 +55,15 @@ if /usr/bin/grep -q 'Enabling the Morning Brief for %@' \
 fi
 print "ok    Morning Brief switching preserves Dia's native confirmation UI"
 
+if ! /usr/bin/grep -q 'dia_custom_swift_enable_advanced_new_tab_surface' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q 'showParticlesLogo' \
+    "$project_dir/src/bootstrap/offline-bootstrap-introspection.swift"; then
+  print -u2 "native Advanced Chat New Tab state is not wired"
+  exit 1
+fi
+print "ok    Advanced Chat uses Dia's native particle New Tab surface"
+
 if "$script_dir/build-apple-model-helper.sh" >/dev/null; then
   print "ok    Apple Foundation Models helper builds"
 else

@@ -1063,6 +1063,8 @@ static void dia_custom_populate_retention_popup(NSPopUpButton *popup) {
 extern BOOL dia_custom_swift_set_native_memory_enabled(
     const void *viewModel,
     BOOL enabled);
+extern BOOL dia_custom_swift_enable_advanced_new_tab_surface(
+    const void *viewController);
 
 static BOOL dia_custom_is_native_memory_content_view(NSView *view) {
     NSString *className = NSStringFromClass([view class]);
@@ -1116,6 +1118,50 @@ static void dia_custom_configure_native_memory_descendants(
     }
     for (NSView *child in view.subviews) {
         dia_custom_configure_native_memory_descendants(child, target);
+    }
+}
+
+static id dia_custom_new_tab_controller_for_view(NSView *view) {
+    NSResponder *responder = view.nextResponder;
+    NSUInteger remaining = 8;
+    while (responder != nil && remaining-- > 0) {
+        NSString *className = NSStringFromClass([responder class]);
+        if ([className containsString:@"NewTabPageViewController"]) {
+            return responder;
+        }
+        responder = responder.nextResponder;
+    }
+    return nil;
+}
+
+static BOOL dia_custom_apply_advanced_new_tab_surface(NSView *view) {
+    if (view == nil) {
+        return NO;
+    }
+    BOOL found = NO;
+    id controller = dia_custom_new_tab_controller_for_view(view);
+    if (controller != nil &&
+        [controller respondsToSelector:@selector(view)] &&
+        [controller view] == view) {
+        found = YES;
+        BOOL applied = dia_custom_swift_enable_advanced_new_tab_surface(
+            (__bridge const void *)controller);
+        dia_custom_log_status(applied
+            ? @"advanced-new-tab-state-applied"
+            : @"advanced-new-tab-state-rejected");
+    }
+    for (NSView *child in view.subviews) {
+        found = dia_custom_apply_advanced_new_tab_surface(child) || found;
+    }
+    return found;
+}
+
+static void dia_custom_refresh_advanced_new_tab_surface(void) {
+    if (!dia_custom_mod_enabled("native-apps")) {
+        return;
+    }
+    for (NSWindow *window in NSApp.windows) {
+        dia_custom_apply_advanced_new_tab_surface(window.contentView);
     }
 }
 
@@ -2121,6 +2167,9 @@ static void dia_custom_request_interface_refresh(id target,
         if (dia_custom_mod_enabled("native-memory")) {
             dia_custom_install_local_memory_controls(target, memoryAction);
         }
+        if (dia_custom_mod_enabled("native-apps")) {
+            dia_custom_refresh_advanced_new_tab_surface();
+        }
     });
 }
 
@@ -2287,6 +2336,7 @@ static void dia_custom_schedule_model_picker_attempts(id target,
                 @selector(toggleLocalMemory:));
         }
         if (dia_custom_mod_enabled("native-apps")) {
+            dia_custom_refresh_advanced_new_tab_surface();
             dia_custom_fetch_native_apps_state(self, YES);
         }
         if (dia_custom_mod_enabled("morning-brief")) {
@@ -2967,6 +3017,7 @@ static void dia_custom_install_developer_menu(void) {
                 @selector(toggleLocalMemory:));
         }
         if (nativeAppsEnabled) {
+            dia_custom_refresh_advanced_new_tab_surface();
             dia_custom_fetch_native_apps_state(
                 dia_custom_developer_menu_controller, YES);
         }
