@@ -365,6 +365,68 @@ test("pins a Report to a deterministic folder in the current agent context", () 
   assert.equal(reportWorkflowState(payload).stage, "create_report");
 });
 
+test("adopts a model-initiated native Report and recovers its own safe artifact folder", () => {
+  const work = "/tmp/profile/User Data/Default/AgentServer/contexts/E53B9BE3-F23C-4C0E-987B-30921F6BA109/work";
+  const reportPath = `${work}/artifacts/proxmox_ve_overview/index.html`;
+  const payload = {
+    messages: [{
+      role: "user",
+      content: `<agent-context>\n<agent-id>agent-1</agent-id>\n<working-directory>${work}</working-directory>\n</agent-context>\n<user-message>Explain a specific topic of Proxmox</user-message>`,
+    }],
+  };
+  assert.equal(reportWorkflowState(payload).active, false);
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [
+        { type: "tool_use", id: "skill-a", name: "Skill", input: { skill: "artifact-generation" } },
+        { type: "tool_use", id: "skill-r", name: "Skill", input: { skill: "report-kit" } },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        { type: "tool_result", tool_use_id: "skill-a", content: "Launching skill" },
+        { type: "tool_result", tool_use_id: "skill-r", content: "Launching skill" },
+      ],
+    },
+  );
+  assert.equal(reportWorkflowState(payload).modelInitiated, true);
+  assert.equal(reportWorkflowState(payload).stage, "create_report");
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "write",
+        name: "Write",
+        input: { file_path: reportPath },
+      }],
+    },
+    {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        tool_use_id: "write",
+        content: "File created successfully",
+      }],
+    },
+  );
+  assert.equal(reportWorkflowState(payload).stage, "upload_report");
+  assert.deepEqual(reportWorkflowState(payload).uploadInput, {
+    site_root: `${work}/artifacts/proxmox_ve_overview`,
+    relative_path: "index.html",
+  });
+
+  payload.messages.push({
+    role: "user",
+    content: [{ type: "text", text: "<user-message>What time is it?</user-message>" }],
+  });
+  assert.equal(reportWorkflowState(payload).active, false);
+});
+
 test("does not hijack a report question or an unrelated later request", () => {
   assert.equal(reportWorkflowState({
     messages: [{ role: "user", content: "How do I make a report?" }],

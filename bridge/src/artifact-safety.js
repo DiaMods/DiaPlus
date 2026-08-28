@@ -1,5 +1,6 @@
-import { lstat, opendir, readFile, realpath } from "node:fs/promises";
-import { basename, extname, relative, resolve, sep } from "node:path";
+import { copyFile, lstat, mkdir, opendir, readFile, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { contentAsText, systemAsText } from "./chat-shape.js";
 import { assertPublicWebURL } from "./local-tools/web.js";
 
@@ -11,6 +12,16 @@ const maximumSafetyScanBytes = 8 * 1024 * 1024;
 const maximumOutboundURLs = 250;
 const inspectableExtensions = new Set([
   ".css", ".htm", ".html", ".js", ".json", ".mjs", ".svg", ".xml",
+]);
+const bridgeDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const localArtifactLibraries = new Map([
+  [
+    "https://artifactcdn.diabrowser.engineering/ajax/libs/Chart.js/chart.umd.js",
+    {
+      source: resolve(bridgeDirectory, "node_modules/chart.js/dist/chart.umd.js"),
+      destination: ".dia-custom-libs/chart.umd.js",
+    },
+  ],
 ]);
 
 function isInside(parent, child) {
@@ -120,6 +131,38 @@ async function inspectArtifactTree(root, { collectFiles = false } = {}) {
   return { files, bytes, ...(collectFiles ? { filePaths } : {}) };
 }
 
+async function localizeKnownArtifactLibraries(root) {
+  const { filePaths } = await inspectArtifactTree(root, { collectFiles: true });
+  const copied = new Set();
+  for (const path of filePaths) {
+    if (!inspectableExtensions.has(extname(path).toLowerCase())) continue;
+    const contents = await readFile(path);
+    if (contents.includes(0)) continue;
+    let text = contents.toString("utf8");
+    let changed = false;
+    for (const [remoteURL, library] of localArtifactLibraries) {
+      if (!text.includes(remoteURL)) continue;
+      const destination = resolve(root, library.destination);
+      if (!copied.has(destination)) {
+        await mkdir(dirname(destination), { recursive: true });
+        await copyFile(library.source, destination);
+        copied.add(destination);
+      }
+      const localReference = relative(dirname(path), destination)
+        .split(sep).join("/");
+      text = text.replaceAll(
+        remoteURL,
+        localReference.startsWith("../") || localReference.startsWith("./")
+          ? localReference
+          : `./${localReference}`,
+      );
+      changed = true;
+    }
+    if (changed) await writeFile(path, text);
+  }
+  return copied.size;
+}
+
 export async function authorizeArtifactUpload(
   toolCall,
   profileDirectory,
@@ -142,8 +185,22 @@ export async function authorizeArtifactUpload(
     };
   }
 
-  const relativePath = toolCall.input?.relative_path ?? "index.html";
-  if (typeof relativePath !== "string" || !relativePath || relativePath.startsWith(sep)) {
+  const requestedRelativePath = toolCall.input?.relative_path;
+  let relativePath = requestedRelativePath;
+  if (
+    relativePath === undefined ||
+    relativePath === null ||
+    (typeof relativePath === "string" && ["", ".", "./"].includes(relativePath.trim())) ||
+    (typeof relativePath === "string" &&
+      relativePath.startsWith(sep) &&
+      resolve(relativePath) === resolve(siteRoot))
+  ) {
+    // Dia's native upload_artifact contract defines a blank/root path as the
+    // site's index.html. Preserve that contract instead of rejecting a valid
+    // model-generated Report at the final handoff.
+    relativePath = "index.html";
+  }
+  if (typeof relativePath !== "string" || relativePath.startsWith(sep)) {
     return { allowed: false, reason: "relative_path must name a file inside site_root" };
   }
   try {
@@ -155,6 +212,7 @@ export async function authorizeArtifactUpload(
     if (!isInside(realRoot, realEntry) || !entryStat.isFile() || entryStat.isSymbolicLink()) {
       return { allowed: false, reason: "relative_path must resolve to a regular file inside site_root" };
     }
+    await localizeKnownArtifactLibraries(realRoot);
     const tree = await inspectArtifactTree(realRoot);
     const outbound = await inspectArtifactOutboundURLs(realRoot, { lookupImplementation });
     if (outbound.blocked.length > 0) {

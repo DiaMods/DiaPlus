@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -54,6 +54,36 @@ test("Report safety metadata only whitelists a real current-context artifact", a
   }, profile, { contextID, requireContext: true, lookupImplementation });
   assert.equal(authorization.allowed, true);
   assert.equal(authorization.files, 2);
+});
+
+test("Report upload treats a blank root path as index.html and localizes Report Kit Chart.js", async () => {
+  const { profile, root } = await fixture();
+  const reportKitChartURL =
+    "https://artifactcdn.diabrowser.engineering/ajax/libs/Chart.js/chart.umd.js";
+  await writeFile(resolve(root, "index.html"), `
+    <main>Chart report</main>
+    <script src="${reportKitChartURL}"></script>
+  `);
+  const lookupImplementation = async () => [{ address: "93.184.216.34", family: 4 }];
+
+  const authorization = await authorizeArtifactUpload({
+    name: "mcp__dia-tools__upload_artifact",
+    input: { site_root: root, relative_path: "" },
+  }, profile, { contextID, requireContext: true, lookupImplementation });
+
+  assert.equal(authorization.allowed, true);
+  assert.equal(authorization.entryPath, await realpath(resolve(root, "index.html")));
+  const localizedHTML = await readFile(resolve(root, "index.html"), "utf8");
+  assert.doesNotMatch(localizedHTML, /artifactcdn\.diabrowser\.engineering/);
+  assert.match(localizedHTML, /\.\/\.dia-custom-libs\/chart\.umd\.js/);
+  await access(resolve(root, ".dia-custom-libs/chart.umd.js"));
+
+  const rootAuthorization = await authorizeArtifactUpload({
+    name: "mcp__dia-tools__upload_artifact",
+    input: { site_root: root, relative_path: root },
+  }, profile, { contextID, requireContext: true, lookupImplementation });
+  assert.equal(rootAuthorization.allowed, true);
+  assert.equal(rootAuthorization.entryPath, await realpath(resolve(root, "index.html")));
 });
 
 test("Report upload must match the native request's current agent context", async () => {

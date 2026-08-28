@@ -84,7 +84,7 @@ Dia's original request already includes `artifact-generation`, `report-kit`, san
 User Data/Default/AgentServer/contexts/<context UUID>/work/artifacts/<report folder>
 ~~~
 
-and then calls native `upload_artifact`. During the creation stage, the provider does not receive the upload schema. Dia Custom derives a deterministic report folder from the active request, normalizes native `Write` to that exact path, and advances to upload only after the matching tool result succeeds. A provider that answers early or invents an unavailable tool is retried with `Write` as its sole available action.
+and then calls native `upload_artifact`. During the creation stage, the provider does not receive the upload schema. Dia Custom derives a deterministic report folder from an explicit Report request, normalizes native `Write` to that exact path, and advances to upload only after the matching tool result succeeds. When the model itself selects `report-kit` for a broader request, the coordinator adopts that committed native workflow and the successful safe artifact path chosen by Dia's tools. A provider that answers early or invents an unavailable tool is retried with `Write` as its sole available action.
 
 Official Dia normally tears down its Artifacts controller when the profile lacks a server-derived account capability, even though all local persistence dependencies exist. A structural patch selects Dia's original async setup continuation for the anonymous clone.
 
@@ -98,6 +98,8 @@ Before that patched branch is reachable, the bridge independently requires:
 - at most 1,000 files and 50 MiB;
 - at most 8 MiB of inspectable HTML/CSS/JS/JSON/SVG/XML;
 - only resolvable public, non-Dia outbound HTTP(S) URLs.
+
+Dia's native Report Kit defines a blank/root `relative_path` as the site's `index.html`; the bridge canonicalizes that value before the path checks. Its exact approved `artifactcdn.diabrowser.engineering` Chart.js reference is never requested: the bridge copies a pinned Chart.js bundle into `.dia-custom-libs/` and rewrites the artifact to that relative file before scanning outbound URLs. All other Dia-owned artifact URLs remain blocked.
 
 The bridge then emits Dia's proprietary `tool_safety_check_result` with the same tool-use ID and approved outbound URL list. Dia's native permission controller is notified, while the patched handler resolves the unavailable proprietary Watchtower decision locally.
 

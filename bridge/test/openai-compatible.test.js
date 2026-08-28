@@ -27,6 +27,7 @@ function sseResponse(events) {
 test("OpenAI-compatible chat completions stream reasoning and native tool calls", async () => {
   const originalFetch = globalThis.fetch;
   const reasoning = [];
+  const startedTools = [];
   globalThis.fetch = async (url, options) => {
     assert.equal(String(url), "http://127.0.0.1:11434/v1/chat/completions");
     const body = JSON.parse(options.body);
@@ -34,7 +35,8 @@ test("OpenAI-compatible chat completions stream reasoning and native tool calls"
     assert.equal(body.tools[0].function.name, "open_tabs");
     return sseResponse([
       { data: { choices: [{ delta: { reasoning_content: "Choosing a browser action." } }] } },
-      { data: { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "open_tabs", arguments: "{\"urls\":[\"https://example.com\"]}" } }] } }] } },
+      { data: { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "open_", arguments: "" } }] } }] } },
+      { data: { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "tabs", arguments: "{\"urls\":[\"https://example.com\"]}" } }] } }] } },
       { data: { choices: [{ delta: {} }], usage: { prompt_tokens: 10, completion_tokens: 4 } } },
     ]);
   };
@@ -45,10 +47,12 @@ test("OpenAI-compatible chat completions stream reasoning and native tool calls"
       tools,
       model: "qwen3:8b",
       onReasoning: (value) => reasoning.push(value),
+      onToolStart: (call) => startedTools.push(call.name),
     });
     assert.equal(result.kind, "tool_use");
     assert.deepEqual(result.toolCalls[0].input, { urls: ["https://example.com"] });
     assert.match(reasoning.join(""), /browser action/);
+    assert.deepEqual(startedTools, ["open_tabs"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -118,6 +122,7 @@ test("OpenAI Responses API stream maps output and reasoning summaries", async ()
 
 test("OpenAI Responses API stream maps function calls back to Dia tools", async () => {
   const originalFetch = globalThis.fetch;
+  const startedTools = [];
   globalThis.fetch = async () => sseResponse([
     {
       event: "response.output_item.added",
@@ -145,10 +150,12 @@ test("OpenAI Responses API stream maps function calls back to Dia tools", async 
       payload,
       tools,
       model: "gpt-test",
+      onToolStart: (call) => startedTools.push(call.name),
     });
     assert.equal(result.kind, "tool_use");
     assert.equal(result.toolCalls[0].name, "open_tabs");
     assert.deepEqual(result.toolCalls[0].input, { urls: ["https://example.com"] });
+    assert.deepEqual(startedTools, ["open_tabs"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

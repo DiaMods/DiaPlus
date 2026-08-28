@@ -141,7 +141,15 @@ async function checkedFetch(url, options) {
   return response;
 }
 
-async function runChatCompletions({ provider, payload, tools, model, apiKey, onReasoning }) {
+async function runChatCompletions({
+  provider,
+  payload,
+  tools,
+  model,
+  apiKey,
+  onReasoning,
+  onToolStart,
+}) {
   const body = {
     model,
     messages: anthropicMessagesToChat(payload),
@@ -174,9 +182,20 @@ async function runChatCompletions({ provider, payload, tools, model, apiKey, onR
     }
     for (const partial of delta.tool_calls ?? []) {
       const key = partial.index ?? partial.id ?? calls.size;
-      const existing = calls.get(key) ?? { id: partial.id, name: "", arguments: "" };
+      const existing = calls.get(key) ?? {
+        id: partial.id,
+        name: "",
+        arguments: "",
+        startNotified: false,
+      };
       if (partial.id) existing.id = partial.id;
-      if (partial.function?.name) existing.name += partial.function.name;
+      if (partial.function?.name) {
+        existing.name += partial.function.name;
+        if (!existing.startNotified && tools.some((tool) => tool.name === existing.name)) {
+          existing.startNotified = true;
+          if (onToolStart) await onToolStart(existing);
+        }
+      }
       if (partial.function?.arguments) existing.arguments += partial.function.arguments;
       calls.set(key, existing);
     }
@@ -199,7 +218,15 @@ async function runChatCompletions({ provider, payload, tools, model, apiKey, onR
     : { kind: "final", toolCalls: [], text, usage, model };
 }
 
-async function runResponses({ provider, payload, tools, model, apiKey, onReasoning }) {
+async function runResponses({
+  provider,
+  payload,
+  tools,
+  model,
+  apiKey,
+  onReasoning,
+  onToolStart,
+}) {
   const body = {
     model,
     instructions: systemAsText(payload?.system) || undefined,
@@ -235,11 +262,13 @@ async function runResponses({ provider, payload, tools, model, apiKey, onReasoni
       await onReasoning(item.delta);
     }
     if (type === "response.output_item.added" && item.item?.type === "function_call") {
-      calls.set(item.output_index ?? calls.size, {
+      const call = {
         id: item.item.call_id ?? item.item.id,
         name: item.item.name ?? "",
         arguments: item.item.arguments ?? "",
-      });
+      };
+      calls.set(item.output_index ?? calls.size, call);
+      if (onToolStart) await onToolStart(call);
     }
     if (type === "response.function_call_arguments.delta") {
       const key = item.output_index ?? 0;

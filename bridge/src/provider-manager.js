@@ -703,6 +703,11 @@ export class ProviderManager {
         model,
         apiKey,
         onReasoning,
+        onToolStart: async (call) => {
+          if (emitStatus && call?.name === "Write" && reportState.active) {
+            await emitStatus("Generating the Report in Dia...");
+          }
+        },
       });
       result.model = key;
       result = normalizeReportWriteCalls(reportState, result);

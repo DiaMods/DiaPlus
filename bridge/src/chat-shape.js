@@ -145,8 +145,9 @@ export function buildExactToolGuide(tools) {
       "native agent context; never reuse an artifact path from an earlier conversation. A Report is not " +
       "complete until the upload tool returns a successful result. If the upload returns an error, stop and " +
       "report that exact error. Never retry a failed upload during the same user request; a retry requires a " +
-      "new user message. Do not embed artifactcdn.diabrowser.engineering or any other Dia-owned URL; use " +
-      "relative files or a public non-Dia CDN instead.",
+      "new user message. For Report charts, use Report Kit's exact approved Chart.js URL; Dia Custom " +
+      "replaces that dependency with a local copy before opening the Report. Do not embed any other " +
+      "Dia-owned URL; use relative files instead.",
     );
   }
   if (connectorSearch) {
@@ -297,20 +298,10 @@ export function reportWorkflowState(payload) {
     const text = humanMessageText(message);
     return text ? [{ index, text }] : [];
   });
-  let reportRequest = null;
-  for (const request of humanRequests) {
-    if (requestsReport(request.text)) reportRequest = request;
-  }
-  if (!reportRequest) return { active: false, stage: "inactive" };
-
-  const laterRequests = humanRequests.filter(({ index }) => index > reportRequest.index);
-  if (laterRequests.some(({ text }) => !continuesReportRequest(text))) {
-    return { active: false, stage: "inactive" };
-  }
 
   const callsByID = new Map();
   const resultsByID = new Map();
-  for (let index = reportRequest.index + 1; index < messages.length; index += 1) {
+  for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
     for (const block of Array.isArray(message?.content) ? message.content : []) {
       if (message.role === "assistant" && block?.type === "tool_use" && block.id) {
@@ -325,10 +316,35 @@ export function reportWorkflowState(payload) {
     }
   }
 
+  let reportRequest = null;
+  for (const request of humanRequests) {
+    if (requestsReport(request.text)) reportRequest = request;
+  }
+  let modelInitiated = false;
+  if (!reportRequest) {
+    const committedReportCall = [...callsByID.values()].findLast((call) => {
+      const result = resultsByID.get(call.id);
+      return call.name === "Skill" && call.input?.skill === "report-kit" &&
+        result && !result.failed;
+    });
+    if (committedReportCall) {
+      reportRequest = humanRequests.findLast(({ index }) =>
+        index < committedReportCall.messageIndex) ?? null;
+      modelInitiated = reportRequest !== null;
+    }
+  }
+  if (!reportRequest) return { active: false, stage: "inactive" };
+
+  const laterRequests = humanRequests.filter(({ index }) => index > reportRequest.index);
+  if (laterRequests.some(({ text }) => !continuesReportRequest(text))) {
+    return { active: false, stage: "inactive" };
+  }
+
   const skills = new Set();
   const successfulWrites = [];
   const uploads = [];
   for (const call of callsByID.values()) {
+    if (call.messageIndex <= reportRequest.index) continue;
     const result = resultsByID.get(call.id);
     if (call.name === "Skill" && typeof call.input?.skill === "string" && result && !result.failed) {
       skills.add(call.input.skill);
@@ -356,6 +372,7 @@ export function reportWorkflowState(payload) {
     : null;
   const base = {
     active: true,
+    modelInitiated,
     requestIndex: reportRequest.index,
     requestText: reportRequest.text,
     workingDirectory,
@@ -385,7 +402,8 @@ export function reportWorkflowState(payload) {
   }
 
   const reportFile = base.reportFilePath
-    ? successfulWrites.findLast(({ filePath }) => resolve(filePath) === base.reportFilePath)
+    ? successfulWrites.findLast(({ filePath }) => resolve(filePath) === base.reportFilePath) ??
+      (modelInitiated ? successfulWrites.at(-1) : undefined)
     : successfulWrites.at(-1);
   if (!reportFile) return { ...base, stage: "create_report" };
   return {
