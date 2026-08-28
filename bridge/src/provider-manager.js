@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import {
   normalizeAnthropicTools,
   appendToolResults,
+  currentPageAttachmentState,
   deferredAnthropicTools,
   isDiaOwnedProductKnowledgeTool,
   isToolContinuation,
@@ -309,6 +310,22 @@ function nativeLatexFormattingDecision(state, tools, model) {
       name: skillTool.name,
       input: { skill: state.skill },
     }],
+    model,
+  };
+}
+
+function nativeCurrentPageDecision(state, tools, model) {
+  if (!state?.active || state.stage !== "read_page") return null;
+  const readTool = tools.find((tool) => tool.name === "Read" && tool.source === "native");
+  if (!readTool) return null;
+  return {
+    kind: "tool_use",
+    text: "",
+    toolCalls: state.pendingPaths.map((filePath) => ({
+      id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+      name: readTool.name,
+      input: { file_path: filePath },
+    })),
     model,
   };
 }
@@ -714,10 +731,12 @@ export class ProviderManager {
       ? await this.credentialStore.get(provider)
       : null;
     let currentPayload = payload;
+    const initialPageAttachmentState = currentPageAttachmentState(payload);
     if (
       modEnabled("native-memory") &&
       config.localMemory.enabled &&
       config.localMemory.automaticRecall &&
+      !initialPageAttachmentState.active &&
       !isToolContinuation(payload) &&
       !isPrivateMemoryPayload(payload)
     ) {
@@ -757,6 +776,13 @@ export class ProviderManager {
               ? "Reading the existing Report before updating it..."
               : "Adding the finished report to Dia's Reports library...");
         }
+        break;
+      }
+      const pageAttachmentState = currentPageAttachmentState(currentPayload);
+      const nativePageResult = nativeCurrentPageDecision(pageAttachmentState, tools, key);
+      if (nativePageResult) {
+        result = nativePageResult;
+        if (emitStatus) await emitStatus("Reading the current page...");
         break;
       }
       const latexState = reportState.active

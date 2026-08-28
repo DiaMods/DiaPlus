@@ -281,6 +281,147 @@ function reportWorkingDirectory(payload) {
     : null;
 }
 
+function decodeXMLAttribute(value) {
+  return value
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+}
+
+function attachmentAttribute(attributes, name) {
+  const match = new RegExp(`\\b${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i")
+    .exec(attributes);
+  return match ? decodeXMLAttribute(match[2]) : null;
+}
+
+function resolvedNativeReadPath(value, workingDirectory) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const input = value.trim();
+  if (input.startsWith("/")) return resolve(input);
+  if (input === "attachments" || input.startsWith("attachments/")) {
+    return resolve(workingDirectory, "..", input);
+  }
+  return resolve(workingDirectory, input);
+}
+
+function nativeReadResultFailed(block) {
+  if (block?.is_error === true) return true;
+  const text = contentAsText(block?.content).trim();
+  if (!text) return false;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.is_error === true || parsed?.success === false) return true;
+    if (typeof parsed?.error === "string" && parsed.error.trim()) return true;
+  } catch {
+    // A successful Read result is normally the page's unstructured text.
+  }
+  return /^(?:error|failed to read|unable to read|permission denied|file not found|enoent)\b/i
+    .test(text);
+}
+
+/**
+ * Dia's Ask-on-Page prompt provides page text as a context-local attachment.
+ * We intentionally leave the bytes in Dia's agent sandbox and require its
+ * native Read tool to fetch them. Small local models sometimes describe that
+ * required action and end the turn; this state lets the bridge make the native
+ * step deterministic without reading or copying the page itself.
+ */
+export function currentPageAttachmentState(payload) {
+  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+  const request = messages
+    .map((message, index) => ({
+      index,
+      text: humanMessageText(message),
+      rawText: contentAsText(message?.content),
+    }))
+    .filter(({ text }) => text)
+    .at(-1);
+  if (!request) return { active: false, loaded: false, stage: "inactive" };
+
+  const tag = [...request.rawText.matchAll(/<attachment\b([\s\S]*?)\/?\s*>/gi)]
+    .map((match) => match[1])
+    .find((attributes) =>
+      attachmentAttribute(attributes, "type")?.toLowerCase() === "current-webpage");
+  if (!tag) return { active: false, loaded: false, stage: "inactive" };
+
+  const workingDirectory = reportWorkingDirectory(payload);
+  const manifestPath = attachmentAttribute(tag, "path");
+  if (!workingDirectory || !manifestPath || manifestPath.length > 500 ||
+      manifestPath.startsWith("/") || manifestPath.includes("\\") ||
+      manifestPath.split("/").some((part) => !part || part === "." || part === "..")) {
+    return { active: false, loaded: false, stage: "invalid" };
+  }
+  const attachmentDirectory = resolve(workingDirectory, "..", "attachments");
+  const attachmentPath = resolve(attachmentDirectory, manifestPath);
+  if (!attachmentPath.startsWith(`${attachmentDirectory}/`)) {
+    return { active: false, loaded: false, stage: "invalid" };
+  }
+  const rawParts = attachmentAttribute(tag, "parts");
+  const partCount = rawParts == null ? 0 : Number.parseInt(rawParts, 10);
+  if (rawParts != null && (!/^\d+$/.test(rawParts) || partCount < 1 || partCount > 100)) {
+    return { active: false, loaded: false, stage: "invalid" };
+  }
+  const filePaths = partCount > 0
+    ? Array.from({ length: partCount }, (_value, index) =>
+      resolve(attachmentPath, String(index + 1)))
+    : [attachmentPath];
+
+  const resultsByID = new Map();
+  for (const message of messages.slice(request.index + 1)) {
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (message.role === "user" && block?.type === "tool_result") {
+        resultsByID.set(block.tool_use_id, block);
+      }
+    }
+  }
+  const readsByPath = new Map();
+  for (const message of messages.slice(request.index + 1)) {
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (message.role !== "assistant" || block?.type !== "tool_use" ||
+          block.name !== "Read" || !block.id) continue;
+      const filePath = resolvedNativeReadPath(block.input?.file_path, workingDirectory);
+      if (filePath && filePaths.includes(filePath)) {
+        readsByPath.set(filePath, {
+          id: block.id,
+          result: resultsByID.get(block.id),
+        });
+      }
+    }
+  }
+  const failedPaths = filePaths.filter((filePath) => {
+    const read = readsByPath.get(filePath);
+    return read?.result !== undefined && nativeReadResultFailed(read.result);
+  });
+  const inFlightPaths = filePaths.filter((filePath) => {
+    const read = readsByPath.get(filePath);
+    return read && read.result === undefined;
+  });
+  const pendingPaths = filePaths.filter((filePath) => !readsByPath.has(filePath));
+  const loadedPaths = filePaths.filter((filePath) => {
+    const read = readsByPath.get(filePath);
+    return read?.result !== undefined && !nativeReadResultFailed(read.result);
+  });
+  const loaded = loadedPaths.length === filePaths.length;
+  return {
+    active: !loaded && failedPaths.length === 0 && inFlightPaths.length === 0 &&
+      pendingPaths.length > 0,
+    loaded,
+    stage: loaded ? "loaded"
+      : failedPaths.length > 0 ? "failed"
+      : inFlightPaths.length > 0 ? "reading"
+      : "read_page",
+    requestIndex: request.index,
+    workingDirectory,
+    attachmentDirectory,
+    filePaths,
+    pendingPaths,
+    failedPaths,
+    inFlightPaths,
+  };
+}
+
 function reportArtifactFolder(request) {
   const slug = request.text.normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")

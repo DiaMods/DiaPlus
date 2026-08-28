@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   buildDecisionPrompt,
   buildExactToolGuide,
+  currentPageAttachmentState,
   deferredAnthropicTools,
   normalizeAnthropicTools,
   reportWorkflowRequiresTool,
@@ -78,6 +80,51 @@ test("recognizes only an active native tool continuation", () => {
       { role: "user", content: "A new request" },
     ],
   }), false);
+});
+
+test("requires Dia's native Read before answering from current-page context", () => {
+  const contextWork = "/tmp/User Data/Default/AgentServer/contexts/ACD6942A-79FF-4577-8ED7-D5101C9EC7FC/work";
+  const payload = {
+    messages: [{
+      role: "user",
+      content: [{
+        type: "text",
+        text: `/ask-on-page\n<agent-context><working-directory>${contextWork}</working-directory></agent-context>\n<attachments><attachment type="current-webpage" src="https://example.com" path="d37ec64d.txt" /></attachments>\n<user-message>Is everything looking good?</user-message>`,
+      }],
+    }],
+  };
+  const expectedPath = "/tmp/User Data/Default/AgentServer/contexts/ACD6942A-79FF-4577-8ED7-D5101C9EC7FC/attachments/d37ec64d.txt";
+  assert.deepEqual(currentPageAttachmentState(payload), {
+    active: true,
+    loaded: false,
+    stage: "read_page",
+    requestIndex: 0,
+    workingDirectory: contextWork,
+    attachmentDirectory: resolve(contextWork, "..", "attachments"),
+    filePaths: [expectedPath],
+    pendingPaths: [expectedPath],
+    failedPaths: [],
+    inFlightPaths: [],
+  });
+
+  payload.messages.push(
+    { role: "assistant", content: [{
+      type: "tool_use",
+      id: "read-page",
+      name: "Read",
+      input: { file_path: expectedPath },
+    }] },
+    { role: "user", content: [{
+      type: "tool_result",
+      tool_use_id: "read-page",
+      content: "Proxmox node status: healthy; task errors: 0",
+    }] },
+  );
+  const loaded = currentPageAttachmentState(payload);
+  assert.equal(loaded.active, false);
+  assert.equal(loaded.loaded, true);
+  assert.equal(loaded.stage, "loaded");
+  assert.deepEqual(loaded.pendingPaths, []);
 });
 
 test("filters Dia-owned knowledge tools while retaining browser tools", () => {

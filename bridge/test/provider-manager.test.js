@@ -138,6 +138,89 @@ test("native web tools return to Dia while bridge-only local tools execute inter
   memory.database.close();
 });
 
+test("current-page attachments are read natively before a model may answer", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-current-page-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const current = await config.load();
+  await config.update({
+    ...current,
+    localMemory: { ...current.localMemory, enabled: false },
+  });
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => ({
+      onDevice: { available: false, reason: "test" },
+      privateCloud: { available: false, reason: "test" },
+    }),
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  await manager.initialize();
+  let providerCalls = 0;
+  manager.runProvider = async (_provider, { payload }) => {
+    providerCalls += 1;
+    assert.match(JSON.stringify(payload), /Proxmox node status: healthy/);
+    return {
+      kind: "final",
+      text: "The node looks healthy based on the current page.",
+      toolCalls: [],
+      model: "gpt-5.6-luna",
+    };
+  };
+  const contextWork = resolve(
+    directory,
+    "User Data/Default/AgentServer/contexts/ACD6942A-79FF-4577-8ED7-D5101C9EC7FC/work",
+  );
+  const payload = {
+    messages: [{
+      role: "user",
+      content: [{
+        type: "text",
+        text: `/ask-on-page\n<agent-context><working-directory>${contextWork}</working-directory></agent-context>\n<attachments><attachment type="current-webpage" path="d37ec64d.txt" /></attachments>\n<user-message>Is everything looking good?</user-message>`,
+      }],
+    }],
+    tools: [{
+      name: "Read",
+      description: "Read a file inside the current Dia agent context",
+      input_schema: {
+        type: "object",
+        properties: { file_path: { type: "string" } },
+        required: ["file_path"],
+      },
+    }],
+  };
+
+  const readTurn = await manager.run(payload);
+  assert.equal(providerCalls, 0);
+  assert.equal(readTurn.result.kind, "tool_use");
+  assert.equal(readTurn.result.toolCalls[0].name, "Read");
+  assert.equal(
+    readTurn.result.toolCalls[0].input.file_path,
+    resolve(contextWork, "..", "attachments/d37ec64d.txt"),
+  );
+  payload.messages.push(
+    { role: "assistant", content: [{
+      type: "tool_use",
+      id: readTurn.result.toolCalls[0].id,
+      name: "Read",
+      input: readTurn.result.toolCalls[0].input,
+    }] },
+    { role: "user", content: [{
+      type: "tool_result",
+      tool_use_id: readTurn.result.toolCalls[0].id,
+      content: "Proxmox node status: healthy",
+    }] },
+  );
+  const answerTurn = await manager.run(payload);
+  assert.equal(providerCalls, 1);
+  assert.equal(answerTurn.result.text, "The node looks healthy based on the current page.");
+  memory.database.close();
+});
+
 test("ToolSearch is returned to Dia so its deferred native tools can be loaded", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-tool-search-"));
   const config = new ConfigStore(resolve(directory, "config.json"));
