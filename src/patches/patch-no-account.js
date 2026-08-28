@@ -77,6 +77,26 @@ const layouts = {
     cliaExpected: "2884fff008112991",
     cliaReplacement: "0884ffd008311291",
   },
+  "86064": {
+    accountStateGuard: 0x0758b14,
+    capabilityGateOne: 0x07d1968,
+    capabilityGateTwo: 0x07e3554,
+    accountState: 0x2d3c390,
+    authenticationMethod: 0x0759b90,
+    modelTokenFailure: {
+      offset: 0x41343d4,
+      expected: "e05240f96d7756940000009000c0169104000014",
+      replacement: "e00314aacd775694ff5a00f9150080d21300fcd2",
+    },
+    authClientConstructor: {
+      offset: 0x2d23244,
+      replacement: "a00d8a97",
+    },
+    keyVerification: 0x2ad9a9c,
+    cliaClosures: [0x0fa6958, 0x0fa6970, 0x0fa6994],
+    cliaExpected: "2884ffb008112991",
+    cliaReplacement: "0884ff9008311291",
+  },
 };
 
 const layout = layouts[build];

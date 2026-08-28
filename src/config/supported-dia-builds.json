@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-24",
+  "updatedAt": "2026-08-27",
   "builds": {
     "85660": {
       "status": "audited",
@@ -21,6 +21,25 @@
       ]
     },
     "85823": {
+      "status": "audited",
+      "version": "1.46.0",
+      "notes": "Current live-tested Dia Custom compatibility baseline.",
+      "modules": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "local-ai-routing",
+        "account-bypass",
+        "model-picker",
+        "developer-tools",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "apple-models"
+      ]
+    },
+    "86064": {
       "status": "audited",
       "version": "1.46.0",
       "notes": "Current live-tested Dia Custom compatibility baseline.",

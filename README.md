@@ -78,7 +78,7 @@ The bridge treats Report creation as a staged native workflow: it loads the two 
 
 Anonymous Dia profiles normally skip construction of the native Artifacts controller, and the uploader also performs a duplicate official-profile registry check that cannot recognize a separately bundled profile. The clone structurally selects Dia's own controller-setup continuation and bypasses only that duplicate registry rejection. Before allowing an upload, the bridge still requires the exact active context's `work/artifacts/<folder>` shape, a regular `index.html`, no symlinks, bounded files and bytes, and safe public outbound URLs. It then emits Dia's expected tool-safety event and hands the same call to the native Reports-library path.
 
-The binary layouts, live Artifacts controller, context safety gate, complete stream handoff, and visible native Report presentation are tested on build 85823. A generated Report is registered through Dia's artifact database and opens at Dia's sandboxed `chrome-untrusted://…dia-artifacts/` URL; it is not represented as a separate local-file export.
+The binary layouts, live Artifacts controller, context safety gate, complete stream handoff, and visible native Report presentation are tested on build 86064. A generated Report is registered through Dia's artifact database and opens at Dia's sandboxed `chrome-untrusted://…dia-artifacts/` URL; it is not represented as a separate local-file export.
 
 ## Network and sandbox boundary
 
@@ -92,7 +92,7 @@ Three distinct sandboxes remain enabled:
 
 Browser internet access happens through native/local browser tools. Report files are written through Dia's sandboxed native tools. Disabling these sandboxes is neither required nor the Report fix.
 
-The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. That command checks **src/config/supported-dia-builds.json before copying or replacing anything**; an unknown build leaves the working clone untouched. Rebuilds preserve provider state and also fail closed if a private integration point changes shape. Builds 85660 and 85823 are currently audited on Apple silicon.
+The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. That command checks **src/config/supported-dia-builds.json before copying or replacing anything**; an unknown build leaves the working clone untouched. Rebuilds preserve provider state and also fail closed if a private integration point changes shape. Builds 85660, 85823, and 86064 are currently audited on Apple silicon. A newly released upstream build needs one compatibility audit in this project; once listed, the update itself remains a single command.
 
 ## Compatibility modules
 

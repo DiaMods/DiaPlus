@@ -1,6 +1,6 @@
 # Status
 
-Last audited against Dia 1.46.0, build 85823, on 2026-08-24. Build 85660 remains in the guarded patch table.
+Last audited against Dia 1.46.0, build 86064, on 2026-08-27. Builds 85660 and 85823 remain in the guarded patch table.
 
 ## Verified on this Mac
 
@@ -39,7 +39,7 @@ Run **./dia-custom test** for the full suite and **./dia-custom doctor** for the
 
 - **Live account connectors:** implement explicit user-authorized OAuth adapters and incremental sync for Gmail, Calendar, Slack, Notion, Drive, and similar services. Today's connector layer indexes exports only; it does not reuse the real Dia app's account or credentials.
 - **Authenticated browser fetch:** the public fetch override has no access to Chromium cookies. Signed-in page content should continue through native tab-reading context until a cookie-safe local browser-session adapter exists.
-- **Future Dia builds:** endpoint, handler, Report, Prompt Tools, and UI integration points are signature/runtime discovered. The anonymous account gate still contains a small build-specific ARM64 table, so unknown builds intentionally fail closed pending audit.
+- **Future Dia builds:** endpoint, handler, Report, Prompt Tools, and UI integration points are signature/runtime discovered. The anonymous account gate still contains a small build-specific ARM64 table, so `./dia-custom update` intentionally leaves the installed clone untouched until a newly released build receives its one-time compatibility audit.
 - **Incremental final-text streaming:** reasoning is displayed while providers run, but the bridge buffers a provider's final decision before emitting the final Dia text/tool block. This is required for Codex/Apple structured decisions today and can be optimized independently for OpenAI-compatible streams.
 
 ## Account boundary
