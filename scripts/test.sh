@@ -60,6 +60,8 @@ if /usr/bin/grep -q 'official-dia-sync' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
    ! /usr/bin/grep -q 'return @"Import from Dia"' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q 'return @"Importing from Dia"' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
    ! /usr/bin/grep -q 'dia_custom_arc_import_original_name(object, selector)' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
    ! /usr/bin/grep -q 'patch-dia-import.js' \

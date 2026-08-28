@@ -351,6 +351,14 @@ static NSString *dia_custom_localized_string(id bundle, SEL selector,
             @"onboarding import profiles view title format"]) {
         return @"Import from Dia";
     }
+    if ([result isEqualToString:@"Importing from Arc"] ||
+        [lowerKey isEqualToString:@"importing from arc"] ||
+        [lowerKey hasPrefix:@"importing from %"] ||
+        [lowerResult hasPrefix:@"importing from %"] ||
+        [lowerKey containsString:
+            @"import progress view importing from browser title format"]) {
+        return @"Importing from Dia";
+    }
     if ([result isEqualToString:
             @"We'll import your Arc spaces, tabs, and folders to Dia."]) {
         return @"We'll import your Dia profiles, bookmarks, history, and extensions.";
