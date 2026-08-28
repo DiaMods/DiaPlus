@@ -290,6 +290,55 @@ private func reflectedString(_ value: Any, named name: String) -> String? {
     return unwrapped as? String
 }
 
+private func stableProfileIdentifier(_ value: Any, depth: Int = 0) -> String? {
+    guard depth <= 5, let candidate = unwrappedOptional(value) else { return nil }
+    let raw: String?
+    if let string = candidate as? String {
+        raw = string
+    } else if let uuid = candidate as? UUID {
+        raw = uuid.uuidString
+    } else if String(reflecting: Swift.type(of: candidate)).hasSuffix(".ProfileID") {
+        raw = String(describing: candidate)
+    } else {
+        raw = ["rawValue", "profileID", "id", "identifier", "value"]
+            .compactMap { label in
+                reflectedValue(candidate, named: label)
+                    .flatMap { stableProfileIdentifier($0, depth: depth + 1) }
+            }
+            .first
+    }
+    guard let identifier = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !identifier.isEmpty,
+          identifier.count <= 120,
+          !identifier.contains("/"),
+          !identifier.contains("\\"),
+          !identifier.contains("\0") else { return nil }
+    return identifier
+}
+
+private func nativeAppsSelectedProfileID<T>(_ value: T) -> String? {
+    guard let selected = reflectedValue(value, named: "selectedProfileID") else {
+        return nil
+    }
+    return stableProfileIdentifier(selected)
+}
+
+@_cdecl("dia_custom_swift_native_apps_selected_profile_id")
+@MainActor
+public func diaCustomSwiftNativeAppsSelectedProfileID(
+    _ rawViewModel: UnsafeRawPointer?
+) -> UnsafeMutablePointer<CChar>? {
+    guard let rawViewModel else { return nil }
+    let viewModel = Unmanaged<AnyObject>.fromOpaque(rawViewModel).takeUnretainedValue()
+    guard let subject = Mirror(reflecting: viewModel).children
+        .first(where: { $0.label == "stateSubject" })?.value as AnyObject?,
+          let currentValue = Mirror(reflecting: subject).children
+        .first(where: { $0.label == "currentValue" })?.value else { return nil }
+    func open<T>(_ value: T) -> String? { nativeAppsSelectedProfileID(value) }
+    guard let profileID = _openExistential(currentValue, do: open) else { return nil }
+    return strdup(profileID)
+}
+
 private func nativeConnectorID(displayName: String, fallback: String? = nil) -> String {
     let known: [String: String] = [
         "google calendar": "google-calendar",

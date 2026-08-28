@@ -17,12 +17,29 @@ test("Morning Brief is locally entitled, profile-exclusive, and once daily", asy
   assert.equal((await store.publicState("Default")).morningBrief.due, true);
   assert.equal((await store.publicState("Work")).morningBrief.enabled, false);
 
+  await store.setMorningBrief({ enabled: false, profileID: "Work" });
+  assert.equal(
+    (await store.publicState("Default")).morningBrief.enabled,
+    true,
+    "disabling another profile must not disable the active profile",
+  );
+
   await store.recordMorningBrief({ profileID: "Default", status: "running" });
   assert.equal((await store.publicState("Default")).morningBrief.due, false);
   await store.recordMorningBrief({ profileID: "Default", status: "failed", diagnostics: ["Gmail unavailable"] });
   assert.equal((await store.publicState("Default")).morningBrief.due, true);
   await store.recordMorningBrief({ profileID: "Default", status: "succeeded" });
   assert.equal((await store.publicState("Default")).morningBrief.due, false);
+
+  await store.setMorningBrief({ enabled: true, profileID: "Work" });
+  assert.equal((await store.publicState("Default")).morningBrief.enabled, false);
+  assert.equal((await store.publicState("Work")).morningBrief.enabled, true);
+  assert.equal(
+    (await store.publicState("Work")).morningBrief.due,
+    true,
+    "a successful run from another profile must not suppress this profile",
+  );
+  await store.setMorningBrief({ enabled: true, profileID: "Default" });
 
   now = new Date(2026, 7, 28, 12, 0);
   assert.equal((await store.publicState("Default")).morningBrief.due, true, "launch catch-up remains due after 11 AM");

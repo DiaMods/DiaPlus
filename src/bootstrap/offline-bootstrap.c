@@ -17,6 +17,8 @@ extern BOOL dia_custom_swift_set_native_apps_enabled(
     BOOL morningBriefEnabled);
 extern char *dia_custom_swift_native_apps_connections_json(
     const void *viewModel);
+extern char *dia_custom_swift_native_apps_selected_profile_id(
+    const void *viewModel);
 extern BOOL dia_custom_swift_invoke_native_apps_enable(const void *view);
 extern void *dia_custom_call_prompt_tools_allocating_init(
     const void *initializer,
@@ -1194,9 +1196,13 @@ static void dia_custom_install_local_memory_controls(id target, SEL action) {
 // and retargets only its existing Advanced Chat and Morning Brief buttons.
 // Connector rows and callbacks remain owned by Dia's browser-local clients.
 static NSDictionary *dia_custom_local_apps_state;
+static NSMutableDictionary *dia_custom_local_apps_states_by_profile;
 static NSDate *dia_custom_local_apps_last_refresh;
 static BOOL dia_custom_local_apps_request_in_flight = NO;
+static BOOL dia_custom_local_apps_refresh_pending = NO;
+static NSString *dia_custom_local_apps_request_profile_id;
 static BOOL dia_custom_local_apps_compatible = YES;
+static NSString *dia_custom_native_apps_selected_profile_id;
 static NSString *dia_custom_native_apps_connections_snapshot;
 static BOOL dia_custom_native_apps_connections_request_in_flight = NO;
 
@@ -1212,6 +1218,129 @@ static NSString *dia_custom_current_profile_id(void) {
     NSString *lastUsed = [root[@"profile"][@"last_used"]
         isKindOfClass:[NSString class]] ? root[@"profile"][@"last_used"] : nil;
     return lastUsed.length > 0 ? lastUsed : @"Default";
+}
+
+static NSString *dia_custom_native_apps_profile_id(id viewModel) {
+    if (viewModel == nil) return nil;
+    char *raw = dia_custom_swift_native_apps_selected_profile_id(
+        (__bridge const void *)viewModel);
+    if (raw == NULL) return nil;
+    NSString *profileID = [NSString stringWithUTF8String:raw];
+    free(raw);
+    return profileID.length > 0 ? profileID : nil;
+}
+
+static NSString *dia_custom_apps_profile_id_in_view(NSView *view) {
+    if ([NSStringFromClass(view.class) containsString:@"AppsPreferencePaneView"]) {
+        NSString *profileID = dia_custom_native_apps_profile_id(
+            dia_custom_object_ivar(view, "viewModel"));
+        if (profileID.length > 0) return profileID;
+    }
+    for (NSView *child in view.subviews) {
+        NSString *profileID = dia_custom_apps_profile_id_in_view(child);
+        if (profileID.length > 0) return profileID;
+    }
+    return nil;
+}
+
+static BOOL dia_custom_set_native_apps_selected_profile(NSString *profileID) {
+    if (profileID.length == 0 ||
+        [dia_custom_native_apps_selected_profile_id isEqualToString:profileID]) {
+        return NO;
+    }
+    [dia_custom_native_apps_selected_profile_id release];
+    dia_custom_native_apps_selected_profile_id = [profileID copy];
+    [dia_custom_local_apps_last_refresh release];
+    dia_custom_local_apps_last_refresh = nil;
+    [dia_custom_native_apps_connections_snapshot release];
+    dia_custom_native_apps_connections_snapshot = nil;
+    dia_custom_log_status([NSString stringWithFormat:
+        @"native-apps-selected-profile-%@", profileID]);
+    return YES;
+}
+
+static NSString *dia_custom_selected_apps_profile_id(void) {
+    for (NSWindow *window in NSApp.windows) {
+        NSString *profileID = dia_custom_apps_profile_id_in_view(window.contentView);
+        if (profileID.length > 0) {
+            dia_custom_set_native_apps_selected_profile(profileID);
+            return dia_custom_native_apps_selected_profile_id;
+        }
+    }
+    return dia_custom_native_apps_selected_profile_id ?:
+        dia_custom_current_profile_id();
+}
+
+static void dia_custom_cache_local_apps_state(NSDictionary *state) {
+    NSString *profileID = [state[@"profileID"] isKindOfClass:[NSString class]]
+        ? state[@"profileID"] : nil;
+    if (profileID.length == 0) return;
+    if (dia_custom_local_apps_states_by_profile == nil) {
+        dia_custom_local_apps_states_by_profile = [[NSMutableDictionary alloc] init];
+    }
+    [dia_custom_local_apps_states_by_profile setObject:state forKey:profileID];
+    NSDictionary *responseBrief = [state[@"morningBrief"]
+        isKindOfClass:[NSDictionary class]] ? state[@"morningBrief"] : nil;
+    NSString *enabledProfileID = [responseBrief[@"enabledProfileID"]
+        isKindOfClass:[NSString class]] ? responseBrief[@"enabledProfileID"] : nil;
+    for (NSString *cachedProfileID in
+         [dia_custom_local_apps_states_by_profile allKeys]) {
+        NSDictionary *cachedState =
+            dia_custom_local_apps_states_by_profile[cachedProfileID];
+        NSDictionary *cachedBrief = [cachedState[@"morningBrief"]
+            isKindOfClass:[NSDictionary class]] ? cachedState[@"morningBrief"] : nil;
+        if (cachedBrief == nil) continue;
+        NSMutableDictionary *updatedState = [cachedState mutableCopy];
+        NSMutableDictionary *updatedBrief = [cachedBrief mutableCopy];
+        updatedBrief[@"enabled"] = @([enabledProfileID
+            isEqualToString:cachedProfileID]);
+        if (enabledProfileID != nil) {
+            updatedBrief[@"enabledProfileID"] = enabledProfileID;
+        } else {
+            [updatedBrief removeObjectForKey:@"enabledProfileID"];
+        }
+        updatedState[@"morningBrief"] = updatedBrief;
+        [dia_custom_local_apps_states_by_profile setObject:updatedState
+                                                    forKey:cachedProfileID];
+        [updatedBrief release];
+        [updatedState release];
+    }
+}
+
+static void dia_custom_set_local_apps_state(NSDictionary *state) {
+    if (state == nil) return;
+    [dia_custom_local_apps_state release];
+    dia_custom_local_apps_state = [state copy];
+    dia_custom_cache_local_apps_state(dia_custom_local_apps_state);
+}
+
+static NSDictionary *dia_custom_local_apps_state_for_profile(
+    NSString *profileID) {
+    if (profileID.length == 0) return dia_custom_local_apps_state;
+    NSDictionary *cached = dia_custom_local_apps_states_by_profile[profileID];
+    if (cached != nil) return cached;
+    NSString *currentProfile = [dia_custom_local_apps_state[@"profileID"]
+        isKindOfClass:[NSString class]]
+        ? dia_custom_local_apps_state[@"profileID"] : nil;
+    if ([currentProfile isEqualToString:profileID]) return dia_custom_local_apps_state;
+    NSDictionary *currentBrief = [dia_custom_local_apps_state[@"morningBrief"]
+        isKindOfClass:[NSDictionary class]]
+        ? dia_custom_local_apps_state[@"morningBrief"] : nil;
+    if (dia_custom_local_apps_state == nil || currentBrief == nil) return nil;
+    NSMutableDictionary *derived = [dia_custom_local_apps_state mutableCopy];
+    NSMutableDictionary *brief = [currentBrief mutableCopy];
+    NSString *enabledProfileID = [brief[@"enabledProfileID"]
+        isKindOfClass:[NSString class]] ? brief[@"enabledProfileID"] : nil;
+    brief[@"profileID"] = profileID;
+    brief[@"enabled"] = @([enabledProfileID isEqualToString:profileID]);
+    brief[@"due"] = @NO;
+    [brief removeObjectForKey:@"run"];
+    derived[@"profileID"] = profileID;
+    derived[@"morningBrief"] = brief;
+    [brief release];
+    NSDictionary *result = [derived autorelease];
+    dia_custom_cache_local_apps_state(result);
+    return result;
 }
 
 static BOOL dia_custom_view_contains_text(NSView *view, NSString *needle) {
@@ -1234,6 +1363,7 @@ static BOOL dia_custom_button_is_in_morning_brief_row(NSButton *button) {
 }
 
 static void dia_custom_install_native_apps_action_hooks(void);
+static void dia_custom_fetch_native_apps_state(id target, BOOL force);
 
 static NSString *dia_custom_button_search_text(NSButton *button) {
     NSArray<NSString *> *labels = @[
@@ -1246,12 +1376,15 @@ static NSString *dia_custom_button_search_text(NSButton *button) {
 }
 
 static BOOL dia_custom_is_morning_action_button(NSButton *button) {
-    NSString *lower = dia_custom_button_search_text(button);
+    NSString *label = button.title.length > 0
+        ? button.title : button.accessibilityLabel;
+    NSString *lower = [label.lowercaseString
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     return dia_custom_button_is_in_morning_brief_row(button) &&
-        ([lower containsString:@"turn on"] ||
-         [lower containsString:@"turn off"] ||
-         [lower containsString:@"enable"] ||
-         [lower containsString:@"disable"]);
+        ([lower hasPrefix:@"turn on"] ||
+         [lower hasPrefix:@"turn off"] ||
+         [lower hasPrefix:@"enable for"] ||
+         [lower hasPrefix:@"disable for"]);
 }
 
 static NSView *dia_custom_apps_view_for_descendant(NSView *view) {
@@ -1297,7 +1430,8 @@ static void dia_custom_configure_native_apps_descendants(NSView *view, id target
     }
 }
 
-static void dia_custom_sync_native_apps_connections(id viewModel) {
+static void dia_custom_sync_native_apps_connections(id viewModel,
+                                                     NSString *profileID) {
     if (!dia_custom_mod_enabled("live-connectors") || viewModel == nil ||
         dia_custom_native_apps_connections_request_in_flight) return;
     char *raw = dia_custom_swift_native_apps_connections_json(
@@ -1305,7 +1439,10 @@ static void dia_custom_sync_native_apps_connections(id viewModel) {
     if (raw == NULL) return;
     NSString *json = [NSString stringWithUTF8String:raw];
     free(raw);
-    if (json == nil || [json isEqualToString:dia_custom_native_apps_connections_snapshot]) {
+    NSString *snapshot = profileID.length > 0 && json != nil
+        ? [NSString stringWithFormat:@"%@\n%@", profileID, json] : nil;
+    if (snapshot == nil ||
+        [snapshot isEqualToString:dia_custom_native_apps_connections_snapshot]) {
         return;
     }
     NSData *jsonData = [json dataUsingEncoding:NSUTF8StringEncoding];
@@ -1322,12 +1459,12 @@ static void dia_custom_sync_native_apps_connections(id viewModel) {
     [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
     [request setValue:token forHTTPHeaderField:@"x-dia-custom-token"];
     request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
-        @"profileID": dia_custom_current_profile_id(),
+        @"profileID": profileID ?: @"Default",
         @"connectors": connectors,
     } options:0 error:nil];
     dia_custom_native_apps_connections_request_in_flight = YES;
     [dia_custom_native_apps_connections_snapshot release];
-    dia_custom_native_apps_connections_snapshot = [json copy];
+    dia_custom_native_apps_connections_snapshot = [snapshot copy];
     [[[NSURLSession sharedSession] dataTaskWithRequest:request
         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             (void)data;
@@ -1352,6 +1489,22 @@ static BOOL dia_custom_apply_native_apps_state_in_view(NSView *view, id target) 
     if ([NSStringFromClass(view.class) containsString:@"AppsPreferencePaneView"]) {
         dia_custom_install_native_apps_action_hooks();
         found = YES;
+        id viewModel = dia_custom_object_ivar(view, "viewModel");
+        NSString *nativeProfileID = dia_custom_native_apps_profile_id(viewModel);
+        BOOL profileChanged = dia_custom_set_native_apps_selected_profile(
+            nativeProfileID);
+        NSString *profileID = nativeProfileID.length > 0
+            ? nativeProfileID : dia_custom_selected_apps_profile_id();
+        NSDictionary *profileState = dia_custom_local_apps_state_for_profile(
+            profileID);
+        if (profileState != nil && profileState != dia_custom_local_apps_state) {
+            dia_custom_set_local_apps_state(profileState);
+        }
+        if (profileChanged) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                dia_custom_fetch_native_apps_state(target, YES);
+            });
+        }
         NSDictionary *advanced = [dia_custom_local_apps_state[@"advancedChat"]
             isKindOfClass:[NSDictionary class]] ? dia_custom_local_apps_state[@"advancedChat"] : nil;
         NSDictionary *brief = [dia_custom_local_apps_state[@"morningBrief"]
@@ -1366,9 +1519,8 @@ static BOOL dia_custom_apply_native_apps_state_in_view(NSView *view, id target) 
                     ? @"native-apps-enable-action-invoked"
                     : @"native-apps-enable-action-unavailable");
             }
-            id viewModel = dia_custom_object_ivar(view, "viewModel");
             if (viewModel != nil) {
-                dia_custom_sync_native_apps_connections(viewModel);
+                dia_custom_sync_native_apps_connections(viewModel, profileID);
                 if (!dia_custom_swift_set_native_apps_enabled(
                     (__bridge const void *)viewModel,
                     [brief[@"enabled"] boolValue])) {
@@ -1419,8 +1571,15 @@ static void dia_custom_refresh_native_apps_controls(id target) {
 
 static void dia_custom_fetch_native_apps_state(id target, BOOL force) {
     if (!dia_custom_mod_enabled("native-apps") ||
-        !dia_custom_local_apps_compatible || target == nil ||
-        dia_custom_local_apps_request_in_flight) return;
+        !dia_custom_local_apps_compatible || target == nil) return;
+    NSString *profileID = dia_custom_selected_apps_profile_id();
+    if (dia_custom_local_apps_request_in_flight) {
+        if (![dia_custom_local_apps_request_profile_id
+                isEqualToString:profileID]) {
+            dia_custom_local_apps_refresh_pending = YES;
+        }
+        return;
+    }
     if (!force && dia_custom_local_apps_last_refresh != nil &&
         [dia_custom_local_apps_last_refresh timeIntervalSinceNow] > -5.0) {
         return;
@@ -1428,9 +1587,12 @@ static void dia_custom_fetch_native_apps_state(id target, BOOL force) {
     NSURLComponents *components = [NSURLComponents componentsWithURL:
         dia_custom_local_api_url(@"/api/apps/state") resolvingAgainstBaseURL:NO];
     components.queryItems = @[[NSURLQueryItem queryItemWithName:@"profileID"
-        value:dia_custom_current_profile_id()]];
+        value:profileID]];
     if (components.URL == nil) return;
     dia_custom_local_apps_request_in_flight = YES;
+    [dia_custom_local_apps_request_profile_id release];
+    dia_custom_local_apps_request_profile_id = [profileID copy];
+    NSString *requestedProfileID = [profileID copy];
     [[[NSURLSession sharedSession] dataTaskWithURL:components.URL
         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
@@ -1440,16 +1602,32 @@ static void dia_custom_fetch_native_apps_state(id target, BOOL force) {
                 : nil;
             dispatch_async(dispatch_get_main_queue(), ^{
                 dia_custom_local_apps_request_in_flight = NO;
-                [dia_custom_local_apps_last_refresh release];
-                dia_custom_local_apps_last_refresh = [[NSDate date] retain];
+                NSString *selectedProfileID = dia_custom_selected_apps_profile_id();
+                BOOL selectedRequest = [selectedProfileID
+                    isEqualToString:requestedProfileID];
                 if (error == nil && status >= 200 && status < 300 &&
                     [value isKindOfClass:[NSDictionary class]]) {
-                    [dia_custom_local_apps_state release];
-                    dia_custom_local_apps_state = [value copy];
-                    dia_custom_refresh_native_apps_controls(target);
+                    dia_custom_cache_local_apps_state(value);
+                    if (selectedRequest) {
+                        dia_custom_set_local_apps_state(value);
+                        [dia_custom_local_apps_last_refresh release];
+                        dia_custom_local_apps_last_refresh = [[NSDate date] retain];
+                        dia_custom_refresh_native_apps_controls(target);
+                    } else {
+                        dia_custom_log_status(@"native-apps-stale-profile-response-ignored");
+                    }
+                }
+                BOOL refreshPending = dia_custom_local_apps_refresh_pending ||
+                    !selectedRequest;
+                dia_custom_local_apps_refresh_pending = NO;
+                [dia_custom_local_apps_request_profile_id release];
+                dia_custom_local_apps_request_profile_id = nil;
+                if (refreshPending) {
+                    dia_custom_fetch_native_apps_state(target, YES);
                 }
             });
         }] resume];
+    [requestedProfileID release];
 }
 
 static BOOL dia_custom_model_popup_needs_refresh(NSPopUpButton *popup) {
@@ -2076,8 +2254,10 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 
 - (void)toggleLocalMorningBrief:(id)sender {
     dia_custom_log_status(@"native-apps-morning-toggle-requested");
-    NSDictionary *brief = [dia_custom_local_apps_state[@"morningBrief"]
-        isKindOfClass:[NSDictionary class]] ? dia_custom_local_apps_state[@"morningBrief"] : nil;
+    NSString *profileID = dia_custom_selected_apps_profile_id();
+    NSDictionary *profileState = dia_custom_local_apps_state_for_profile(profileID);
+    NSDictionary *brief = [profileState[@"morningBrief"]
+        isKindOfClass:[NSDictionary class]] ? profileState[@"morningBrief"] : nil;
     BOOL enabled = [brief[@"enabled"] boolValue];
     NSDictionary *catalog = dia_custom_model_catalog();
     NSString *token = [catalog[@"selectionToken"] isKindOfClass:[NSString class]]
@@ -2097,9 +2277,10 @@ static void dia_custom_schedule_model_picker_attempts(id target,
     [request setValue:token forHTTPHeaderField:@"x-dia-custom-token"];
     request.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
         @"enabled": [NSNumber numberWithBool:!enabled],
-        @"profileID": dia_custom_current_profile_id(),
+        @"profileID": profileID,
     } options:0 error:nil];
     DiaCustomDeveloperMenuController *controller = self;
+    NSString *requestedProfileID = [profileID copy];
     [[[NSURLSession sharedSession] dataTaskWithRequest:request
         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             NSInteger status = [response isKindOfClass:[NSHTTPURLResponse class]]
@@ -2111,10 +2292,15 @@ static void dia_custom_schedule_model_picker_attempts(id target,
                 if (error == nil && status >= 200 && status < 300 &&
                     [value isKindOfClass:[NSDictionary class]]) {
                     dia_custom_log_status(@"native-apps-morning-toggle-succeeded");
-                    [dia_custom_local_apps_state release];
-                    dia_custom_local_apps_state = [value copy];
-                    dia_custom_refresh_native_apps_controls(controller);
-                    if (!enabled) [controller checkLocalMorningBriefSchedule];
+                    dia_custom_cache_local_apps_state(value);
+                    if ([dia_custom_selected_apps_profile_id()
+                            isEqualToString:requestedProfileID]) {
+                        dia_custom_set_local_apps_state(value);
+                        dia_custom_refresh_native_apps_controls(controller);
+                        if (!enabled) [controller checkLocalMorningBriefSchedule];
+                    } else {
+                        dia_custom_fetch_native_apps_state(controller, YES);
+                    }
                 } else {
                     NSString *reason = [value[@"error"] isKindOfClass:[NSString class]]
                         ? value[@"error"] : @"unknown";
@@ -2126,6 +2312,7 @@ static void dia_custom_schedule_model_picker_attempts(id target,
                 }
             });
         }] resume];
+    [requestedProfileID release];
 }
 
 - (void)checkLocalMorningBriefSchedule {
@@ -2479,6 +2666,7 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 static DiaCustomDeveloperMenuController *dia_custom_developer_menu_controller;
 static BOOL dia_custom_native_apps_actions_installed = NO;
 static id dia_custom_native_apps_event_monitor;
+static NSButton *dia_custom_native_apps_pressed_morning_button;
 static IMP dia_custom_native_enable_morning_action;
 static IMP dia_custom_native_disable_morning_action;
 
@@ -2517,17 +2705,37 @@ static void dia_custom_install_native_apps_event_monitor(void) {
     if (!dia_custom_mod_enabled("native-apps") ||
         dia_custom_native_apps_event_monitor != nil) return;
     dia_custom_native_apps_event_monitor = [[NSEvent
-        addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp
+        addLocalMonitorForEventsMatchingMask:
+            (NSEventMaskLeftMouseDown | NSEventMaskLeftMouseUp)
         handler:^NSEvent *(NSEvent *event) {
             NSWindow *window = event.window;
             NSView *contentView = window.contentView;
+            if (event.type == NSEventTypeLeftMouseDown) {
+                [dia_custom_native_apps_pressed_morning_button release];
+                dia_custom_native_apps_pressed_morning_button = nil;
+                if (contentView != nil &&
+                    dia_custom_view_contains_text(contentView, @"Morning Brief")) {
+                    dia_custom_native_apps_pressed_morning_button =
+                        [dia_custom_morning_button_at_point(
+                            contentView, event.locationInWindow) retain];
+                }
+                return event;
+            }
+            NSButton *pressedButton =
+                [dia_custom_native_apps_pressed_morning_button retain];
+            [dia_custom_native_apps_pressed_morning_button release];
+            dia_custom_native_apps_pressed_morning_button = nil;
             if (contentView == nil ||
                 !dia_custom_view_contains_text(contentView, @"Morning Brief")) {
+                [pressedButton release];
                 return event;
             }
             NSButton *button = dia_custom_morning_button_at_point(
                 contentView, event.locationInWindow);
-            if (button == nil) return event;
+            if (button == nil || button != pressedButton) {
+                [pressedButton release];
+                return event;
+            }
             NSString *label = dia_custom_button_search_text(button);
             NSView *appsView = dia_custom_apps_view_for_descendant(button);
             BOOL disabling = [label containsString:@"turn off"] ||
@@ -2544,6 +2752,7 @@ static void dia_custom_install_native_apps_event_monitor(void) {
             }
             [dia_custom_developer_menu_controller toggleLocalMorningBrief:button];
             dia_custom_log_status(@"native-apps-morning-action-intercepted");
+            [pressedButton release];
             return nil;
         }] retain];
 }

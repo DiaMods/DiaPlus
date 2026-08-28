@@ -102,7 +102,11 @@ export class AppsStateStore {
     if (typeof enabled !== "boolean") throw new Error("enabled must be a boolean");
     const state = await this.load();
     const selectedProfile = cleanProfileID(profileID);
-    state.morningBrief.enabledProfileID = enabled ? selectedProfile : null;
+    state.morningBrief.enabledProfileID = enabled
+      ? selectedProfile
+      : state.morningBrief.enabledProfileID === selectedProfile
+        ? null
+        : state.morningBrief.enabledProfileID;
     return this.save();
   }
 
@@ -138,7 +142,8 @@ export class AppsStateStore {
     const selectedProfile = cleanProfileID(profileID);
     const now = this.now();
     const day = localDay(now);
-    const run = this.value.morningBrief.runs[day] ?? null;
+    const candidateRun = this.value.morningBrief.runs[day] ?? null;
+    const run = candidateRun?.profileID === selectedProfile ? candidateRun : null;
     const enabled = this.value.morningBrief.enabledProfileID === selectedProfile;
     const afterWindowStart = now.getHours() >= this.value.morningBrief.windowStartHour;
     const finished = run?.status === "succeeded";
