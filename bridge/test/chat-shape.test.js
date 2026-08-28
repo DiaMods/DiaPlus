@@ -158,7 +158,9 @@ test("normalizes common model math dialects into Dia's native LaTeX markers", ()
     "Inline: $E = mc^2$.",
     "Alternate: \\(a^2 + b^2 = c^2\\).",
     "Malformed: $\\{latex\\}x = \\frac{-b}{2a}\\{/latex\\}$.",
+    "Mixed currency: 0.15$ per $\\text{kWh}$.",
     "$$\\int_0^1 x^2 \\, dx$$",
+    "$$\\text{Annual Cost} = 3066 \\times $0.15 = $459.90$$",
     "```latex",
     "\\sum_{n=1}^{\\infty} \\frac{1}{n^2}",
     "```",
@@ -168,7 +170,11 @@ test("normalizes common model math dialects into Dia's native LaTeX markers", ()
   assert.match(output, /Inline: `\{latex\}E = mc\^2`\./);
   assert.match(output, /Alternate: `\{latex\}a\^2 \+ b\^2 = c\^2`\./);
   assert.match(output, /Malformed: `\{latex\}x = \\frac\{-b\}\{2a\}`\./);
+  assert.match(output, /Mixed currency: \$0\.15 per `\{latex\}\\text\{kWh\}`\./);
   assert.match(output, /```\{latex\}\n\\int_0\^1 x\^2 \\, dx\n```/);
+  assert.ok(output.includes(
+    "```{latex}\n\\text{Annual Cost} = 3066 \\times \\$0.15 = \\$459.90\n```",
+  ));
   assert.match(output, /```\{latex\}\n\\sum_\{n=1\}\^\{\\infty\} \\frac\{1\}\{n\^2\}\n```/);
   assert.equal(normalizeDiaLatexFormatting(input, { enabled: false }), input);
 });

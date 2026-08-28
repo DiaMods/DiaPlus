@@ -544,7 +544,7 @@ export function buildDecisionPrompt(payload, tools) {
     "Do not combine local memory calls and browser action calls in one decision. Finish local research first, then request browser actions in a later decision.",
     "When no tool is needed or tool results are sufficient, return kind=final with the natural-language answer in text and an empty tool_calls array.",
     "Use standard Markdown tables when rows and columns make a comparison or compact data clearer. Include a header separator row and never wrap a table in a code fence.",
-    "For math or science, follow the loaded latex-formatting skill exactly so Dia receives its native inlineLatex and latexBlock syntax; do not substitute generic dollar-delimited LaTeX.",
+    "For math or science, follow the loaded latex-formatting skill exactly so Dia receives its native inlineLatex and latexBlock syntax; do not substitute generic dollar-delimited LaTeX. Keep currency amounts as plain Markdown such as **$0.15/kWh**, outside math expressions.",
     "Final text must begin with the completed answer. Never narrate current or future work such as ‘I’m gathering’, ‘I’ll search’, or ‘Let me check’; tool activity is displayed separately.",
     "A prior assistant tool_use followed by a user tool_result means the tool already ran. Use its result. If that result reports an error, do not repeat the same call during this automatic continuation; stop and explain the error.",
     "Never claim a browser action succeeded unless a corresponding tool_result says it succeeded.",
@@ -563,11 +563,16 @@ export function stripLeadingProgressNarration(text) {
 }
 
 function diaInlineLatex(value) {
-  return `\`{latex}${value.trim()}\``;
+  return `\`{latex}${sanitizeLatexBody(value)}\``;
 }
 
 function diaBlockLatex(value) {
-  return `\`\`\`{latex}\n${value.trim()}\n\`\`\``;
+  return `\`\`\`{latex}\n${sanitizeLatexBody(value)}\n\`\`\``;
+}
+
+function sanitizeLatexBody(value) {
+  return value.trim().replace(/\\.|\$/gs, (token) =>
+    token === "$" ? "\\$" : token);
 }
 
 function looksLikeInlineMath(value) {
@@ -576,6 +581,41 @@ function looksLikeInlineMath(value) {
     /[\\^_=+*/{}]/.test(inner) ||
     /^[A-Za-z](?:\s*[<>≤≥≈≠]\s*[A-Za-z0-9])?$/.test(inner)
   );
+}
+
+function nextUnescapedDollar(text, start) {
+  for (let index = start; index < text.length; index += 1) {
+    if (text[index] !== "$") continue;
+    let slashes = 0;
+    for (let before = index - 1; before >= 0 && text[before] === "\\"; before -= 1) {
+      slashes += 1;
+    }
+    if (slashes % 2 === 0) return index;
+  }
+  return -1;
+}
+
+function normalizeInlineDollarMath(text) {
+  let output = "";
+  let cursor = 0;
+  while (cursor < text.length) {
+    const start = nextUnescapedDollar(text, cursor);
+    if (start === -1) return output + text.slice(cursor);
+    output += text.slice(cursor, start);
+    const end = nextUnescapedDollar(text, start + 1);
+    if (end === -1) return output + text.slice(start);
+    const body = text.slice(start + 1, end);
+    if (looksLikeInlineMath(body)) {
+      output += diaInlineLatex(body);
+      cursor = end + 1;
+    } else {
+      // Leave this dollar literal but reconsider the next one as a possible
+      // opener. This repairs mixed text such as "0.15$ per $\\text{kWh}$".
+      output += "$";
+      cursor = start + 1;
+    }
+  }
+  return output;
 }
 
 export function normalizeDiaLatexFormatting(text, { enabled = true } = {}) {
@@ -597,8 +637,9 @@ export function normalizeDiaLatexFormatting(text, { enabled = true } = {}) {
     (_match, body) => diaBlockLatex(body));
   output = output.replace(/\\\(([^\n]*?)\\\)/g,
     (_match, body) => diaInlineLatex(body));
-  output = output.replace(/\$([^$\n]+?)\$/g, (match, body) =>
-    looksLikeInlineMath(body) ? diaInlineLatex(body) : match);
+  output = output.replace(/\b(\d+(?:\.\d+)?)\$(?=\s*(?:per\b|\/))/gi,
+    (_match, amount) => `$${amount}`);
+  output = normalizeInlineDollarMath(output);
   return output;
 }
 
