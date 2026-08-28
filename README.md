@@ -13,10 +13,18 @@ The default is **gpt-5.6-luna** through the existing Codex login. The native cha
 
 ## Start here
 
+For a complete first install or rebuild, point the setup command at the
+official Dia app:
+
 ~~~sh
-./dia-custom doctor
-./dia-custom launch
+./dia-custom setup /Applications/Dia.app
 ~~~
+
+This installs **Dia Custom RTTM.app** in Applications, configures its isolated
+profile, prepares the safe native Dia import, and launches it. Afterward, open
+Dia Custom normally from Applications; no terminal command or development
+folder is needed to run it. Use `./dia-custom doctor` whenever you want to
+verify the installed app.
 
 Choose a model from View → Developer → AI Model. Dia Custom also inserts a compact picker into the chat toolbar: it remains before the attachment button in side chat and sits immediately before the microphone on New Tab. Provider, credential, memory, connector, and tool settings are available at:
 
@@ -153,9 +161,10 @@ See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), and [Status]
 
 ## Runtime locations
 
-- App: **../Dia Custom RTTM.app**
+- App: **/Applications/Dia Custom RTTM.app**
 - Profile: **~/Library/Application Support/Dia Custom RTTM**
-- Deployed bridge: **~/Library/Application Support/Dia Custom RTTM/Bridge**
+- Bundled bridge and Node runtime: **Dia Custom RTTM.app/Contents**
+- Mutable bridge state: **~/Library/Application Support/Dia Custom RTTM/Bridge/.state**
 - Provider config: **Bridge/.state/config.json**
 - Provider credentials: **Bridge/.state/credentials.json**
 - Model/tool catalogs: **Bridge/.state/models.json**, **Bridge/.state/tool-coverage.json**
@@ -164,3 +173,9 @@ See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), and [Status]
 - Safe official-Dia import staging: **~/Library/Application Support/DiaImport**
 - Custom connector manifests: **Bridge/.state/connectors/*.json**
 - Diagnostics: **~/Library/Application Support/Dia Custom RTTM/Diagnostics**
+
+For a complete first install, run **./dia-custom setup /Applications/Dia.app**.
+The command validates the official source, builds the audited clone directly in
+Applications, prepares safe import data, and opens Dia Custom. Afterwards the
+app is launched normally from Applications; it starts its signed, bundled local
+AI bridge and applies the isolation policy itself.

@@ -71,8 +71,25 @@ if /usr/bin/grep -q 'official-dia-sync' \
 fi
 print "ok    Official Dia migration uses the native importer without Sync access"
 node "$project_dir/scripts/test-dia-import.js"
+node "$project_dir/scripts/test-profile-consolidation.js"
 zsh -n "$project_dir/dia-custom" "$project_dir"/scripts/*.sh
 "$script_dir/build-bootstrap.sh" "$source_app" >/dev/null
+if ! /usr/bin/grep -q 'dia_custom_prepare_self_contained_runtime' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q -- '--disable-sync' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q -- '--host-resolver-rules=' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q 'DIA_CUSTOM_MODEL_CATALOG_PATH' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q 'DIA_CUSTOM_STATE_DIR' \
+    "$project_dir/bridge/src/paths.js" || \
+   ! /usr/bin/grep -q 'bundle-runtime.sh' \
+    "$project_dir/scripts/install.sh"; then
+  print -u2 "double-click self-contained runtime is incomplete"
+  exit 1
+fi
+print "ok    app bundle owns the double-click bridge and launch policy"
 if ! /usr/bin/grep -q 'onEnableMorningBriefTapped' \
     "$project_dir/src/bootstrap/offline-bootstrap.c"; then
   print -u2 "native Morning Brief confirmation action is not wired"

@@ -3,9 +3,18 @@
 #include <objc/runtime.h>
 #include <dispatch/dispatch.h>
 #include <mach-o/dyld.h>
+#include <crt_externs.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <libproc.h>
+#include <signal.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include "prompt-tools-offsets.h"
 
@@ -38,7 +47,13 @@ static BOOL dia_custom_mod_enabled(const char *modID) {
         raw = getenv("DIA_CUSTOM_MODULES");
     }
     if (raw == NULL || raw[0] == '\0') {
-        // Launchers from before the Dia Mods manifest enabled every integration.
+        NSString *bundled = [NSBundle.mainBundle
+            objectForInfoDictionaryKey:@"DiaCustomEnabledMods"];
+        raw = [bundled isKindOfClass:[NSString class]]
+            ? bundled.UTF8String : NULL;
+    }
+    if (raw == NULL || raw[0] == '\0') {
+        // Clones from before the Dia Mods manifest enabled every integration.
         return YES;
     }
     NSString *wanted = [NSString stringWithUTF8String:modID];
@@ -73,6 +88,221 @@ static void dia_custom_log_status(NSString *message) {
     fprintf(output, "%.3f\t%s\n",
             [[NSDate date] timeIntervalSince1970], [message UTF8String]);
     fclose(output);
+}
+
+static void dia_custom_set_environment_if_missing(const char *name,
+                                                   NSString *value) {
+    if (name == NULL || value.length == 0 || getenv(name) != NULL) return;
+    setenv(name, value.UTF8String, 1);
+}
+
+static BOOL dia_custom_has_process_argument(char **arguments, int count,
+                                             const char *prefix) {
+    size_t length = strlen(prefix);
+    for (int index = 0; index < count; ++index) {
+        if (arguments[index] != NULL &&
+            strncmp(arguments[index], prefix, length) == 0) return YES;
+    }
+    return NO;
+}
+
+static void dia_custom_install_process_arguments(NSString *profile) {
+    int *countPointer = _NSGetArgc();
+    char ***argumentsPointer = _NSGetArgv();
+    if (countPointer == NULL || argumentsPointer == NULL ||
+        *argumentsPointer == NULL || profile.length == 0) return;
+    int count = *countPointer;
+    char **arguments = *argumentsPointer;
+    NSMutableArray<NSString *> *additions = [NSMutableArray array];
+    if (!dia_custom_has_process_argument(arguments, count,
+            "-customApplicationDataBaseURLPath")) {
+        [additions addObject:@"-customApplicationDataBaseURLPath"];
+        [additions addObject:profile];
+    }
+    NSArray<NSString *> *singleArguments = @[
+        [@"--user-data-dir=" stringByAppendingString:
+            [profile stringByAppendingPathComponent:@"User Data"]],
+        @"--disable-background-networking",
+        @"--disable-component-update",
+        @"--remote-debugging-port=9223",
+        @"--use-mock-keychain",
+        @"--no-first-run",
+        @"--disable-sync",
+        @"--host-resolver-rules=MAP diabrowser.engineering ~NOTFOUND, MAP *.diabrowser.engineering ~NOTFOUND, MAP diabrowser.com ~NOTFOUND, MAP *.diabrowser.com ~NOTFOUND, MAP thebrowser.company ~NOTFOUND, MAP *.thebrowser.company ~NOTFOUND, MAP thebrowser.com ~NOTFOUND, MAP *.thebrowser.com ~NOTFOUND, MAP browserinternal.com ~NOTFOUND, MAP *.browserinternal.com ~NOTFOUND, MAP browserinternalstaging.com ~NOTFOUND, MAP *.browserinternalstaging.com ~NOTFOUND, MAP api.segment.io ~NOTFOUND, MAP cdn-settings.segment.com ~NOTFOUND, MAP clientstream.launchdarkly.com ~NOTFOUND, MAP mobile.launchdarkly.com ~NOTFOUND, MAP browser-intake-datadoghq.com ~NOTFOUND, MAP browser-intake-ap1-datadoghq.com ~NOTFOUND, MAP browser-intake-datadoghq.eu ~NOTFOUND, MAP browser-intake-us3-datadoghq.com ~NOTFOUND, MAP browser-intake-us5-datadoghq.com ~NOTFOUND, MAP o298668.ingest.us.sentry.io ~NOTFOUND, EXCLUDE localhost",
+    ];
+    for (NSString *argument in singleArguments) {
+        NSString *prefix = [argument componentsSeparatedByString:@"="][0];
+        if (!dia_custom_has_process_argument(arguments, count,
+                prefix.UTF8String)) [additions addObject:argument];
+    }
+    if (additions.count == 0) return;
+    char **expanded = calloc((size_t)count + additions.count + 1,
+                             sizeof(char *));
+    if (expanded == NULL) return;
+    for (int index = 0; index < count; ++index) expanded[index] = arguments[index];
+    for (NSUInteger index = 0; index < additions.count; ++index) {
+        expanded[count + (int)index] = strdup(additions[index].UTF8String);
+    }
+    *countPointer = count + (int)additions.count;
+    *argumentsPointer = expanded;
+}
+
+static BOOL dia_custom_bridge_is_healthy(NSString *runtimeID) {
+    int socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
+    if (socketDescriptor < 0) return NO;
+    struct timeval timeout = { .tv_sec = 0, .tv_usec = 300000 };
+    setsockopt(socketDescriptor, SOL_SOCKET, SO_RCVTIMEO,
+               &timeout, sizeof(timeout));
+    setsockopt(socketDescriptor, SOL_SOCKET, SO_SNDTIMEO,
+               &timeout, sizeof(timeout));
+    struct sockaddr_in address = {0};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(8765);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (connect(socketDescriptor, (struct sockaddr *)&address,
+                sizeof(address)) != 0) {
+        close(socketDescriptor);
+        return NO;
+    }
+    const char *request = "GET /health HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nConnection: close\r\n\r\n";
+    if (send(socketDescriptor, request, strlen(request), 0) < 0) {
+        close(socketDescriptor);
+        return NO;
+    }
+    char response[16384];
+    size_t total = 0;
+    ssize_t received = 0;
+    while (total + 1 < sizeof(response) &&
+           (received = recv(socketDescriptor, response + total,
+                            sizeof(response) - total - 1, 0)) > 0) {
+        total += (size_t)received;
+    }
+    close(socketDescriptor);
+    response[total] = '\0';
+    if (strstr(response, "\"ok\":true") == NULL) return NO;
+    if (runtimeID.length == 0) return YES;
+    NSString *needle = [NSString stringWithFormat:@"\"runtimeID\":\"%@\"",
+        runtimeID];
+    return strstr(response, needle.UTF8String) != NULL;
+}
+
+extern char **environ;
+
+static void dia_custom_start_bundled_bridge(NSString *nodePath,
+                                            NSString *serverPath,
+                                            NSString *pidPath,
+                                            NSString *logPath,
+                                            NSString *runtimeID) {
+    if (dia_custom_bridge_is_healthy(runtimeID)) return;
+    NSData *pidData = [NSData dataWithContentsOfFile:pidPath];
+    NSString *pidText = pidData != nil
+        ? [[[NSString alloc] initWithData:pidData
+                                encoding:NSUTF8StringEncoding] autorelease]
+        : nil;
+    pid_t previousPID = (pid_t)pidText.intValue;
+    if (previousPID > 1) {
+        char executablePath[PROC_PIDPATHINFO_MAXSIZE] = {0};
+        if (proc_pidpath(previousPID, executablePath,
+                         sizeof(executablePath)) > 0 &&
+            strcmp(executablePath, nodePath.UTF8String) == 0) {
+            kill(previousPID, SIGTERM);
+            for (NSUInteger attempt = 0; attempt < 20; ++attempt) {
+                if (kill(previousPID, 0) != 0) break;
+                usleep(50000);
+            }
+        }
+    }
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO,
+        logPath.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO,
+        logPath.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    char *spawnArguments[] = {
+        (char *)nodePath.UTF8String,
+        (char *)serverPath.UTF8String,
+        NULL,
+    };
+    pid_t bridgePID = 0;
+    int status = posix_spawn(&bridgePID, nodePath.fileSystemRepresentation,
+                             &actions, NULL, spawnArguments, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    if (status != 0 || bridgePID <= 1) {
+        dia_custom_log_status(@"bundled-bridge-spawn-failed");
+        return;
+    }
+    NSString *newPID = [NSString stringWithFormat:@"%d\n", bridgePID];
+    [newPID writeToFile:pidPath atomically:YES
+               encoding:NSUTF8StringEncoding error:nil];
+    chmod(pidPath.fileSystemRepresentation, 0600);
+    for (NSUInteger attempt = 0; attempt < 50; ++attempt) {
+        if (dia_custom_bridge_is_healthy(runtimeID)) {
+            dia_custom_log_status(@"bundled-bridge-ready");
+            return;
+        }
+        usleep(100000);
+    }
+    dia_custom_log_status(@"bundled-bridge-start-timeout");
+}
+
+static void dia_custom_prepare_self_contained_runtime(void) {
+    NSString *profile = getenv("DIA_CUSTOM_PROFILE") != NULL
+        ? [NSString stringWithUTF8String:getenv("DIA_CUSTOM_PROFILE")]
+        : [NSHomeDirectory() stringByAppendingPathComponent:
+            @"Library/Application Support/Dia Custom RTTM"];
+    NSString *state = [profile stringByAppendingPathComponent:@"Bridge/.state"];
+    NSString *diagnostics = [profile stringByAppendingPathComponent:@"Diagnostics"];
+    NSFileManager *manager = NSFileManager.defaultManager;
+    [manager createDirectoryAtPath:state withIntermediateDirectories:YES
+                        attributes:@{NSFilePosixPermissions: @0700} error:nil];
+    [manager createDirectoryAtPath:diagnostics withIntermediateDirectories:YES
+                        attributes:@{NSFilePosixPermissions: @0700} error:nil];
+    NSString *bundle = NSBundle.mainBundle.bundlePath;
+    NSString *bridge = [bundle stringByAppendingPathComponent:
+        @"Contents/Resources/DiaCustomBridge"];
+    NSString *node = [bundle stringByAppendingPathComponent:
+        @"Contents/Helpers/DiaCustomNode"];
+    NSString *runtimeID = [NSBundle.mainBundle
+        objectForInfoDictionaryKey:@"DiaCustomBridgeRuntimeID"];
+    NSString *mods = [NSBundle.mainBundle
+        objectForInfoDictionaryKey:@"DiaCustomEnabledMods"];
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_PROFILE", profile);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_STATE_DIR", state);
+    // The bridge can derive these files from DIA_CUSTOM_STATE_DIR, but the
+    // native AppKit hooks read them directly. Export the same explicit paths
+    // used by scripts/launch.sh so a Finder launch behaves identically.
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_CONFIG_PATH",
+        [state stringByAppendingPathComponent:@"config.json"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_MODEL_CATALOG_PATH",
+        [state stringByAppendingPathComponent:@"models.json"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_TOOL_COVERAGE_PATH",
+        [state stringByAppendingPathComponent:@"tool-coverage.json"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_MEMORY_PATH",
+        [state stringByAppendingPathComponent:@"memory.sqlite3"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_MODS", mods);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_MODS_MANIFEST_PATH",
+        [bridge stringByAppendingPathComponent:@"config/dia-mods.json"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_APPLE_MODEL_HELPER",
+        [bundle stringByAppendingPathComponent:@"Contents/Helpers/DiaCustomAppleModel"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_CAPTURE_DIR",
+        [diagnostics stringByAppendingPathComponent:@"Captures"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_RUNTIME_LOG",
+        [diagnostics stringByAppendingPathComponent:@"runtime-classes.txt"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_NETWORK_LOG",
+        [diagnostics stringByAppendingPathComponent:@"network-requests.txt"]);
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_SETTINGS_URL",
+        @"http://127.0.0.1:8765/settings");
+    dia_custom_set_environment_if_missing("DIA_CUSTOM_RUNTIME_ID", runtimeID);
+    dia_custom_install_process_arguments(profile);
+    dia_custom_log_status(@"self-contained-launch-policy-installed");
+    NSString *server = [bridge stringByAppendingPathComponent:@"src/server.js"];
+    if ([manager isExecutableFileAtPath:node] &&
+        [manager fileExistsAtPath:server]) {
+        dia_custom_start_bundled_bridge(node, server,
+            [state stringByAppendingPathComponent:@"bridge.pid"],
+            [state stringByAppendingPathComponent:@"bridge.log"],
+            runtimeID);
+    }
 }
 
 static void dia_custom_log_request_url(NSURL *url, const char *disposition) {
@@ -3435,6 +3665,8 @@ static void dia_custom_install_runtime_overrides(void) {
     if (program == NULL || strcmp(program, "Dia") != 0) {
         return;
     }
+
+    dia_custom_prepare_self_contained_runtime();
 
     if (dia_custom_mod_enabled("network-isolation")) {
         dia_custom_schedule_network_log();

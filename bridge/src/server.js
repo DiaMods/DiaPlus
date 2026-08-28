@@ -37,6 +37,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 const maxBodyBytes = 16 * 1024 * 1024;
 const captureEnabled = process.env.DIA_CUSTOM_CAPTURE === "1";
+const runtimeID = process.env.DIA_CUSTOM_RUNTIME_ID ?? "development";
 const stateDir = stateDirectory;
 const captureDir = captureDirectory;
 const sessionFile = sessionPath;
@@ -525,6 +526,8 @@ async function handleRequest(request, response) {
       mode: captureEnabled ? "capture" : "bridge",
       selectedModel,
       enabledMods: enabledModIDs(),
+      runtimeID,
+      profileDirectory,
     }));
     return;
   }

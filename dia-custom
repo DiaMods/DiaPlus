@@ -6,6 +6,7 @@ command="${1:-help}"
 (( $# == 0 )) || shift
 
 case "$command" in
+  setup) exec "$project_dir/scripts/setup.sh" "$@" ;;
   build) exec "$project_dir/scripts/build.sh" "$@" ;;
   install) exec "$project_dir/scripts/install.sh" "$@" ;;
   launch) exec "$project_dir/scripts/launch.sh" "$@" ;;
@@ -21,7 +22,7 @@ case "$command" in
       http://127.0.0.1:8765/api/models
     ;;
   settings)
-    custom_app="${DIA_CUSTOM_APP:-${project_dir:h}/Dia Custom RTTM.app}"
+    custom_app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
     if [[ ! -d "$custom_app" ]]; then
       print -u2 "Dia Custom is not installed at $custom_app"
       exit 1
@@ -33,6 +34,7 @@ case "$command" in
   help|-h|--help)
     print 'Dia Custom'
     print ''
+    print '  ./dia-custom setup [/path/Dia.app]  Install, configure, and launch everything'
     print '  ./dia-custom launch             Start the local bridge and browser'
     print '  ./dia-custom bridge             Start only the local bridge'
     print '  ./dia-custom doctor             Check the installed clone'

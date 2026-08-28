@@ -14,25 +14,23 @@ fi
 script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
-app="${DIA_CUSTOM_APP:-$work_dir/Dia Custom RTTM.app}"
+app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 debug_port="${DIA_CUSTOM_DEBUG_PORT:-9223}"
 embedded_bootstrap="$app/Contents/Frameworks/DiaCustomBootstrap.dylib"
-bridge_source_dir="$project_dir/bridge"
-bridge_dir="$profile/Bridge"
-bridge_state_dir="$bridge_dir/.state"
-bridge_log="$bridge_state_dir/bridge.log"
-bridge_pid_file="$bridge_state_dir/bridge.pid"
-bridge_lock_marker="$bridge_state_dir/package-lock.sha256"
+bridge_dir="$app/Contents/Resources/DiaCustomBridge"
+mutable_bridge_state_dir="$profile/Bridge/.state"
+bridge_log="$mutable_bridge_state_dir/bridge.log"
+bridge_pid_file="$mutable_bridge_state_dir/bridge.pid"
 bridge_label="local.rttm.dia.bridge"
 diagnostics_dir="$profile/Diagnostics"
 runtime_log="$diagnostics_dir/runtime-classes.txt"
 network_log="$diagnostics_dir/network-requests.txt"
 apple_model_helper="$app/Contents/Helpers/DiaCustomAppleModel"
-model_catalog="$bridge_state_dir/models.json"
-tool_coverage="$bridge_state_dir/tool-coverage.json"
-provider_config="$bridge_state_dir/config.json"
-memory_database="$bridge_state_dir/memory.sqlite3"
+model_catalog="$mutable_bridge_state_dir/models.json"
+tool_coverage="$mutable_bridge_state_dir/tool-coverage.json"
+provider_config="$mutable_bridge_state_dir/config.json"
+memory_database="$mutable_bridge_state_dir/memory.sqlite3"
 enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
 mod_enabled() {
   case ",${enabled_mods}," in
@@ -52,8 +50,8 @@ if [[ ! -f "$embedded_bootstrap" ]]; then
   "$script_dir/install.sh" "$app"
 fi
 
-mkdir -p "$diagnostics_dir" "$bridge_state_dir"
-/bin/chmod 700 "$diagnostics_dir" "$bridge_state_dir"
+mkdir -p "$diagnostics_dir" "$mutable_bridge_state_dir"
+/bin/chmod 700 "$diagnostics_dir" "$mutable_bridge_state_dir"
 
 # Dia's native importer reads a Chromium-shaped source profile. Create a
 # scrubbed local source once, and offer the native flow on a fresh custom
@@ -67,94 +65,23 @@ if mod_enabled dia-import; then
     fi
   fi
   if [[ "$fresh_profile" == true && -f "$staged_dia_manifest" ]]; then
-    : > "$bridge_state_dir/open-dia-import"
-    /bin/chmod 600 "$bridge_state_dir/open-dia-import"
+    : > "$mutable_bridge_state_dir/open-dia-import"
+    /bin/chmod 600 "$mutable_bridge_state_dir/open-dia-import"
   fi
 fi
 
-# launchd cannot reliably read projects in macOS-protected Documents folders.
-# Deploy the runnable bridge into this app's private profile; retain local state.
-/usr/bin/rsync -a --delete \
-  --exclude .state \
-  --exclude node_modules \
-  "$bridge_source_dir/" "$bridge_dir/"
-
-lock_checksum="$(/usr/bin/shasum -a 256 "$bridge_source_dir/package-lock.json" | /usr/bin/awk '{print $1}')"
-installed_checksum="$(test -f "$bridge_lock_marker" && /bin/cat "$bridge_lock_marker" || true)"
-if [[ ! -d "$bridge_dir/node_modules/@openai/codex-sdk" || "$lock_checksum" != "$installed_checksum" ]]; then
-  npm_bin="${DIA_CUSTOM_NPM:-$(command -v npm || true)}"
-  if [[ -z "$npm_bin" ]]; then
-    print -u2 "Dia Custom needs npm to install its local bridge dependency."
-    exit 1
-  fi
-  (cd "$bridge_dir" && "$npm_bin" ci --omit=dev)
-  print -r -- "$lock_checksum" > "$bridge_lock_marker"
-  /bin/chmod 600 "$bridge_lock_marker"
+if [[ ! -x "$app/Contents/Helpers/DiaCustomNode" ||
+      ! -f "$bridge_dir/src/server.js" ]]; then
+  print -u2 "Dia Custom's self-contained runtime is missing. Run './dia-custom install'."
+  exit 1
 fi
-[[ ! -f "$bridge_lock_marker" ]] || /bin/chmod 600 "$bridge_lock_marker"
 
 [[ -e "$network_log" ]] || : > "$network_log"
 /bin/chmod 600 "$network_log"
 
-# Complete the local anonymous setup and explicitly select New Chat flags.
-if mod_enabled account-bypass; then
-  /usr/bin/defaults write local.rttm.dia onboardingForceCompleteFlowEnabled -bool false
-  /usr/bin/defaults write local.rttm.dia hasPresentedOnboardingIntro -bool true
-  /usr/bin/defaults write local.rttm.dia hasUserAuthenticated -bool true
-  /usr/bin/defaults write local.rttm.dia onboardingRemainingSteps -array
-fi
-/usr/bin/defaults write local.rttm.dia shouldAutomaticallyUpdate -bool false
-/usr/bin/defaults write local.rttm.dia automaticallyUpdateArc -bool false
-/usr/bin/defaults write local.rttm.dia shouldAutomaticallyUpdateArc -bool false
-/usr/bin/defaults write local.rttm.dia SUEnableAutomaticChecks -bool false
-/usr/bin/defaults write local.rttm.dia SUAutomaticallyUpdate -bool false
-/usr/bin/defaults write local.rttm.dia SUScheduledCheckInterval -int 0
-/usr/bin/defaults write local.rttm.dia canShowUpdateBanner -bool false
-feature_flags=( \
-  "clia-agents-chat-enabled=true" \
-  "force-classic-chat-enabled=false" \
-  "agent-thinking-ui-enabled=true" \
-  "clia-thinking-enabled=true" \
-  "tools-ui-revision-enabled=true" \
-  "fetch-web-content-enabled=true" \
-  "read-calendar-step-enabled=true" \
-  "search-email-step-enabled=true" \
-  "search-github-step-enabled=true" \
-  "search-notion-step-enabled=true" \
-  "search-slack-step-enabled=true" \
-  "search-slack-bylines-enabled=true" \
-  "clia-settings-toggle-always-visible-enabled=true" \
-  "auto-enable-clia-from-onboarding-enabled=true" \
-  "clia-in-app-upsell-enabled=true" \
-  "clia-report-enabled=true" \
-  "clia-artifact-in-chat-presentation-enabled=true" \
-  "clia-artifact-tab-preview-enabled=true" \
-  "external-qa-access-for-developer-menu-enabled=true" \
-  "enable-llm-debugger=true" \
-)
-if mod_enabled native-apps; then
-  feature_flags+=("apps-pref-pane-redesign-enabled=true")
-fi
-if mod_enabled morning-brief; then
-  feature_flags+=(
-    "clia-morning-brief-settings-enabled=true"
-    "clia-morning-brief-allow-gmail-gcal-enabled=true"
-    "clia-morning-brief-allow-msft-enabled=true"
-    "clia-morning-brief-connect-apps-enabled=true"
-    "clia-morning-brief-auto-focus-enabled=true"
-    "clia-morning-brief-open-links-enabled=true"
-    "clia-morning-brief-paper-window-enabled=true"
-    "clia-morning-brief-paper-expand-into-tab-enabled=true"
-    "context-builder-morning-brief-enabled=true"
-  )
-fi
-/usr/bin/defaults write local.rttm.dia transientFeatureFlagOverrides -array "${feature_flags[@]}"
+DIA_CUSTOM_PROFILE="$profile" "$script_dir/configure-profile.sh"
 
-node_bin="${DIA_CUSTOM_NODE:-$(command -v node || true)}"
-if [[ -z "$node_bin" ]]; then
-  print -u2 "Dia Custom needs Node.js to start its local AI bridge."
-  exit 1
-fi
+node_bin="$app/Contents/Helpers/DiaCustomNode"
 if ! "$node_bin" -e 'import("node:sqlite")' >/dev/null 2>&1; then
   print -u2 "Dia Custom needs Node.js 22.5 or newer for its local memory database."
   exit 1
@@ -170,11 +97,14 @@ bridge_environment=(
   "DIA_CUSTOM_CAPTURE_DIR=$diagnostics_dir/Captures"
   "DIA_CUSTOM_DEBUG_PORT=$debug_port"
   "DIA_CUSTOM_PROFILE=$profile"
+  "DIA_CUSTOM_STATE_DIR=$mutable_bridge_state_dir"
+  "DIA_CUSTOM_MODS_MANIFEST_PATH=$bridge_dir/config/dia-mods.json"
   "DIA_CUSTOM_CONFIG_PATH=$provider_config"
   "DIA_CUSTOM_MODEL_CATALOG_PATH=$model_catalog"
   "DIA_CUSTOM_TOOL_COVERAGE_PATH=$tool_coverage"
   "DIA_CUSTOM_MEMORY_PATH=$memory_database"
   "DIA_CUSTOM_MODS=$enabled_mods"
+  "DIA_CUSTOM_RUNTIME_ID=$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBridgeRuntimeID' "$app/Contents/Info.plist")"
 )
 if mod_enabled apple-models && [[ -x "$apple_model_helper" ]]; then
   bridge_environment+=("DIA_CUSTOM_APPLE_MODEL_HELPER=$apple_model_helper")

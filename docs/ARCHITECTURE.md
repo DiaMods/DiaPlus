@@ -150,3 +150,11 @@ Most patches locate unique strings, signatures, Swift metadata, or runtime view 
 `src/config/supported-dia-builds.json` is the update allowlist. **./dia-custom update** validates the official bundle and every enabled Dia Mod against it before creating a temporary clone. Only then does it apply and verify patches, sign the result, preserve the prior clone as a backup, and swap. Unknown or partially audited layouts leave the existing clone untouched. Native Sparkle checks remain disabled and point to an empty loopback feed, so an update cannot bypass this audit path.
 
 Bridge configuration, credentials, model choice, memory, connector data, sessions, and coverage live outside the app bundle and survive supported rebuilds.
+
+The executable bridge code, production dependencies, and a pinned official
+Node LTS runtime live inside the signed app bundle. The bootstrap supplies the
+canonical profile, sandbox, Sync-disable, update-disable, and Dia-host blocking
+arguments before Chromium initializes, then starts that bundled bridge when a
+healthy matching runtime is not already available. This makes an ordinary
+Finder launch equivalent to the development launcher without placing mutable
+state inside `/Applications`.

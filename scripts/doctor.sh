@@ -5,7 +5,7 @@ script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
-app="${DIA_CUSTOM_APP:-$work_dir/Dia Custom RTTM.app}"
+app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
 enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build)"
@@ -75,6 +75,10 @@ if [[ -d "$app" ]]; then
     pass "manual update checks are routed to the empty local appcast" || \
     fail "custom update feed is not local: $custom_update_feed"
   [[ -f "$app/Contents/Frameworks/DiaCustomBootstrap.dylib" ]] && pass "runtime bootstrap is embedded" || fail "runtime bootstrap is missing"
+  [[ -x "$app/Contents/Helpers/DiaCustomNode" &&
+     -f "$app/Contents/Resources/DiaCustomBridge/src/server.js" ]] && \
+    pass "double-click runtime is self-contained" || \
+    fail "self-contained bridge runtime is missing"
   if mod_enabled apple-models; then
     [[ -x "$app/Contents/Helpers/DiaCustomAppleModel" ]] && pass "Apple Foundation Models helper is embedded" || warn "Apple Foundation Models helper is unavailable"
   else
@@ -137,6 +141,15 @@ fi
 if bridge_health="$(/usr/bin/curl --silent --fail --max-time 1 http://127.0.0.1:8765/health 2>/dev/null)"; then
   selected_model="$(print -r -- "$bridge_health" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(JSON.parse(s).selectedModel||"unknown"))')"
   pass "local AI bridge is healthy ($selected_model)"
+  bridge_runtime="$(print -r -- "$bridge_health" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(JSON.parse(s).runtimeID||""))')"
+  bridge_profile="$(print -r -- "$bridge_health" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(JSON.parse(s).profileDirectory||""))')"
+  expected_runtime="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBridgeRuntimeID' "$app/Contents/Info.plist" 2>/dev/null)"
+  [[ -n "$expected_runtime" && "$bridge_runtime" == "$expected_runtime" ]] && \
+    pass "running bridge matches the signed app runtime" || \
+    fail "running bridge does not match the signed app runtime"
+  [[ "$bridge_profile" == "$profile" ]] && \
+    pass "browser and bridge share the canonical profile" || \
+    fail "bridge uses a different profile: $bridge_profile"
   if /usr/bin/curl --silent --fail --max-time 2 http://127.0.0.1:8765/api/models | \
       node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const v=JSON.parse(s);if(!Array.isArray(v.models)||v.models.length===0)process.exit(1)})'; then
     pass "provider model catalog is available"
@@ -148,18 +161,26 @@ else
 fi
 
 if running_command="$(/bin/ps -axo command= | /usr/bin/grep -F "$app/Contents/MacOS/Dia" | /usr/bin/grep -v grep | /usr/bin/head -1)" && [[ -n "$running_command" ]]; then
+  embedded_launch=false
+  if /usr/bin/grep -q 'self-contained-launch-policy-installed' \
+       "$profile/Diagnostics/runtime-classes.txt" 2>/dev/null && \
+     /bin/ps -axo command= | /usr/bin/grep -F "$app/Contents/Frameworks" | \
+       /usr/bin/grep -F -- "--user-data-dir=$profile/User Data" >/dev/null; then
+    embedded_launch=true
+  fi
   if [[ " $running_command " == *" --no-sandbox "* ]]; then
     warn "running browser predates sandbox hardening; restart Dia Custom"
   else
     pass "Chromium process sandbox is enabled"
   fi
-  if [[ "$running_command" == *host-resolver-rules=* &&
-        "$running_command" == *diabrowser.engineering* ]]; then
+  if [[ "$embedded_launch" == true ||
+        ("$running_command" == *host-resolver-rules=* &&
+         "$running_command" == *diabrowser.engineering*) ]]; then
     pass "Chromium navigation also blocks Dia-owned hostnames"
   else
     warn "running browser predates the Chromium Dia-host DNS block; restart Dia Custom"
   fi
-  [[ " $running_command " == *" --disable-sync "* ]] && \
+  [[ "$embedded_launch" == true || " $running_command " == *" --disable-sync "* ]] && \
     pass "official Dia Sync remains disabled" || \
     fail "running browser is missing the Sync disable flag"
 fi

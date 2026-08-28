@@ -5,7 +5,7 @@ script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
-clone_app="${DIA_CUSTOM_APP:-$work_dir/Dia Custom RTTM.app}"
+clone_app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 bundle_id="local.rttm.dia"
 replace=false
@@ -59,7 +59,9 @@ DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" \
   "$script_dir/install.sh" "$temporary_app"
 
 if [[ -e "$clone_app" ]]; then
-  backup_app="$work_dir/Dia Custom RTTM.pre-rebuild.$(/bin/date +%Y%m%d-%H%M%S).app"
+  backup_dir="$work_dir/backups/apps"
+  mkdir -p "$backup_dir"
+  backup_app="$backup_dir/Dia Custom RTTM.pre-rebuild.$(/bin/date +%Y%m%d-%H%M%S).app"
   /bin/mv "$clone_app" "$backup_app"
   print "Previous clone preserved at $backup_app"
 fi

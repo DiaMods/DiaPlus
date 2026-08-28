@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
-app="${1:-${DIA_CUSTOM_APP:-$work_dir/Dia Custom RTTM.app}}"
+app="${1:-${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 
 if [[ ! -d "$app" ]]; then
@@ -15,6 +15,10 @@ if /usr/bin/pgrep -f "$app/Contents/MacOS/Dia" >/dev/null; then
   print -u2 "Quit Dia Custom before updating its patched executables."
   exit 1
 fi
+
+# Retire the development launchd bridge. Installed builds carry their runtime
+# and start it directly from the signed app bundle.
+/bin/launchctl remove local.rttm.dia.bridge >/dev/null 2>&1 || true
 
 enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
 enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build)"
@@ -87,10 +91,15 @@ if mod_enabled apple-models; then
   fi
 fi
 
+"$script_dir/bundle-runtime.sh" "$app"
+
 /usr/libexec/PlistBuddy -c "Add :DiaCustomEnabledMods string '$enabled_mods'" "$info" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c "Set :DiaCustomEnabledMods '$enabled_mods'" "$info"
 /usr/libexec/PlistBuddy -c "Add :DiaCustomBuildMods string '$enabled_build_mods'" "$info" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c "Set :DiaCustomBuildMods '$enabled_build_mods'" "$info"
+
+# Configure Finder launches as well as explicit command-line launches.
+DIA_CUSTOM_PROFILE="$profile" "$script_dir/configure-profile.sh"
 
 # A certificate-backed designated requirement stays stable across rebuilds, so
 # macOS can retain the user's TCC and Keychain decisions.
@@ -106,6 +115,7 @@ codesign --force --deep --sign "$sign_identity" \
 codesign --verify --strict \
   "$app/Contents/Resources/agent-server-resources/dist/handler"
 codesign --verify --deep --strict "$app"
+"$app/Contents/Helpers/DiaCustomNode" -e 'import("node:sqlite")' >/dev/null
 
 if [[ "$sign_identity" == "-" ]]; then
   print "Installed Dia Custom with an ad-hoc signature in $app"

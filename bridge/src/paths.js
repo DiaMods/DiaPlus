@@ -4,13 +4,15 @@ import { fileURLToPath } from "node:url";
 const sourceDirectory = dirname(fileURLToPath(import.meta.url));
 
 export const bridgeDirectory = resolve(sourceDirectory, "..");
-export const stateDirectory = resolve(bridgeDirectory, ".state");
+export const stateDirectory = process.env.DIA_CUSTOM_STATE_DIR ??
+  resolve(bridgeDirectory, ".state");
 export const modsManifestPath = process.env.DIA_CUSTOM_MODS_MANIFEST_PATH ??
   resolve(bridgeDirectory, "config/dia-mods.json");
 export const modsStatePath = process.env.DIA_CUSTOM_MODS_STATE_PATH ??
   resolve(stateDirectory, "mods.json");
 export const legacyModulesStatePath = resolve(stateDirectory, "modules.json");
-export const toolCacheDirectory = resolve(bridgeDirectory, "tool-cache");
+export const toolCacheDirectory = process.env.DIA_CUSTOM_TOOL_CACHE_DIR ??
+  resolve(stateDirectory, "tool-cache");
 export const configPath = process.env.DIA_CUSTOM_CONFIG_PATH ??
   resolve(stateDirectory, "config.json");
 export const modelCatalogPath = process.env.DIA_CUSTOM_MODEL_CATALOG_PATH ??
