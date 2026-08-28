@@ -833,18 +833,32 @@ static BOOL dia_custom_model_popup_needs_refresh(NSPopUpButton *popup) {
     if ([validModels count] == 0) {
         return [popup numberOfItems] != 1 || [popup isEnabled];
     }
-    if ([popup numberOfItems] != [validModels count]) {
-        return YES;
-    }
-    for (NSUInteger index = 0; index < [validModels count]; ++index) {
-        NSDictionary *model = validModels[index];
-        NSMenuItem *item = [popup itemAtIndex:index];
+    NSUInteger itemIndex = 0;
+    NSString *lastProvider = nil;
+    for (NSDictionary *model in validModels) {
+        NSString *provider = [model[@"providerLabel"] isKindOfClass:[NSString class]]
+            ? model[@"providerLabel"] : @"Models";
+        if (lastProvider != nil && ![provider isEqualToString:lastProvider]) {
+            if (itemIndex >= [popup numberOfItems] ||
+                ![[popup itemAtIndex:itemIndex] isSeparatorItem]) {
+                return YES;
+            }
+            ++itemIndex;
+        }
+        if (itemIndex >= [popup numberOfItems]) {
+            return YES;
+        }
+        NSMenuItem *item = [popup itemAtIndex:itemIndex++];
         BOOL available = ![model[@"available"] respondsToSelector:@selector(boolValue)] ||
             [model[@"available"] boolValue];
         if (![[item representedObject] isEqual:model[@"key"]] ||
             [item isEnabled] != available) {
             return YES;
         }
+        lastProvider = provider;
+    }
+    if (itemIndex != [popup numberOfItems]) {
+        return YES;
     }
     return selected != nil &&
         ![[[popup selectedItem] representedObject] isEqual:selected];
@@ -913,12 +927,19 @@ static void dia_custom_populate_model_popup(NSPopUpButton *popup) {
     }
     [popup setEnabled:YES];
     NSDictionary *selectedModel = nil;
+    NSString *lastProvider = nil;
     for (NSDictionary *model in models) {
         NSString *key = [model[@"key"] isKindOfClass:[NSString class]]
             ? model[@"key"] : nil;
         if (key == nil) {
             continue;
         }
+        NSString *provider = [model[@"providerLabel"] isKindOfClass:[NSString class]]
+            ? model[@"providerLabel"] : @"Models";
+        if (lastProvider != nil && ![provider isEqualToString:lastProvider]) {
+            [[popup menu] addItem:[NSMenuItem separatorItem]];
+        }
+        lastProvider = provider;
         [popup addItemWithTitle:dia_custom_model_title(model)];
         NSMenuItem *item = [popup lastItem];
         [item setRepresentedObject:key];
