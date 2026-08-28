@@ -339,6 +339,33 @@ public func diaCustomSwiftNativeAppsSelectedProfileID(
     return strdup(profileID)
 }
 
+@_cdecl("dia_custom_swift_native_apps_morning_brief_state")
+@MainActor
+public func diaCustomSwiftNativeAppsMorningBriefState(
+    _ rawObject: UnsafeRawPointer?
+) -> Int32 {
+    guard let rawObject else { return -1 }
+    let object = Unmanaged<AnyObject>.fromOpaque(rawObject).takeUnretainedValue()
+    var preference = Mirror(reflecting: object).children
+        .first(where: { $0.label == "morningBriefPreference" })?.value
+    if preference == nil,
+       let subject = Mirror(reflecting: object).children
+        .first(where: { $0.label == "stateSubject" })?.value {
+        let state = Mirror(reflecting: subject).children
+            .first(where: { $0.label == "currentValue" })?.value
+        if let state {
+            preference = Mirror(reflecting: state).children
+                .first(where: { $0.label == "morningBriefPreference" })?.value
+        }
+    }
+    guard let preference else { return -1 }
+    let description = String(describing: preference).lowercased()
+    if description == "daily" || description.hasSuffix(".daily)") { return 1 }
+    if description == "never" || description.hasSuffix(".never)") ||
+        description == "nil" { return 0 }
+    return -1
+}
+
 private func nativeConnectorID(displayName: String, fallback: String? = nil) -> String {
     let known: [String: String] = [
         "google calendar": "google-calendar",

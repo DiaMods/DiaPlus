@@ -43,6 +43,17 @@ trap - EXIT
 print "ok    Dia Mods are independently gated and required safety mods fail closed"
 zsh -n "$project_dir/dia-custom" "$project_dir"/scripts/*.sh
 "$script_dir/build-bootstrap.sh" "$source_app" >/dev/null
+if ! /usr/bin/grep -q 'onEnableMorningBriefTapped' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c"; then
+  print -u2 "native Morning Brief confirmation action is not wired"
+  exit 1
+fi
+if /usr/bin/grep -q 'Enabling the Morning Brief for %@' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c"; then
+  print -u2 "Morning Brief confirmation was replaced by custom UI"
+  exit 1
+fi
+print "ok    Morning Brief switching preserves Dia's native confirmation UI"
 
 if "$script_dir/build-apple-model-helper.sh" >/dev/null; then
   print "ok    Apple Foundation Models helper builds"

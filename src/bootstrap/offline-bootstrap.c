@@ -19,6 +19,8 @@ extern char *dia_custom_swift_native_apps_connections_json(
     const void *viewModel);
 extern char *dia_custom_swift_native_apps_selected_profile_id(
     const void *viewModel);
+extern int32_t dia_custom_swift_native_apps_morning_brief_state(
+    const void *object);
 extern BOOL dia_custom_swift_invoke_native_apps_enable(const void *view);
 extern void *dia_custom_call_prompt_tools_allocating_init(
     const void *initializer,
@@ -1205,6 +1207,31 @@ static BOOL dia_custom_local_apps_compatible = YES;
 static NSString *dia_custom_native_apps_selected_profile_id;
 static NSString *dia_custom_native_apps_connections_snapshot;
 static BOOL dia_custom_native_apps_connections_request_in_flight = NO;
+static IMP dia_custom_native_enable_morning_action;
+static NSString *dia_custom_pending_morning_brief_profile_id;
+static NSView *dia_custom_pending_morning_brief_apps_view;
+static NSUInteger dia_custom_pending_morning_brief_generation = 0;
+
+static void dia_custom_clear_pending_morning_brief_confirmation(void) {
+    [dia_custom_pending_morning_brief_profile_id release];
+    dia_custom_pending_morning_brief_profile_id = nil;
+    [dia_custom_pending_morning_brief_apps_view release];
+    dia_custom_pending_morning_brief_apps_view = nil;
+    dia_custom_pending_morning_brief_generation += 1;
+}
+
+static int32_t dia_custom_pending_morning_brief_native_state(void) {
+    NSView *appsView = dia_custom_pending_morning_brief_apps_view;
+    if (appsView == nil) return -1;
+    id viewModel = dia_custom_object_ivar(appsView, "viewModel");
+    int32_t state = viewModel != nil
+        ? dia_custom_swift_native_apps_morning_brief_state(
+            (__bridge const void *)viewModel)
+        : -1;
+    return state >= 0 ? state
+        : dia_custom_swift_native_apps_morning_brief_state(
+            (__bridge const void *)appsView);
+}
 
 static NSString *dia_custom_current_profile_id(void) {
     const char *rawProfile = getenv("DIA_CUSTOM_PROFILE");
@@ -1218,23 +1245,6 @@ static NSString *dia_custom_current_profile_id(void) {
     NSString *lastUsed = [root[@"profile"][@"last_used"]
         isKindOfClass:[NSString class]] ? root[@"profile"][@"last_used"] : nil;
     return lastUsed.length > 0 ? lastUsed : @"Default";
-}
-
-static NSString *dia_custom_profile_display_name(NSString *profileID) {
-    const char *rawProfile = getenv("DIA_CUSTOM_PROFILE");
-    if (profileID.length == 0 || rawProfile == NULL || rawProfile[0] == '\0') {
-        return profileID ?: @"Profile";
-    }
-    NSString *base = [NSString stringWithUTF8String:rawProfile];
-    NSString *path = [base stringByAppendingPathComponent:@"User Data/Local State"];
-    NSData *data = [NSData dataWithContentsOfFile:path];
-    NSDictionary *root = data != nil
-        ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
-        : nil;
-    NSString *name = [root[@"profile"][@"info_cache"][profileID][@"name"]
-        isKindOfClass:[NSString class]]
-        ? root[@"profile"][@"info_cache"][profileID][@"name"] : nil;
-    return name.length > 0 ? name : profileID;
 }
 
 static NSString *dia_custom_native_apps_profile_id(id viewModel) {
@@ -1404,6 +1414,15 @@ static BOOL dia_custom_is_morning_action_button(NSButton *button) {
          [lower hasPrefix:@"disable for"]);
 }
 
+static NSView *dia_custom_apps_view_for_descendant(NSView *view) {
+    for (NSView *candidate = view; candidate != nil;
+         candidate = candidate.superview) {
+        if ([NSStringFromClass(candidate.class)
+                containsString:@"AppsPreferencePaneView"]) return candidate;
+    }
+    return nil;
+}
+
 static void dia_custom_configure_native_apps_descendants(NSView *view, id target) {
     if ([view isKindOfClass:[NSButton class]]) {
         NSButton *button = (NSButton *)view;
@@ -1486,6 +1505,14 @@ static BOOL dia_custom_apply_native_apps_state_in_view(NSView *view, id target) 
             nativeProfileID);
         NSString *profileID = nativeProfileID.length > 0
             ? nativeProfileID : dia_custom_selected_apps_profile_id();
+        if (profileChanged &&
+            dia_custom_pending_morning_brief_profile_id.length > 0 &&
+            ![dia_custom_pending_morning_brief_profile_id
+                isEqualToString:profileID]) {
+            dia_custom_clear_pending_morning_brief_confirmation();
+            dia_custom_log_status(
+                @"native-apps-morning-confirmation-cancelled-profile-change");
+        }
         NSDictionary *profileState = dia_custom_local_apps_state_for_profile(
             profileID);
         if (profileState != nil && profileState != dia_custom_local_apps_state) {
@@ -1512,20 +1539,30 @@ static BOOL dia_custom_apply_native_apps_state_in_view(NSView *view, id target) 
             }
             if (viewModel != nil) {
                 dia_custom_sync_native_apps_connections(viewModel, profileID);
-                if (!dia_custom_swift_set_native_apps_enabled(
-                    (__bridge const void *)viewModel,
-                    [brief[@"enabled"] boolValue])) {
+                BOOL awaitingNativeChoice =
+                    dia_custom_pending_morning_brief_profile_id.length > 0 &&
+                    [dia_custom_pending_morning_brief_profile_id
+                        isEqualToString:profileID];
+                if (!awaitingNativeChoice &&
+                    !dia_custom_swift_set_native_apps_enabled(
+                        (__bridge const void *)viewModel,
+                        [brief[@"enabled"] boolValue])) {
                     dia_custom_local_apps_compatible = NO;
                     dia_custom_log_status(@"native-apps-disabled-incompatible-view-model-state");
                     return YES;
                 }
             }
+            BOOL awaitingNativeChoice =
+                dia_custom_pending_morning_brief_profile_id.length > 0 &&
+                [dia_custom_pending_morning_brief_profile_id
+                    isEqualToString:profileID];
             BOOL applied =
                 dia_custom_set_bool_ivar(view, "isRedesignEnabled", YES) &&
                 dia_custom_set_bool_ivar(view, "isCliaActivated",
                     [advanced[@"enabled"] boolValue]) &&
-                dia_custom_set_bool_ivar(view, "morningBriefPreference",
-                    ![brief[@"enabled"] boolValue]) &&
+                (awaitingNativeChoice ||
+                 dia_custom_set_bool_ivar(view, "morningBriefPreference",
+                    ![brief[@"enabled"] boolValue])) &&
                 dia_custom_set_bool_ivar(view, "isMorningBriefSubscriptionEligible",
                     [brief[@"eligible"] boolValue]);
             if (!applied) {
@@ -2083,6 +2120,9 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 - (void)setLocalMorningBriefEnabled:(BOOL)enabled
                           profileID:(NSString *)profileID
                              sender:(id)sender;
+- (void)resolveNativeMorningBriefConfirmation:(BOOL)definitive;
+- (void)nativeMorningBriefSheetDidEnd:(NSNotification *)notification;
+- (void)pollNativeMorningBriefConfirmation:(NSDictionary *)context;
 - (void)checkLocalMorningBriefSchedule;
 - (void)openModelSettings:(id)sender;
 - (void)showDiaMods:(id)sender;
@@ -2257,36 +2297,29 @@ static void dia_custom_schedule_model_picker_attempts(id target,
         isKindOfClass:[NSString class]] ? brief[@"enabledProfileID"] : nil;
     if (!enabled && enabledProfileID.length > 0 &&
         ![enabledProfileID isEqualToString:profileID]) {
-        NSString *requestedProfileID = [profileID copy];
-        NSString *requestedName = dia_custom_profile_display_name(profileID);
-        NSString *enabledName = dia_custom_profile_display_name(enabledProfileID);
-        NSAlert *alert = [[[NSAlert alloc] init] autorelease];
-        alert.messageText = [NSString stringWithFormat:
-            @"Enabling the Morning Brief for %@ will remove Morning Brief for %@",
-            requestedName, enabledName];
-        alert.informativeText =
-            @"The Morning Brief can only be enabled for one profile at a time.";
-        [alert addButtonWithTitle:[NSString stringWithFormat:
-            @"Enable for %@", requestedName]];
-        [alert addButtonWithTitle:@"Cancel"];
-        NSWindow *window = [sender isKindOfClass:[NSView class]]
-            ? [(NSView *)sender window] : NSApp.keyWindow;
-        DiaCustomDeveloperMenuController *controller = self;
-        [alert beginSheetModalForWindow:window
-                      completionHandler:^(NSModalResponse response) {
-            if (response == NSAlertFirstButtonReturn) {
-                [controller setLocalMorningBriefEnabled:YES
-                                               profileID:requestedProfileID
-                                                  sender:nil];
-                dia_custom_log_status(
-                    @"native-apps-morning-confirmation-accepted");
-            } else {
-                dia_custom_log_status(
-                    @"native-apps-morning-confirmation-cancelled");
-            }
-        }];
-        [requestedProfileID release];
+        NSView *appsView = [sender isKindOfClass:[NSView class]]
+            ? dia_custom_apps_view_for_descendant(sender) : nil;
+        if (appsView == nil || dia_custom_native_enable_morning_action == NULL) {
+            dia_custom_log_status(@"native-apps-morning-confirmation-unavailable");
+            NSBeep();
+            return;
+        }
+        dia_custom_clear_pending_morning_brief_confirmation();
+        dia_custom_pending_morning_brief_profile_id = [profileID copy];
+        dia_custom_pending_morning_brief_apps_view = [appsView retain];
+        NSUInteger generation = dia_custom_pending_morning_brief_generation;
+        SEL nativeSelector = sel_registerName("onEnableMorningBriefTapped");
+        ((void (*)(id, SEL))dia_custom_native_enable_morning_action)(
+            appsView, nativeSelector);
         dia_custom_log_status(@"native-apps-morning-confirmation-presented");
+        NSDictionary *context = @{
+            @"generation": @(generation),
+            @"attempt": @0,
+        };
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
+                       dispatch_get_main_queue(), ^{
+            [self pollNativeMorningBriefConfirmation:context];
+        });
         return;
     }
     [self setLocalMorningBriefEnabled:!enabled
@@ -2351,6 +2384,60 @@ static void dia_custom_schedule_model_picker_attempts(id target,
             });
         }] resume];
     [requestedProfileID release];
+}
+
+- (void)resolveNativeMorningBriefConfirmation:(BOOL)definitive {
+    if (dia_custom_pending_morning_brief_profile_id.length == 0) return;
+    int32_t nativeState = dia_custom_pending_morning_brief_native_state();
+    // A disabled native preference is also the pre-confirmation state. Only a
+    // positive native choice may resolve early; dismissal makes Cancel final.
+    if (!definitive && nativeState != 1) return;
+    BOOL accepted = nativeState == 1;
+    NSString *profileID = [dia_custom_pending_morning_brief_profile_id copy];
+    dia_custom_clear_pending_morning_brief_confirmation();
+    if (accepted) {
+        [self setLocalMorningBriefEnabled:YES profileID:profileID sender:nil];
+        dia_custom_log_status(@"native-apps-morning-confirmation-accepted");
+    } else {
+        dia_custom_log_status(@"native-apps-morning-confirmation-cancelled");
+        dia_custom_fetch_native_apps_state(self, YES);
+    }
+    [profileID release];
+}
+
+- (void)nativeMorningBriefSheetDidEnd:(NSNotification *)notification {
+    (void)notification;
+    if (dia_custom_pending_morning_brief_profile_id.length == 0) return;
+    NSUInteger generation = dia_custom_pending_morning_brief_generation;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 150 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        if (generation == dia_custom_pending_morning_brief_generation) {
+            [self resolveNativeMorningBriefConfirmation:YES];
+        }
+    });
+}
+
+- (void)pollNativeMorningBriefConfirmation:(NSDictionary *)context {
+    NSUInteger generation = [context[@"generation"] unsignedIntegerValue];
+    NSUInteger attempt = [context[@"attempt"] unsignedIntegerValue];
+    if (generation != dia_custom_pending_morning_brief_generation ||
+        dia_custom_pending_morning_brief_profile_id.length == 0) return;
+    if (dia_custom_pending_morning_brief_native_state() == 1) {
+        [self resolveNativeMorningBriefConfirmation:NO];
+        return;
+    }
+    if (attempt >= 1200) {
+        [self resolveNativeMorningBriefConfirmation:YES];
+        return;
+    }
+    NSDictionary *next = @{
+        @"generation": @(generation),
+        @"attempt": @(attempt + 1),
+    };
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        [self pollNativeMorningBriefConfirmation:next];
+    });
 }
 
 - (void)checkLocalMorningBriefSchedule {
@@ -2725,6 +2812,9 @@ static void dia_custom_install_native_apps_action_hooks(void) {
             dia_custom_log_status(@"native-apps-disabled-missing-action");
             return;
         }
+        if (index == 1) {
+            dia_custom_native_enable_morning_action = method_getImplementation(method);
+        }
     }
     dia_custom_native_apps_actions_installed = YES;
     dia_custom_log_status(@"native-apps-actions-redirected");
@@ -2866,6 +2956,11 @@ static void dia_custom_install_developer_menu(void) {
             addObserver:dia_custom_developer_menu_controller
                selector:@selector(windowDidUpdate:)
                    name:NSWindowDidUpdateNotification
+                 object:nil];
+        [[NSNotificationCenter defaultCenter]
+            addObserver:dia_custom_developer_menu_controller
+               selector:@selector(nativeMorningBriefSheetDidEnd:)
+                   name:NSWindowDidEndSheetNotification
                  object:nil];
         dia_custom_log_status(@"developer-menu-installed");
 
