@@ -115,6 +115,53 @@ test("Report upload restores Report Kit's native shell after a fragment-only rev
     "<html>ordinary artifact</html>");
 });
 
+test("Report upload rejects unresolved image examples and uninitialized canvases", async () => {
+  const { profile, root } = await fixture();
+  await writeFile(resolve(root, "index.html"), `
+    <!-- report-kit -->
+    <html><head><link rel="stylesheet" href="style.css"></head><body>
+      <img src="IMAGE_URL" alt="Example copied from Report Kit">
+      <canvas id="chart-1"></canvas>
+    </body></html>
+  `);
+  const authorization = await authorizeArtifactUpload({
+    name: "mcp__dia-tools__upload_artifact",
+    input: { site_root: root, relative_path: "index.html" },
+  }, profile, {
+    contextID,
+    requireContext: true,
+    lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+  });
+  assert.equal(authorization.allowed, false);
+  assert.match(authorization.reason, /unfinished visuals/);
+  assert.match(authorization.reason, /IMAGE_URL/);
+  assert.match(authorization.reason, /canvas visual/);
+});
+
+test("Report upload accepts bundled images, initialized charts, and inline SVG diagrams", async () => {
+  const { profile, root } = await fixture();
+  await mkdir(resolve(root, "assets"));
+  await writeFile(resolve(root, "assets/diagram.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+  await writeFile(resolve(root, "index.html"), `
+    <!-- report-kit -->
+    <html><head><link rel="stylesheet" href="style.css"></head><body>
+      <img src="assets/diagram.svg" alt="Bundled diagram">
+      <svg viewBox="0 0 100 100" role="img"><title>Inline diagram</title></svg>
+      <canvas id="chart-1"></canvas>
+      <script>new Chart(document.getElementById("chart-1"), { type: "bar", data: {} });</script>
+    </body></html>
+  `);
+  const authorization = await authorizeArtifactUpload({
+    name: "mcp__dia-tools__upload_artifact",
+    input: { site_root: root, relative_path: "index.html" },
+  }, profile, {
+    contextID,
+    requireContext: true,
+    lookupImplementation: async () => [{ address: "93.184.216.34", family: 4 }],
+  });
+  assert.equal(authorization.allowed, true);
+});
+
 test("Report upload must match the native request's current agent context", async () => {
   const { profile, root } = await fixture();
   const payload = {

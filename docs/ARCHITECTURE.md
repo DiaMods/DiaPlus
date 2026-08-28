@@ -103,6 +103,8 @@ Before that patched branch is reachable, the bridge independently requires:
 
 Dia's native Report Kit defines a blank/root `relative_path` as the site's `index.html`; the bridge canonicalizes that value before the path checks. Before ingestion, a Report Kit-marked body fragment is reconstructed as a complete HTML document with Dia's required UTF-8/viewport metadata and `style.css` link. Its exact approved `artifactcdn.diabrowser.engineering` Chart.js reference is never requested: the bridge copies a pinned Chart.js bundle into `.dia-custom-libs/` and rewrites the artifact to that relative file before scanning outbound URLs. All other Dia-owned artifact URLs remain blocked.
 
+The same preflight verifies that Report visuals are durable before native ingestion. Image and SVG-image references must be real public HTTP(S)/data sources or regular files contained in the Report folder; example sentinels such as `IMAGE_URL`, blob URLs, escaped paths, and missing assets fail closed. Canvas visuals require inline drawing or Chart initialization, including a reference to each named canvas. Provider policy prefers an accessible inline SVG when no real image asset exists.
+
 The bridge then emits Dia's proprietary `tool_safety_check_result` with the same tool-use ID and approved outbound URL list. Dia's native permission controller is notified, while the patched handler resolves the unavailable proprietary Watchtower decision locally.
 
 ## Network boundary

@@ -69,6 +69,9 @@ export function normalizeReportKitHTML(input) {
       .replace(/<\/?body\b[^>]*>/ig, "")
       .trim();
   }
+  if (!reportKitMarker.test(body)) {
+    body = `<!-- report-kit -->\n${body}`;
+  }
   return [
     "<!DOCTYPE html>",
     '<html lang="en">',
@@ -233,6 +236,79 @@ async function normalizeReportKitDocument(root) {
   return true;
 }
 
+function tagAttribute(tag, name) {
+  const match = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i")
+    .exec(tag);
+  return match ? (match[1] ?? match[2] ?? match[3] ?? "").trim() : null;
+}
+
+async function assertReportVisualsResolve(root) {
+  const indexPath = resolve(root, "index.html");
+  const contents = await readFile(indexPath);
+  if (contents.includes(0)) return;
+  const html = contents.toString("utf8");
+  if (!reportKitMarker.test(html)) return;
+
+  const issues = [];
+  const visualTags = [
+    ...html.matchAll(/<img\b[^>]*>/gi),
+    ...html.matchAll(/<image\b[^>]*>/gi),
+  ].map((match) => match[0]);
+  for (const tag of visualTags) {
+    const attribute = /^<image\b/i.test(tag) ? "href" : "src";
+    const reference = tagAttribute(tag, attribute) ??
+      (/^<image\b/i.test(tag) ? tagAttribute(tag, "xlink:href") : null);
+    if (!reference) {
+      issues.push(`${tag.slice(0, 20)} is missing ${attribute}`);
+      continue;
+    }
+    if (/^(?:https?:|data:image\/)/i.test(reference) ||
+        (/^<image\b/i.test(tag) && reference.startsWith("#"))) continue;
+    if (/^(?:blob:|javascript:)/i.test(reference)) {
+      issues.push(`${attribute} ${JSON.stringify(reference)} cannot be preserved in a Report`);
+      continue;
+    }
+    let localPath;
+    try {
+      const relativeReference = decodeURIComponent(reference.split(/[?#]/, 1)[0]);
+      localPath = resolve(dirname(indexPath), relativeReference);
+    } catch {
+      issues.push(`${attribute} ${JSON.stringify(reference)} is not a valid asset path`);
+      continue;
+    }
+    if (!isInside(root, localPath)) {
+      issues.push(`${attribute} ${JSON.stringify(reference)} escapes the Report folder`);
+      continue;
+    }
+    try {
+      const asset = await lstat(localPath);
+      if (!asset.isFile() || asset.isSymbolicLink()) throw new Error("not a regular file");
+    } catch {
+      issues.push(`${attribute} ${JSON.stringify(reference)} does not name a bundled asset`);
+    }
+  }
+
+  const canvases = [...html.matchAll(/<canvas\b[^>]*>/gi)].map((match) => match[0]);
+  if (canvases.length > 0) {
+    const inlineScripts = [...html.matchAll(/<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script\s*>/gi)]
+      .map((match) => match[1]).join("\n");
+    if (!/(?:new\s+Chart\s*\(|\.getContext\s*\()/i.test(inlineScripts)) {
+      issues.push("canvas visual has no inline Chart or drawing initialization");
+    } else {
+      for (const canvas of canvases) {
+        const id = tagAttribute(canvas, "id");
+        if (id && !inlineScripts.includes(id)) {
+          issues.push(`canvas ${JSON.stringify(id)} is not referenced by its initialization script`);
+        }
+      }
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Report contains unfinished visuals: ${issues.slice(0, 4).join("; ")}`);
+  }
+}
+
 export async function authorizeArtifactUpload(
   toolCall,
   profileDirectory,
@@ -284,6 +360,7 @@ export async function authorizeArtifactUpload(
     }
     await normalizeReportKitDocument(realRoot);
     await localizeKnownArtifactLibraries(realRoot);
+    await assertReportVisualsResolve(realRoot);
     const tree = await inspectArtifactTree(realRoot);
     const outbound = await inspectArtifactOutboundURLs(realRoot, { lookupImplementation });
     if (outbound.blocked.length > 0) {

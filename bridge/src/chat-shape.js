@@ -549,6 +549,7 @@ export function withReportWorkflowPolicy(payload, state, attempt = 0) {
     ? `Return the next exact tool call now. ${state.revision ? "Revise the existing Report using the Read result, then call Write to replace the same index.html with the complete updated document. " : "Research with an available tool if needed; otherwise call Write to create a complete index.html "}` +
       `${state.reportFilePath ? `with file_path exactly ${JSON.stringify(state.reportFilePath)}` : "under the current context's work/artifacts directory"}. ` +
       "Write the complete document, not a body fragment: preserve <!DOCTYPE html>, html, head, body, UTF-8 and viewport metadata, and <link rel=\"stylesheet\" href=\"style.css\">. " +
+      "Do not copy example placeholders such as IMAGE_URL, AVATAR_URL, or empty canvas elements. Every img must use a real public HTTPS URL or a real bundled relative file. When a diagram has no real image asset, create a complete accessible inline SVG instead. Every canvas must have an inline script after it that initializes its Chart or drawing. " +
       "Do not call upload_artifact yet: Dia Custom will reject upload until Write succeeds."
     : state.stage === "upload_report"
       ? `Call the available upload_artifact tool now with ${JSON.stringify(state.uploadInput)}.`
