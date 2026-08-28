@@ -19,6 +19,7 @@ import {
 
 const reportTools = [
   { name: "Skill", source: "native", input_schema: { type: "object", properties: {} } },
+  { name: "Read", source: "native", input_schema: { type: "object", properties: {} } },
   { name: "Write", source: "native", input_schema: { type: "object", properties: {} } },
   {
     name: "mcp__dia-tools__upload_artifact",
@@ -300,6 +301,121 @@ test("tracks the native Report workflow through skills, Write, upload failure, a
     {
       role: "user",
       content: [{ type: "tool_result", tool_use_id: "upload-2", content: '{"result":"report-123"}' }],
+    },
+  );
+  assert.equal(reportWorkflowState(payload).stage, "complete");
+});
+
+test("reopens a completed Report for a follow-up revision and re-uploads the same artifact", () => {
+  const reportPath = "/tmp/context/work/artifacts/partnership-report/index.html";
+  const payload = {
+    messages: [
+      {
+        role: "user",
+        content: "<user-message>Make a report about a partnership</user-message>",
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "skill-a", name: "Skill", input: { skill: "artifact-generation" } },
+          { type: "tool_use", id: "skill-r", name: "Skill", input: { skill: "report-kit" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "skill-a", content: "Launching skill" },
+          { type: "tool_result", tool_use_id: "skill-r", content: "Launching skill" },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{
+          type: "tool_use",
+          id: "write-original",
+          name: "Write",
+          input: { file_path: reportPath, content: "<!doctype html><html></html>" },
+        }],
+      },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "write-original", content: "File created" }],
+      },
+      {
+        role: "assistant",
+        content: [{
+          type: "tool_use",
+          id: "upload-original",
+          name: "mcp__dia-tools__upload_artifact",
+          input: { site_root: "/tmp/context/work/artifacts/partnership-report", relative_path: "index.html" },
+        }],
+      },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "upload-original", content: '{"result":"report-123"}' }],
+      },
+      {
+        role: "user",
+        content: "<user-message>more history</user-message>",
+      },
+    ],
+  };
+
+  let state = reportWorkflowState(payload);
+  assert.equal(state.revision, true);
+  assert.equal(state.stage, "read_report");
+  assert.equal(state.reportFilePath, reportPath);
+  assert.equal(reportWorkflowRequiresTool(payload, reportTools), true);
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{ type: "tool_use", id: "read-revision", name: "Read", input: { file_path: reportPath } }],
+    },
+    {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "read-revision", content: "<!doctype html><html></html>" }],
+    },
+  );
+  state = reportWorkflowState(payload);
+  assert.equal(state.stage, "create_report");
+  assert.match(JSON.stringify(withReportWorkflowPolicy(payload, state)), /Revise the existing Report/);
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "write-revision",
+        name: "Write",
+        input: { file_path: reportPath, content: "<!doctype html><html>history</html>" },
+      }],
+    },
+    {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "write-revision", content: "File updated" }],
+    },
+  );
+  state = reportWorkflowState(payload);
+  assert.equal(state.stage, "upload_report");
+  assert.deepEqual(state.uploadInput, {
+    site_root: "/tmp/context/work/artifacts/partnership-report",
+    relative_path: "index.html",
+  });
+
+  payload.messages.push(
+    {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "upload-revision",
+        name: "mcp__dia-tools__upload_artifact",
+        input: state.uploadInput,
+      }],
+    },
+    {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: "upload-revision", content: '{"result":"report-123"}' }],
     },
   );
   assert.equal(reportWorkflowState(payload).stage, "complete");

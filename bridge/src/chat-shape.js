@@ -243,6 +243,17 @@ function continuesReportRequest(text) {
   return /^(?:please\s+)?(?:go ahead|continue|proceed|retry|try again|do it|yes|yeah|yep|finish(?: it)?|complete(?: it)?|keep going)\b/i.test(text.trim());
 }
 
+function requestsReportRevision(text) {
+  const value = text?.trim() ?? "";
+  if (!value) return false;
+  return (
+    /^(?:please\s+)?(?:add|include|insert|expand|extend|update|revise|edit|change|replace|remove|delete|fix|rewrite|redo|shorten|condense|lengthen)\b/i.test(value) ||
+    /^(?:please\s+)?(?:more|less)\b/i.test(value) ||
+    /^(?:please\s+)?make\s+(?:it|this|the\s+(?:report|brief|memo))\b/i.test(value) ||
+    /\b(?:add|include|insert|expand|extend|update|revise|edit|change|replace|remove|delete|fix|rewrite|redo)\b[\s\S]{0,100}\b(?:report|brief|memo|artifact|section|page|history|detail|context|content|design|style)\b/i.test(value)
+  );
+}
+
 function isUploadTool(name) {
   return name === "upload_artifact" || name?.endsWith("__upload_artifact");
 }
@@ -316,38 +327,41 @@ export function reportWorkflowState(payload) {
     }
   }
 
-  let reportRequest = null;
+  let originalReportRequest = null;
   for (const request of humanRequests) {
-    if (requestsReport(request.text)) reportRequest = request;
+    if (requestsReport(request.text)) originalReportRequest = request;
   }
   let modelInitiated = false;
-  if (!reportRequest) {
+  if (!originalReportRequest) {
     const committedReportCall = [...callsByID.values()].findLast((call) => {
       const result = resultsByID.get(call.id);
       return call.name === "Skill" && call.input?.skill === "report-kit" &&
         result && !result.failed;
     });
     if (committedReportCall) {
-      reportRequest = humanRequests.findLast(({ index }) =>
+      originalReportRequest = humanRequests.findLast(({ index }) =>
         index < committedReportCall.messageIndex) ?? null;
-      modelInitiated = reportRequest !== null;
+      modelInitiated = originalReportRequest !== null;
     }
   }
-  if (!reportRequest) return { active: false, stage: "inactive" };
-
-  const laterRequests = humanRequests.filter(({ index }) => index > reportRequest.index);
-  if (laterRequests.some(({ text }) => !continuesReportRequest(text))) {
-    return { active: false, stage: "inactive" };
-  }
+  if (!originalReportRequest) return { active: false, stage: "inactive" };
 
   const skills = new Set();
+  const successfulReads = [];
   const successfulWrites = [];
   const uploads = [];
   for (const call of callsByID.values()) {
-    if (call.messageIndex <= reportRequest.index) continue;
+    if (call.messageIndex <= originalReportRequest.index) continue;
     const result = resultsByID.get(call.id);
     if (call.name === "Skill" && typeof call.input?.skill === "string" && result && !result.failed) {
       skills.add(call.input.skill);
+    }
+    if (call.name === "Read" && result && !result.failed &&
+        isSuccessfulReportIndexPath(call.input?.file_path)) {
+      successfulReads.push({
+        filePath: call.input.file_path,
+        messageIndex: result.messageIndex,
+      });
     }
     if (call.name === "Write" && result && !result.failed &&
         isSuccessfulReportIndexPath(call.input?.file_path)) {
@@ -366,28 +380,76 @@ export function reportWorkflowState(payload) {
     }
   }
 
+  const latestSuccessfulUpload = uploads.filter((upload) => !upload.failed).at(-1);
+  let reportRequest = originalReportRequest;
+  let revision = false;
+  let priorReportFile = null;
+
+  if (latestSuccessfulUpload) {
+    const requestsAfterUpload = humanRequests.filter(({ index }) =>
+      index > latestSuccessfulUpload.messageIndex);
+    const revisionRequest = requestsAfterUpload.findLast(({ text }) =>
+      requestsReportRevision(text));
+    if (!revisionRequest) {
+      return requestsAfterUpload.length === 0
+        ? { active: false, completed: true, stage: "complete" }
+        : { active: false, stage: "inactive" };
+    }
+    const requestsAfterRevision = requestsAfterUpload.filter(({ index }) =>
+      index > revisionRequest.index);
+    if (requestsAfterRevision.some(({ text }) => !continuesReportRequest(text))) {
+      return { active: false, stage: "inactive" };
+    }
+    reportRequest = revisionRequest;
+    revision = true;
+    priorReportFile = successfulWrites.findLast(({ messageIndex }) =>
+      messageIndex < latestSuccessfulUpload.messageIndex)?.filePath ?? null;
+    if (!priorReportFile && typeof latestSuccessfulUpload.input?.site_root === "string") {
+      const relativePath = typeof latestSuccessfulUpload.input?.relative_path === "string" &&
+        latestSuccessfulUpload.input.relative_path.trim()
+        ? latestSuccessfulUpload.input.relative_path
+        : "index.html";
+      const candidate = resolve(latestSuccessfulUpload.input.site_root, relativePath);
+      if (isSuccessfulReportIndexPath(candidate)) priorReportFile = candidate;
+    }
+    if (!priorReportFile) return { active: false, stage: "inactive" };
+  } else {
+    const laterRequests = humanRequests.filter(({ index }) => index > reportRequest.index);
+    if (laterRequests.some(({ text }) => !continuesReportRequest(text))) {
+      return { active: false, stage: "inactive" };
+    }
+  }
+
   const workingDirectory = reportWorkingDirectory(payload);
-  const reportDirectory = workingDirectory
+  const reportDirectory = revision
+    ? dirname(priorReportFile)
+    : workingDirectory
     ? resolve(workingDirectory, "artifacts", reportArtifactFolder(reportRequest))
     : null;
   const base = {
     active: true,
     modelInitiated,
+    revision,
     requestIndex: reportRequest.index,
     requestText: reportRequest.text,
+    originalRequestIndex: originalReportRequest.index,
+    originalRequestText: originalReportRequest.text,
     workingDirectory,
     reportDirectory,
-    reportFilePath: reportDirectory ? resolve(reportDirectory, "index.html") : null,
+    reportFilePath: priorReportFile ?? (reportDirectory ? resolve(reportDirectory, "index.html") : null),
     skills: {
       artifactGeneration: skills.has("artifact-generation"),
       reportKit: skills.has("report-kit"),
     },
   };
-  if (uploads.some((upload) => !upload.failed)) {
+  const cycleUploads = uploads.filter(({ messageIndex }) => messageIndex > reportRequest.index);
+  const cycleReads = successfulReads.filter(({ messageIndex }) => messageIndex > reportRequest.index);
+  const cycleWrites = successfulWrites.filter(({ messageIndex }) => messageIndex > reportRequest.index);
+  if (cycleUploads.some((upload) => !upload.failed)) {
     return { ...base, active: false, completed: true, stage: "complete" };
   }
 
-  const lastFailedUpload = uploads.filter((upload) => upload.failed).at(-1);
+  const lastFailedUpload = cycleUploads.filter((upload) => upload.failed).at(-1);
   const retriedByUser = lastFailedUpload &&
     humanRequests.some(({ index }) => index > lastFailedUpload.messageIndex);
   if (lastFailedUpload && !retriedByUser) {
@@ -401,10 +463,15 @@ export function reportWorkflowState(payload) {
     return { ...base, stage: "load_skills", missingSkills };
   }
 
+  if (revision && !cycleReads.some(({ filePath }) =>
+    resolve(filePath) === resolve(base.reportFilePath))) {
+    return { ...base, stage: "read_report" };
+  }
+
   const reportFile = base.reportFilePath
-    ? successfulWrites.findLast(({ filePath }) => resolve(filePath) === base.reportFilePath) ??
-      (modelInitiated ? successfulWrites.at(-1) : undefined)
-    : successfulWrites.at(-1);
+    ? cycleWrites.findLast(({ filePath }) => resolve(filePath) === base.reportFilePath) ??
+      (!revision && modelInitiated ? cycleWrites.at(-1) : undefined)
+    : cycleWrites.at(-1);
   if (!reportFile) return { ...base, stage: "create_report" };
   return {
     ...base,
@@ -466,6 +533,7 @@ export function reportWorkflowRequiresTool(payload, tools = null) {
     .filter((tool) => tool?.source === "native")
     .map((tool) => tool.name));
   if (state.stage === "load_skills") return names.has("Skill");
+  if (state.stage === "read_report") return names.has("Read");
   if (state.stage === "create_report") return names.has("Write");
   if (state.stage === "upload_report") {
     return [...names].some((name) => isUploadTool(name));
@@ -475,8 +543,10 @@ export function reportWorkflowRequiresTool(payload, tools = null) {
 
 export function withReportWorkflowPolicy(payload, state, attempt = 0) {
   if (!state?.active) return payload;
-  const directions = state.stage === "create_report"
-    ? "Return the next exact tool call now. Research with an available tool if needed; otherwise call Write to create a complete index.html " +
+  const directions = state.stage === "read_report"
+    ? `Call Read now with file_path exactly ${JSON.stringify(state.reportFilePath)} so the existing Report can be revised without losing its content or styling.`
+    : state.stage === "create_report"
+    ? `Return the next exact tool call now. ${state.revision ? "Revise the existing Report using the Read result, then call Write to replace the same index.html with the complete updated document. " : "Research with an available tool if needed; otherwise call Write to create a complete index.html "}` +
       `${state.reportFilePath ? `with file_path exactly ${JSON.stringify(state.reportFilePath)}` : "under the current context's work/artifacts directory"}. ` +
       "Write the complete document, not a body fragment: preserve <!DOCTYPE html>, html, head, body, UTF-8 and viewport metadata, and <link rel=\"stylesheet\" href=\"style.css\">. " +
       "Do not call upload_artifact yet: Dia Custom will reject upload until Write succeeds."

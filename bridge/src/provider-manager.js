@@ -262,6 +262,20 @@ function nativeReportDecision(state, tools, model) {
       model,
     };
   }
+  if (state.stage === "read_report") {
+    const readTool = tools.find((tool) => tool.name === "Read" && tool.source === "native");
+    if (!readTool || !state.reportFilePath) return null;
+    return {
+      kind: "tool_use",
+      text: "",
+      toolCalls: [{
+        id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+        name: readTool.name,
+        input: { file_path: state.reportFilePath },
+      }],
+      model,
+    };
+  }
   if (state.stage === "upload_report") {
     const uploadTool = tools.find((tool) =>
       tool.source === "native" &&
@@ -701,7 +715,9 @@ export class ProviderManager {
         if (emitStatus) {
           await emitStatus(reportState.stage === "load_skills"
             ? "Loading Dia's native report design tools..."
-            : "Adding the finished report to Dia's Reports library...");
+            : reportState.stage === "read_report"
+              ? "Reading the existing Report before updating it..."
+              : "Adding the finished report to Dia's Reports library...");
         }
         break;
       }
