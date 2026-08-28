@@ -234,8 +234,15 @@ export function renderSettingsPage(adminToken) {
           meta.textContent = mod.required
             ? 'Required safety/core mod'
             : (mod.rebuildOnChange ? 'Changes require a rebuild' : 'Changes apply after restart') +
+              (mod.requiresStableSignature ? ' · stable signing required' : '') +
               (mod.pending ? ' · change pending' : '');
           copy.append(title, description, meta);
+          if (mod.privacyNotice) {
+            const privacy = document.createElement('div');
+            privacy.className = 'muted mod-meta';
+            privacy.textContent = 'Privacy: ' + mod.privacyNotice;
+            copy.append(privacy);
+          }
           const toggle = document.createElement('input');
           toggle.type = 'checkbox';
           toggle.checked = mod.configuredEnabled;
@@ -539,8 +546,14 @@ export function renderModsPage(adminToken) {
         const meta = document.createElement('div'); meta.className = 'meta';
         meta.textContent = mod.required ? 'Required safety/core mod' :
           (mod.rebuildOnChange ? 'Rebuild after changes' : 'Restart after changes') +
+          (mod.requiresStableSignature ? ' · stable signing required' : '') +
           (mod.pending ? ' · change pending' : '');
         copy.append(title, description, meta);
+        if (mod.privacyNotice) {
+          const privacy = document.createElement('div'); privacy.className = 'description';
+          privacy.textContent = 'Privacy: ' + mod.privacyNotice;
+          copy.append(privacy);
+        }
         const toggle = document.createElement('input');
         toggle.type = 'checkbox'; toggle.role = 'switch';
         toggle.checked = mod.configuredEnabled; toggle.disabled = mod.required;

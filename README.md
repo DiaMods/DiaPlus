@@ -35,6 +35,7 @@ Useful commands:
 ./dia-custom test               Run provider, tool, patch, and build checks
 ./dia-custom update             Rebuild only from an audited /Applications/Dia.app
 ./dia-custom mods               List or configure Dia Mods
+./dia-custom sync               Inspect or configure optional Official Dia Sync
 ./dia-custom status             Print the exact verified/remaining status
 ~~~
 
@@ -116,6 +117,22 @@ Runtime/bridge mods apply after a restart. Binary mods report that a clean **./d
 
 When a Developer ID Application certificate is available, installs use it automatically so Dia Custom keeps one stable macOS code requirement across rebuilds. This prevents repeated Documents, microphone, and similar permission prompts caused by changing ad-hoc CDHashes. `DIA_CUSTOM_SIGN_IDENTITY=-` explicitly selects the portable ad-hoc fallback; that fallback can require permissions again after a rebuild. Chromium also uses its mock keychain and the clone's patched **Dia Custom Store** label, so it does not reuse official Dia's **Dia Safe Storage** item.
 
+### Optional Official Dia Sync
+
+`official-dia-sync` is disabled by default. It is the sole exception to the zero-Dia-service policy and atomically replaces `account-bypass` with Dia's shipped account, encrypted Sync, Recovery Kit, and device-transfer paths. Enabling or disabling it performs a clean, audited rebuild and requires a stable certificate-backed signature:
+
+~~~sh
+./dia-custom sync status
+./dia-custom sync enable
+./dia-custom sync disable
+~~~
+
+Only `https://account.diabrowser.engineering` and `https://dia-sync.diabrowser.engineering` are admitted from Dia-owned space; Atlassian's normal interactive identity pages remain reachable for native sign-in. AI, Memory processing, tools, telemetry, crash reporting, feature flags, and updater services stay blocked. The clone uses app-owned account and WebAuthn Keychain groups and requires a fresh native sign-in—official Dia credentials, cookies, databases, and Keychain items are never copied.
+
+The mod adds no custom request header, user agent, or protocol field. Its audited Sync client name and version remain the stock values for the source Dia build, and a runtime guard cancels an account/Sync request if its visible URL, headers, or bounded body contain `Dia Custom`, `local.rttm.dia`, or the clone's signing Team ID. This prevents an accidental custom marker from being transmitted; it cannot promise that server-side authentication or platform attestation will never infer a separately signed bundle. If Dia requires the official signature or bundle identity, the mod fails closed rather than spoofing either one.
+
+Native Sync is limited to Dia's shipped Profiles, Bookmarks, Pinned Tabs/Groups, and Settings adapters. Chats, local Memory contents, Reports, provider credentials, connector tokens, cookies, model selection, diagnostics, and Dia Mods remain local. `sync status` reads only booleans and a locally observed successful service-response time; it never reads account details, tokens, recovery phrases, or payloads.
+
 ## Project map
 
 | Path | Purpose |
@@ -147,5 +164,6 @@ See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), and [Status]
 - Model/tool catalogs: **Bridge/.state/models.json**, **Bridge/.state/tool-coverage.json**
 - Local memory: **Bridge/.state/memory.sqlite3**
 - Apps/Morning Brief state: **Bridge/.state/apps.json**
+- Official Sync observation state: **Bridge/.state/official-sync-status.json** (timestamp/status only)
 - Custom connector manifests: **Bridge/.state/connectors/*.json**
 - Diagnostics: **~/Library/Application Support/Dia Custom RTTM/Diagnostics**

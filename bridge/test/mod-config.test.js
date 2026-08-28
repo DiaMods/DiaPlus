@@ -28,6 +28,17 @@ async function fixture(activeModIDs = ["safety", "feature"]) {
         scope: ["build"], defaultEnabled: false, required: false,
         rebuildOnChange: true,
       },
+      {
+        id: "account-bypass", label: "Anonymous", description: "No account",
+        scope: ["build"], defaultEnabled: true, required: false,
+        rebuildOnChange: true,
+      },
+      {
+        id: "official-dia-sync", label: "Official Sync", description: "Sync",
+        scope: ["build"], defaultEnabled: false, required: false,
+        rebuildOnChange: true, requires: ["safety"],
+        conflicts: ["account-bypass"], replaces: ["account-bypass"],
+      },
     ],
   }));
   return {
@@ -52,6 +63,18 @@ test("Dia Mods keep safety mods locked and mark restart/rebuild changes", async 
   assert.equal(state.rebuildRequired, true);
   assert.equal(state.mods.find((mod) => mod.id === "patch").apply, "rebuild");
   assert.equal((await stat(statePath)).mode & 0o777, 0o600);
+});
+
+test("Official Sync atomically replaces and restores anonymous account mode", async () => {
+  const { store } = await fixture();
+  let state = await store.setEnabled("official-dia-sync", true);
+  assert.equal(state.mods.find((mod) => mod.id === "official-dia-sync").configuredEnabled, true);
+  assert.equal(state.mods.find((mod) => mod.id === "account-bypass").configuredEnabled, false);
+  assert.equal(state.rebuildRequired, true);
+
+  state = await store.setEnabled("official-dia-sync", false);
+  assert.equal(state.mods.find((mod) => mod.id === "official-dia-sync").configuredEnabled, false);
+  assert.equal(state.mods.find((mod) => mod.id === "account-bypass").configuredEnabled, true);
 });
 
 test("Dia Mods read legacy module overrides until new state is saved", async () => {

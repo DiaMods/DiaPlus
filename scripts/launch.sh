@@ -33,6 +33,7 @@ model_catalog="$bridge_state_dir/models.json"
 tool_coverage="$bridge_state_dir/tool-coverage.json"
 provider_config="$bridge_state_dir/config.json"
 memory_database="$bridge_state_dir/memory.sqlite3"
+sync_mode_file="$bridge_state_dir/official-sync-mode.json"
 enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
 mod_enabled() {
   case ",${enabled_mods}," in
@@ -40,6 +41,12 @@ mod_enabled() {
     *) return 1 ;;
   esac
 }
+sync_team_id=""
+if mod_enabled official-dia-sync; then
+  signing_details="$("$script_dir/signing-identity.sh")"
+  signing_remainder="${signing_details#*$'\t'}"
+  sync_team_id="${signing_remainder%%$'\t'*}"
+fi
 
 if [[ ! -d "$app" ]]; then
   print -u2 "Dia Custom is not installed. Run './dia-custom build' first."
@@ -52,6 +59,24 @@ fi
 
 mkdir -p "$diagnostics_dir" "$bridge_state_dir"
 /bin/chmod 700 "$diagnostics_dir" "$bridge_state_dir"
+
+# hasUserAuthenticated is a process-wide preference for this bundle ID. The
+# anonymous mod intentionally seeds it, so an isolated profile entering Sync
+# mode must clear that synthetic value exactly once and let native sign-in set
+# it again. The marker lives with that profile and survives supported rebuilds.
+if mod_enabled official-dia-sync; then
+  prior_sync_mode="$(/usr/bin/plutil -extract mode raw -o - \
+    "$sync_mode_file" 2>/dev/null || true)"
+  if [[ "$prior_sync_mode" != "enabled" ]]; then
+    /usr/bin/defaults delete local.rttm.dia hasUserAuthenticated \
+      >/dev/null 2>&1 || true
+    /usr/bin/printf '%s\n' '{"version":1,"mode":"enabled"}' \
+      > "$sync_mode_file"
+    /bin/chmod 600 "$sync_mode_file"
+  fi
+else
+  /bin/rm -f "$sync_mode_file"
+fi
 
 # launchd cannot reliably read projects in macOS-protected Documents folders.
 # Deploy the runnable bridge into this app's private profile; retain local state.
@@ -129,6 +154,13 @@ if mod_enabled morning-brief; then
     "context-builder-morning-brief-enabled=true"
   )
 fi
+if mod_enabled official-dia-sync; then
+  feature_flags+=(
+    "sync-enabled=true"
+    "sync-encryption-enabled=true"
+    "sync-failures-enabled=true"
+  )
+fi
 /usr/bin/defaults write local.rttm.dia transientFeatureFlagOverrides -array "${feature_flags[@]}"
 
 node_bin="${DIA_CUSTOM_NODE:-$(command -v node || true)}"
@@ -196,14 +228,21 @@ fi
 launch_args=(
   -customApplicationDataBaseURLPath "$profile"
   --user-data-dir="$profile/User Data"
-  --no-first-run
   --disable-background-networking
   --disable-component-update
-  --disable-sync
-  '--host-resolver-rules=MAP diabrowser.engineering ~NOTFOUND, MAP *.diabrowser.engineering ~NOTFOUND, MAP diabrowser.com ~NOTFOUND, MAP *.diabrowser.com ~NOTFOUND, MAP thebrowser.company ~NOTFOUND, MAP *.thebrowser.company ~NOTFOUND, MAP thebrowser.com ~NOTFOUND, MAP *.thebrowser.com ~NOTFOUND, MAP browserinternal.com ~NOTFOUND, MAP *.browserinternal.com ~NOTFOUND, MAP browserinternalstaging.com ~NOTFOUND, MAP *.browserinternalstaging.com ~NOTFOUND, MAP api.segment.io ~NOTFOUND, MAP cdn-settings.segment.com ~NOTFOUND, MAP clientstream.launchdarkly.com ~NOTFOUND, MAP mobile.launchdarkly.com ~NOTFOUND, MAP browser-intake-datadoghq.com ~NOTFOUND, MAP browser-intake-ap1-datadoghq.com ~NOTFOUND, MAP browser-intake-datadoghq.eu ~NOTFOUND, MAP browser-intake-us3-datadoghq.com ~NOTFOUND, MAP browser-intake-us5-datadoghq.com ~NOTFOUND, MAP o298668.ingest.us.sentry.io ~NOTFOUND, EXCLUDE localhost'
   --remote-debugging-port="$debug_port"
   --use-mock-keychain
 )
+if ! mod_enabled official-dia-sync || [[ -f "$profile/User Data/Local State" ]]; then
+  launch_args+=(--no-first-run)
+fi
+dia_host_rules='MAP diabrowser.engineering ~NOTFOUND, MAP *.diabrowser.engineering ~NOTFOUND, MAP diabrowser.com ~NOTFOUND, MAP *.diabrowser.com ~NOTFOUND, MAP thebrowser.company ~NOTFOUND, MAP *.thebrowser.company ~NOTFOUND, MAP thebrowser.com ~NOTFOUND, MAP *.thebrowser.com ~NOTFOUND, MAP browserinternal.com ~NOTFOUND, MAP *.browserinternal.com ~NOTFOUND, MAP browserinternalstaging.com ~NOTFOUND, MAP *.browserinternalstaging.com ~NOTFOUND, MAP api.segment.io ~NOTFOUND, MAP cdn-settings.segment.com ~NOTFOUND, MAP clientstream.launchdarkly.com ~NOTFOUND, MAP mobile.launchdarkly.com ~NOTFOUND, MAP browser-intake-datadoghq.com ~NOTFOUND, MAP browser-intake-ap1-datadoghq.com ~NOTFOUND, MAP browser-intake-datadoghq.eu ~NOTFOUND, MAP browser-intake-us3-datadoghq.com ~NOTFOUND, MAP browser-intake-us5-datadoghq.com ~NOTFOUND, MAP o298668.ingest.us.sentry.io ~NOTFOUND, EXCLUDE localhost'
+if mod_enabled official-dia-sync; then
+  dia_host_rules="EXCLUDE account.diabrowser.engineering, EXCLUDE dia-sync.diabrowser.engineering, $dia_host_rules"
+else
+  launch_args+=(--disable-sync)
+fi
+launch_args+=("--host-resolver-rules=$dia_host_rules")
 if [[ "${DIA_CUSTOM_DISABLE_BROWSER_SANDBOX:-0}" == "1" ]]; then
   print -u2 "Warning: Chromium sandbox disabled for this diagnostic launch."
   launch_args+=(--no-sandbox)
@@ -216,6 +255,11 @@ launch_env=(
   --env "DIA_CUSTOM_SETTINGS_URL=http://127.0.0.1:8765/settings"
   --env "DIA_CUSTOM_MODS=$enabled_mods"
 )
+[[ -z "$sync_team_id" ]] || \
+  launch_env+=(--env "DIA_CUSTOM_TEAM_ID=$sync_team_id")
+if [[ "${DIA_CUSTOM_OPEN_ACCOUNT_AFTER_LAUNCH:-0}" == "1" ]]; then
+  launch_env+=(--env "DIA_CUSTOM_OPEN_ACCOUNT_AFTER_LAUNCH=1")
+fi
 if [[ "${DIA_CUSTOM_DEBUG_AGENT_MESSAGES:-0}" == "1" ]]; then
   launch_env+=(--env "MESSAGE_LOG_PAYLOADS=1")
 fi

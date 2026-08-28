@@ -82,6 +82,43 @@ function resolveMods(mods, state) {
   });
 }
 
+function validateResolvedMods(mods) {
+  const byID = new Map(mods.map((mod) => [mod.id, mod]));
+  for (const mod of mods.filter((candidate) => candidate.enabled)) {
+    for (const id of mod.requires ?? []) {
+      if (!byID.get(id)?.enabled) {
+        throw new Error(`${mod.id} requires Dia Mod ${id}`);
+      }
+    }
+    for (const id of new Set([...(mod.conflicts ?? []), ...(mod.replaces ?? [])])) {
+      if (byID.get(id)?.enabled) {
+        throw new Error(`${mod.id} conflicts with Dia Mod ${id}`);
+      }
+    }
+  }
+  return mods;
+}
+
+function changedOverrides(mods, state, id, enabled) {
+  const overrides = { ...(state?.overrides ?? {}), [id]: enabled };
+  const selected = mods.find((mod) => mod.id === id);
+  if (enabled) {
+    for (const dependency of selected.requires ?? []) overrides[dependency] = true;
+    for (const conflict of new Set([
+      ...(selected.conflicts ?? []),
+      ...(selected.replaces ?? []),
+    ])) overrides[conflict] = false;
+    for (const mod of mods) {
+      if ((mod.conflicts ?? []).includes(id) || (mod.replaces ?? []).includes(id)) {
+        overrides[mod.id] = false;
+      }
+    }
+  } else {
+    for (const replaced of selected.replaces ?? []) overrides[replaced] = true;
+  }
+  return overrides;
+}
+
 function printTable(mods, statePath) {
   process.stdout.write(`Dia Mods (${statePath})\n\n`);
   const width = Math.max(...mods.map((mod) => mod.id.length));
@@ -112,8 +149,14 @@ if (["enable", "disable"].includes(command)) {
   }
   const next = {
     version: 1,
-    overrides: { ...(state.overrides ?? {}), [id]: command === "enable" },
+    overrides: changedOverrides(
+      manifest.mods,
+      state,
+      id,
+      command === "enable",
+    ),
   };
+  validateResolvedMods(resolveMods(manifest.mods, next));
   await atomicWriteJSON(statePath, next);
   process.stdout.write(
     `${id} is now ${command === "enable" ? "enabled" : "disabled"}. ` +
@@ -122,7 +165,7 @@ if (["enable", "disable"].includes(command)) {
   process.exit(0);
 }
 
-const resolved = resolveMods(manifest.mods, state)
+const resolved = validateResolvedMods(resolveMods(manifest.mods, state))
   .filter((mod) => scope === null || mod.scope.includes(scope));
 if (command === "resolved") {
   process.stdout.write(`${resolved.filter((mod) => mod.enabled).map((mod) => mod.id).join(",")}\n`);

@@ -96,7 +96,7 @@ if [[ -d "$app" ]]; then
   if ! mod_enabled reports; then
     :
   elif node "$project_dir/src/patches/patch-report-controller.js" --check "$app" 2>/dev/null | /usr/bin/grep -q "already patched"; then
-    pass "native Reports controller is enabled for the anonymous profile"
+    pass "native Reports controller is enabled for the isolated clone profile"
   else
     fail "native Reports controller patch is missing or incompatible"
   fi
@@ -104,8 +104,24 @@ if [[ -d "$app" ]]; then
   signature_authority="$(/usr/bin/codesign -dvv "$app" 2>&1 | /usr/bin/awk -F= '/^Authority=/{print $2; exit}')"
   if [[ "$signature_authority" == Developer\ ID\ Application:* ]]; then
     pass "certificate-backed app identity is stable across rebuilds"
+  elif mod_enabled official-dia-sync; then
+    fail "Official Dia Sync requires a certificate-backed app identity"
   else
     warn "app is ad-hoc signed; rebuilds can invalidate macOS permission decisions"
+  fi
+  if mod_enabled official-dia-sync; then
+    sync_team_id="$(/usr/bin/codesign -dvv "$app" 2>&1 | /usr/bin/awk -F= '/^TeamIdentifier=/{print $2; exit}')"
+    sync_auth_group="$sync_team_id.local.rttm.dia.account.auth.v01"
+    sync_webauthn_group="$sync_team_id.local.rttm.dia.account.webauthn.v01"
+    entitlements="$(/usr/bin/codesign -d --entitlements :- "$app" 2>/dev/null || true)"
+    if print -r -- "$entitlements" | /usr/bin/grep -Fq "$sync_auth_group" && \
+       print -r -- "$entitlements" | /usr/bin/grep -Fq "$sync_webauthn_group" && \
+       /usr/bin/grep -a -q "$sync_auth_group" "$app/Contents/MacOS/Dia" && \
+       ! /usr/bin/grep -a -q 'S6N382Y83G.company.thebrowser.browser.auth' "$app/Contents/MacOS/Dia"; then
+      pass "official account credentials use Dia Custom's isolated Keychain groups"
+    else
+      fail "Official Dia Sync Keychain isolation is incomplete"
+    fi
   fi
 else
   fail "Dia Custom is missing at $app"
@@ -151,12 +167,31 @@ if running_command="$(/bin/ps -axo command= | /usr/bin/grep -F "$app/Contents/Ma
   else
     warn "running browser predates the Chromium Dia-host DNS block; restart Dia Custom"
   fi
+  if mod_enabled official-dia-sync; then
+    if [[ "$running_command" == *"EXCLUDE account.diabrowser.engineering"* &&
+          "$running_command" == *"EXCLUDE dia-sync.diabrowser.engineering"* &&
+          " $running_command " != *" --disable-sync "* ]]; then
+      pass "only the official account and Sync DNS exceptions are active"
+    else
+      fail "Official Dia Sync launch isolation is incomplete"
+    fi
+  fi
 fi
 
-if [[ -f "$profile/Diagnostics/network-requests.txt" ]] && \
-    /usr/bin/grep -E 'ALLOW[[:space:]]+https?://([^/]*\.)?(diabrowser\.engineering|diabrowser\.com|thebrowser\.company|thebrowser\.com|browserinternal\.com|browserinternalstaging\.com|api\.segment\.io|cdn-settings\.segment\.com|clientstream\.launchdarkly\.com|mobile\.launchdarkly\.com|browser-intake[^/]*datadoghq[^/]*|o298668\.ingest\.us\.sentry\.io)' \
-      "$profile/Diagnostics/network-requests.txt" >/dev/null 2>&1; then
+dia_allowed_pattern='ALLOW[[:space:]]+https?://([^/]*\.)?(diabrowser\.engineering|diabrowser\.com|thebrowser\.company|thebrowser\.com|browserinternal\.com|browserinternalstaging\.com|api\.segment\.io|cdn-settings\.segment\.com|clientstream\.launchdarkly\.com|mobile\.launchdarkly\.com|browser-intake[^/]*datadoghq[^/]*|o298668\.ingest\.us\.sentry\.io)'
+unexpected_dia_traffic=""
+if [[ -f "$profile/Diagnostics/network-requests.txt" ]]; then
+  unexpected_dia_traffic="$(/usr/bin/grep -E "$dia_allowed_pattern" \
+    "$profile/Diagnostics/network-requests.txt" 2>/dev/null || true)"
+  if mod_enabled official-dia-sync; then
+    unexpected_dia_traffic="$(print -r -- "$unexpected_dia_traffic" | \
+      /usr/bin/grep -Ev 'ALLOW[[:space:]]+https://(account|dia-sync)\.diabrowser\.engineering/?$' || true)"
+  fi
+fi
+if [[ -n "$unexpected_dia_traffic" ]]; then
   fail "network diagnostics show an allowed request to a Dia-owned service host"
+elif mod_enabled official-dia-sync; then
+  pass "network diagnostics allow no Dia hosts beyond account and encrypted Sync"
 else
   pass "no Dia-owned service request was allowed in the current network log"
 fi

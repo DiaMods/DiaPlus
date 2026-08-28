@@ -47,6 +47,27 @@ const unsupported = [...requested].filter((id) => !supportedMods.has(id));
 if (unsupported.length > 0) {
   throw new Error(`Dia build ${build} has not been audited for: ${unsupported.join(", ")}`);
 }
+if (requested.has("official-dia-sync")) {
+  const executable = await readFile(resolve(app, "Contents/MacOS/Dia"));
+  const requiredSyncSurface = [
+    "https://dia-sync.diabrowser.engineering",
+    "X-Dia-Sync-Token",
+    "sync-encryption-enabled",
+    "Aes256Gcm",
+    "SyncClientInfo",
+    "BookmarksSyncAdapter",
+    "ProfilesSyncAdapter",
+    "SettingsSyncAdapter",
+    "TabTreeSyncAdapter",
+  ];
+  const missing = requiredSyncSurface.filter((value) =>
+    !executable.includes(Buffer.from(value)));
+  if (missing.length > 0) {
+    throw new Error(
+      `Dia build ${build} is missing audited native Sync components: ${missing.join(", ")}`,
+    );
+  }
+}
 
 const result = {
   build,

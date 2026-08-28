@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include "prompt-tools-offsets.h"
 
@@ -121,6 +122,14 @@ static BOOL dia_custom_should_block_request_url(NSURL *url) {
         return NO;
     }
 
+    BOOL isOfficialSyncHost =
+        [host isEqualToString:@"account.diabrowser.engineering"] ||
+        [host isEqualToString:@"dia-sync.diabrowser.engineering"];
+    if (isOfficialSyncHost) {
+        return !dia_custom_mod_enabled("official-dia-sync") ||
+            ![[[url scheme] lowercaseString] isEqualToString:@"https"];
+    }
+
     NSArray<NSString *> *blockedHosts = @[
         @"api.segment.io",
         @"cdn-settings.segment.com",
@@ -151,6 +160,116 @@ static BOOL dia_custom_should_block_request_url(NSURL *url) {
            [host hasSuffix:@".browserinternalstaging.com"];
 }
 
+static BOOL dia_custom_request_exposes_custom_identity(
+    NSURLRequest *request) {
+    NSString *host = request.URL.host.lowercaseString;
+    if (!([host isEqualToString:@"account.diabrowser.engineering"] ||
+          [host isEqualToString:@"dia-sync.diabrowser.engineering"])) {
+        return NO;
+    }
+    NSMutableArray<NSString *> *visibleValues = [NSMutableArray array];
+    if (request.URL.absoluteString != nil) {
+        [visibleValues addObject:request.URL.absoluteString];
+    }
+    [visibleValues addObjectsFromArray:request.allHTTPHeaderFields.allValues];
+    NSMutableArray<NSString *> *markers = [NSMutableArray arrayWithArray:@[
+        @"dia custom",
+        @"local.rttm.dia",
+    ]];
+    const char *rawTeamID = getenv("DIA_CUSTOM_TEAM_ID");
+    if (rawTeamID != NULL && rawTeamID[0] != '\0') {
+        [markers addObject:[[NSString stringWithUTF8String:rawTeamID]
+            lowercaseString]];
+    }
+    for (NSString *value in visibleValues) {
+        NSString *lower = value.lowercaseString;
+        for (NSString *marker in markers) {
+            if (marker.length > 0 && [lower containsString:marker]) {
+                return YES;
+            }
+        }
+    }
+    NSData *body = request.HTTPBody;
+    if (body.length > 0 && body.length <= 1024 * 1024) {
+        NSMutableArray<NSData *> *bodyMarkers = [NSMutableArray arrayWithArray:@[
+            [@"Dia Custom" dataUsingEncoding:NSUTF8StringEncoding],
+            [@"dia custom" dataUsingEncoding:NSUTF8StringEncoding],
+            [@"local.rttm.dia" dataUsingEncoding:NSUTF8StringEncoding],
+        ]];
+        if (rawTeamID != NULL && rawTeamID[0] != '\0') {
+            [bodyMarkers addObject:[[NSString stringWithUTF8String:rawTeamID]
+                dataUsingEncoding:NSUTF8StringEncoding]];
+        }
+        for (NSData *marker in bodyMarkers) {
+            if ([body rangeOfData:marker
+                          options:0
+                            range:NSMakeRange(0, body.length)].location !=
+                NSNotFound) {
+                return YES;
+            }
+        }
+    }
+    return NO;
+}
+
+static void dia_custom_record_sync_success(NSInteger statusCode) {
+    const char *rawProfile = getenv("DIA_CUSTOM_PROFILE");
+    if (rawProfile == NULL || rawProfile[0] == '\0') return;
+    NSString *profile = [NSString stringWithUTF8String:rawProfile];
+    NSString *stateDirectory = [profile
+        stringByAppendingPathComponent:@"Bridge/.state"];
+    NSError *error = nil;
+    if (![NSFileManager.defaultManager
+            createDirectoryAtPath:stateDirectory
+      withIntermediateDirectories:YES
+                       attributes:@{NSFilePosixPermissions: @0700}
+                            error:&error]) {
+        return;
+    }
+    NSDictionary *state = @{
+        @"lastSuccessfulServiceResponse": @([[NSDate date]
+            timeIntervalSince1970]),
+        @"statusCode": @(statusCode),
+    };
+    NSData *data = [NSJSONSerialization dataWithJSONObject:state
+                                                   options:0
+                                                     error:&error];
+    NSString *path = [stateDirectory
+        stringByAppendingPathComponent:@"official-sync-status.json"];
+    if (data != nil && [data writeToFile:path
+                                 options:NSDataWritingAtomic
+                                   error:&error]) {
+        chmod(path.fileSystemRepresentation, 0600);
+        dia_custom_log_status(@"official-sync-service-response-success");
+    }
+}
+
+static void dia_custom_observe_sync_task(id task, NSUInteger attempt) {
+    if (task == nil || attempt >= 240) return;
+    [task retain];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSURLRequest *request = [task currentRequest] ?: [task originalRequest];
+        NSString *host = request.URL.host.lowercaseString;
+        NSInteger state = [task state];
+        if (state == NSURLSessionTaskStateCompleted ||
+            state == NSURLSessionTaskStateCanceling) {
+            NSURLResponse *response = [(NSURLSessionTask *)task response];
+            if ([host isEqualToString:@"dia-sync.diabrowser.engineering"] &&
+                [response isKindOfClass:[NSHTTPURLResponse class]]) {
+                NSInteger statusCode = [(NSHTTPURLResponse *)response
+                    statusCode];
+                if (statusCode >= 200 && statusCode < 300) {
+                    dia_custom_record_sync_success(statusCode);
+                }
+            }
+        } else {
+            dia_custom_observe_sync_task(task, attempt + 1);
+        }
+        [task release];
+    });
+}
+
 typedef void (*DiaCustomTaskResumeIMP)(id, SEL);
 
 typedef struct {
@@ -166,7 +285,14 @@ static void dia_custom_task_resume(id task, SEL command) {
     if (request == nil) {
         request = [task originalRequest];
     }
-    BOOL blocked = dia_custom_should_block_request_url(request.URL);
+    BOOL exposedCustomIdentity =
+        dia_custom_mod_enabled("official-dia-sync") &&
+        dia_custom_request_exposes_custom_identity(request);
+    BOOL blocked = dia_custom_should_block_request_url(request.URL) ||
+        exposedCustomIdentity;
+    if (exposedCustomIdentity) {
+        dia_custom_log_status(@"official-sync-blocked-custom-client-marker");
+    }
     dia_custom_log_request_url(request.URL, blocked ? "BLOCKED" : "ALLOW");
     if (blocked) {
         [task cancel];
@@ -178,6 +304,11 @@ static void dia_custom_task_resume(id task, SEL command) {
         for (size_t i = 0; i < dia_custom_task_resume_entry_count; ++i) {
             if (dia_custom_task_resume_entries[i].cls == cls) {
                 dia_custom_task_resume_entries[i].original(task, command);
+                if (dia_custom_mod_enabled("official-dia-sync") &&
+                    [request.URL.host.lowercaseString
+                        isEqualToString:@"dia-sync.diabrowser.engineering"]) {
+                    dia_custom_observe_sync_task(task, 0);
+                }
                 return;
             }
         }
@@ -270,6 +401,9 @@ static void dia_custom_schedule_network_log(void) {
     dia_custom_install_task_resume_log();
 }
 
+static NSTableView *dia_custom_find_settings_table(NSView *view);
+static BOOL dia_custom_is_settings_window(NSWindow *window);
+
 static void dia_custom_close_account_window(void) {
     if (getenv("DIA_CUSTOM_SKIP_ACCOUNT_UI") == NULL) {
         return;
@@ -287,6 +421,54 @@ static void dia_custom_close_account_window(void) {
                 [window close];
             }
         }
+    });
+}
+
+static NSMenuItem *dia_custom_find_menu_item(NSMenu *menu,
+                                              NSArray<NSString *> *titles) {
+    for (NSMenuItem *item in menu.itemArray) {
+        for (NSString *title in titles) {
+            if ([item.title isEqualToString:title]) return item;
+        }
+        NSMenuItem *nested = item.submenu != nil
+            ? dia_custom_find_menu_item(item.submenu, titles) : nil;
+        if (nested != nil) return nested;
+    }
+    return nil;
+}
+
+static void dia_custom_open_native_account_settings(void) {
+    if (!dia_custom_mod_enabled("official-dia-sync") ||
+        getenv("DIA_CUSTOM_OPEN_ACCOUNT_AFTER_LAUNCH") == NULL) {
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1800 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        NSMenuItem *settingsItem = dia_custom_find_menu_item(
+            NSApp.mainMenu, @[@"Settings…", @"Settings...", @"Preferences…"]);
+        if (settingsItem == nil || settingsItem.action == NULL) {
+            dia_custom_log_status(@"official-sync-account-settings-unavailable");
+            return;
+        }
+        [NSApp sendAction:settingsItem.action
+                       to:settingsItem.target
+                     from:settingsItem];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 700 * NSEC_PER_MSEC),
+                       dispatch_get_main_queue(), ^{
+            for (NSWindow *window in NSApp.windows) {
+                if (!dia_custom_is_settings_window(window)) continue;
+                NSTableView *table =
+                    dia_custom_find_settings_table(window.contentView);
+                if (table.numberOfRows > 0) {
+                    [table selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
+                      byExtendingSelection:NO];
+                    [table scrollRowToVisible:0];
+                }
+                [window makeKeyAndOrderFront:nil];
+                dia_custom_log_status(@"official-sync-account-settings-opened");
+                break;
+            }
+        });
     });
 }
 
@@ -572,13 +754,6 @@ static NSURL *dia_custom_local_api_url(NSString *path) {
 // therefore adds one guarded sidebar item to the existing Settings split view
 // and presents its loopback-only configuration surface inside that same window.
 // Native panes and their controllers remain untouched.
-static WKWebView *dia_custom_mods_content_view;
-static NSWindow *dia_custom_mods_settings_window;
-static NSView *dia_custom_mods_content_host;
-static NSTableView *dia_custom_mods_native_table;
-static NSString *dia_custom_mods_previous_window_title;
-static NSTextField *dia_custom_mods_toolbar_title;
-static NSAttributedString *dia_custom_mods_previous_toolbar_title;
 typedef NSInteger (*DiaCustomNumberOfRowsIMP)(id, SEL, NSTableView *);
 typedef NSView *(*DiaCustomViewForRowIMP)(id, SEL, NSTableView *,
                                          NSTableColumn *, NSInteger);
@@ -586,26 +761,136 @@ typedef void (*DiaCustomSelectionChangedIMP)(id, SEL, NSNotification *);
 static DiaCustomNumberOfRowsIMP dia_custom_mods_original_number_of_rows;
 static DiaCustomViewForRowIMP dia_custom_mods_original_view_for_row;
 static DiaCustomSelectionChangedIMP dia_custom_mods_original_selection_changed;
-static id dia_custom_mods_data_source;
-static id dia_custom_mods_delegate;
 static Class dia_custom_mods_data_source_class;
 static Class dia_custom_mods_delegate_class;
 static BOOL dia_custom_mods_table_hooks_installed = NO;
 
-static void dia_custom_set_mods_table_objects(NSTableView *table,
-                                               id dataSource,
-                                               id delegate) {
-    if (dia_custom_mods_native_table != table) {
-        [dia_custom_mods_native_table release];
-        dia_custom_mods_native_table = [table retain];
+static const void *dia_custom_mods_window_context_key =
+    &dia_custom_mods_window_context_key;
+static const void *dia_custom_mods_table_context_key =
+    &dia_custom_mods_table_context_key;
+static id dia_custom_mods_window_close_observer;
+
+@interface DiaCustomModsPaneContext : NSObject {
+@public
+    NSWindow *settingsWindow;
+    NSView *contentHost;
+    NSTableView *nativeTable;
+    WKWebView *contentView;
+    NSString *previousWindowTitle;
+    NSTextField *toolbarTitle;
+    NSAttributedString *previousToolbarTitle;
+    id dataSource;
+    id delegate;
+    BOOL reloadingTable;
+}
+@end
+
+static void dia_custom_install_mods_window_close_observer(void) {
+    if (dia_custom_mods_window_close_observer != nil) return;
+    dia_custom_mods_window_close_observer = [[NSNotificationCenter.defaultCenter
+        addObserverForName:NSWindowWillCloseNotification
+                    object:nil
+                     queue:NSOperationQueue.mainQueue
+                usingBlock:^(NSNotification *notification) {
+        NSWindow *window = [notification.object isKindOfClass:[NSWindow class]]
+            ? notification.object : nil;
+        if (window == nil) return;
+        DiaCustomModsPaneContext *context = objc_getAssociatedObject(
+            window, dia_custom_mods_window_context_key);
+        if (context == nil) return;
+        // A native Settings controller can retain its table delegate. Detach
+        // our per-window context while the window graph is still valid so no
+        // stale title, table, host, or WebView survives a closed window.
+        context->settingsWindow = nil;
+        objc_setAssociatedObject(window,
+                                 dia_custom_mods_window_context_key,
+                                 nil,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        dia_custom_log_status(@"mod-manager-window-context-cleared");
+    }] retain];
+}
+
+@implementation DiaCustomModsPaneContext
+- (void)dealloc {
+    if (nativeTable != nil &&
+        objc_getAssociatedObject(nativeTable,
+                                 dia_custom_mods_table_context_key) == self) {
+        objc_setAssociatedObject(nativeTable,
+                                 dia_custom_mods_table_context_key,
+                                 nil,
+                                 OBJC_ASSOCIATION_ASSIGN);
     }
-    if (dia_custom_mods_data_source != dataSource) {
-        [dia_custom_mods_data_source release];
-        dia_custom_mods_data_source = [dataSource retain];
+    [contentHost release];
+    [nativeTable release];
+    [contentView release];
+    [previousWindowTitle release];
+    [toolbarTitle release];
+    [previousToolbarTitle release];
+    [dataSource release];
+    [delegate release];
+    [super dealloc];
+}
+@end
+
+static DiaCustomModsPaneContext *dia_custom_mods_context_for_table(
+    NSTableView *table) {
+    if (table == nil) return nil;
+    id context = objc_getAssociatedObject(
+        table, dia_custom_mods_table_context_key);
+    return [context isKindOfClass:[DiaCustomModsPaneContext class]]
+        ? context : nil;
+}
+
+static DiaCustomModsPaneContext *dia_custom_mods_context_for_window(
+    NSWindow *window,
+    BOOL create) {
+    if (window == nil) return nil;
+    DiaCustomModsPaneContext *context = objc_getAssociatedObject(
+        window, dia_custom_mods_window_context_key);
+    if (context == nil && create) {
+        context = [[[DiaCustomModsPaneContext alloc] init] autorelease];
+        context->settingsWindow = window;
+        objc_setAssociatedObject(window,
+                                 dia_custom_mods_window_context_key,
+                                 context,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (dia_custom_mods_delegate != delegate) {
-        [dia_custom_mods_delegate release];
-        dia_custom_mods_delegate = [delegate retain];
+    return context;
+}
+
+static void dia_custom_set_mods_table_objects(
+    DiaCustomModsPaneContext *context,
+    NSTableView *table,
+    id nextDataSource,
+    id nextDelegate) {
+    if (context == nil) return;
+    if (context->nativeTable != table) {
+        if (context->nativeTable != nil &&
+            objc_getAssociatedObject(context->nativeTable,
+                                     dia_custom_mods_table_context_key) ==
+                context) {
+            objc_setAssociatedObject(context->nativeTable,
+                                     dia_custom_mods_table_context_key,
+                                     nil,
+                                     OBJC_ASSOCIATION_ASSIGN);
+        }
+        [context->nativeTable release];
+        context->nativeTable = [table retain];
+        if (table != nil) {
+            objc_setAssociatedObject(table,
+                                     dia_custom_mods_table_context_key,
+                                     context,
+                                     OBJC_ASSOCIATION_ASSIGN);
+        }
+    }
+    if (context->dataSource != nextDataSource) {
+        [context->dataSource release];
+        context->dataSource = [nextDataSource retain];
+    }
+    if (context->delegate != nextDelegate) {
+        [context->delegate release];
+        context->delegate = [nextDelegate retain];
     }
 }
 
@@ -657,53 +942,59 @@ static NSTextField *dia_custom_find_toolbar_title(NSView *view) {
     return nil;
 }
 
-static void dia_custom_set_mods_toolbar_title(NSString *title) {
-    if (dia_custom_mods_settings_window == nil) return;
-    if (dia_custom_mods_toolbar_title == nil) {
-        for (NSToolbarItem *item in dia_custom_mods_settings_window.toolbar.items) {
+static void dia_custom_set_mods_toolbar_title(
+    DiaCustomModsPaneContext *context,
+    NSString *title) {
+    if (context == nil || context->settingsWindow == nil) return;
+    if (context->toolbarTitle == nil) {
+        for (NSToolbarItem *item in context->settingsWindow.toolbar.items) {
             NSTextField *label = dia_custom_find_toolbar_title(item.view);
             if (label != nil) {
-                dia_custom_mods_toolbar_title = label;
+                context->toolbarTitle = [label retain];
                 break;
             }
         }
     }
-    if (dia_custom_mods_toolbar_title != nil) {
-        if (dia_custom_mods_previous_toolbar_title == nil) {
-            dia_custom_mods_previous_toolbar_title =
-                [dia_custom_mods_toolbar_title.attributedStringValue copy];
+    if (context->toolbarTitle != nil) {
+        if (context->previousToolbarTitle == nil) {
+            context->previousToolbarTitle =
+                [context->toolbarTitle.attributedStringValue copy];
         }
-        dia_custom_mods_toolbar_title.stringValue = title;
+        context->toolbarTitle.stringValue = title;
     }
 }
 
-static NSInteger dia_custom_native_settings_row_count(void) {
+static NSInteger dia_custom_native_settings_row_count(
+    DiaCustomModsPaneContext *context) {
     if (dia_custom_mods_original_number_of_rows == NULL ||
-        dia_custom_mods_data_source == nil ||
-        dia_custom_mods_native_table == nil) return NSNotFound;
+        context == nil || context->dataSource == nil ||
+        context->nativeTable == nil) return NSNotFound;
     return dia_custom_mods_original_number_of_rows(
-        dia_custom_mods_data_source,
+        context->dataSource,
         @selector(numberOfRowsInTableView:),
-        dia_custom_mods_native_table);
+        context->nativeTable);
 }
 
-static NSColor *dia_custom_native_sidebar_icon_tint(void) {
-    NSInteger nativeRows = dia_custom_native_settings_row_count();
+static NSColor *dia_custom_native_sidebar_icon_tint(
+    DiaCustomModsPaneContext *context) {
+    NSInteger nativeRows = dia_custom_native_settings_row_count(context);
     if (nativeRows == NSNotFound || nativeRows <= 0) return nil;
-    NSInteger referenceRow = dia_custom_mods_native_table.selectedRow == 0 &&
+    NSInteger referenceRow = context->nativeTable.selectedRow == 0 &&
         nativeRows > 1 ? 1 : 0;
-    NSTableCellView *reference = (NSTableCellView *)[dia_custom_mods_native_table
+    NSTableCellView *reference = (NSTableCellView *)[context->nativeTable
         viewAtColumn:0 row:referenceRow makeIfNecessary:NO];
     return reference.imageView.contentTintColor;
 }
 
-static void dia_custom_set_mods_sidebar_selected(BOOL selected) {
-    NSInteger rowIndex = dia_custom_native_settings_row_count();
+static void dia_custom_set_mods_sidebar_selected(
+    DiaCustomModsPaneContext *context,
+    BOOL selected) {
+    NSInteger rowIndex = dia_custom_native_settings_row_count(context);
     if (rowIndex == NSNotFound) return;
-    NSTableRowView *row = [dia_custom_mods_native_table
+    NSTableRowView *row = [context->nativeTable
         rowViewAtRow:rowIndex makeIfNecessary:NO];
     row.emphasized = selected;
-    NSView *cell = [dia_custom_mods_native_table
+    NSView *cell = [context->nativeTable
         viewAtColumn:0 row:rowIndex makeIfNecessary:NO];
     for (NSView *child in cell.subviews) {
         if ([child isKindOfClass:[NSTextField class]]) {
@@ -712,66 +1003,72 @@ static void dia_custom_set_mods_sidebar_selected(BOOL selected) {
         } else if ([child isKindOfClass:[NSImageView class]]) {
             [(NSImageView *)child setContentTintColor:
                 (selected ? NSColor.whiteColor :
-                    dia_custom_native_sidebar_icon_tint())];
+                    dia_custom_native_sidebar_icon_tint(context))];
         }
     }
 }
 
-static void dia_custom_hide_mods_pane(void) {
-    if (dia_custom_mods_content_view != nil) {
-        dia_custom_mods_content_view.hidden = YES;
+static void dia_custom_hide_mods_pane(
+    DiaCustomModsPaneContext *context) {
+    if (context == nil) return;
+    if (context->contentView != nil) {
+        context->contentView.hidden = YES;
     }
-    dia_custom_set_mods_sidebar_selected(NO);
-    if (dia_custom_mods_settings_window != nil &&
-        dia_custom_mods_previous_window_title != nil) {
-        dia_custom_mods_settings_window.title =
-            dia_custom_mods_previous_window_title;
+    dia_custom_set_mods_sidebar_selected(context, NO);
+    if (context->settingsWindow != nil &&
+        context->previousWindowTitle != nil) {
+        context->settingsWindow.title = context->previousWindowTitle;
     }
-    if (dia_custom_mods_toolbar_title != nil &&
-        dia_custom_mods_previous_toolbar_title != nil) {
-        dia_custom_mods_toolbar_title.attributedStringValue =
-            dia_custom_mods_previous_toolbar_title;
+    if (context->toolbarTitle != nil &&
+        context->previousToolbarTitle != nil) {
+        context->toolbarTitle.attributedStringValue =
+            context->previousToolbarTitle;
     }
 }
 
-static void dia_custom_show_mods_pane(void) {
-    if (dia_custom_mods_settings_window == nil ||
-        dia_custom_mods_content_host == nil) return;
-    [dia_custom_mods_previous_window_title release];
-    dia_custom_mods_previous_window_title =
-        [dia_custom_mods_settings_window.title copy];
-    [dia_custom_mods_previous_toolbar_title release];
-    dia_custom_mods_previous_toolbar_title = nil;
-    if (dia_custom_mods_content_view == nil ||
-        dia_custom_mods_content_view.superview != dia_custom_mods_content_host) {
-        [dia_custom_mods_content_view removeFromSuperview];
-        [dia_custom_mods_content_view release];
+static void dia_custom_show_mods_pane(
+    DiaCustomModsPaneContext *context) {
+    if (context == nil || context->settingsWindow == nil ||
+        context->contentHost == nil) return;
+    BOOL wasVisible = context->contentView != nil &&
+        !context->contentView.hidden;
+    if (!wasVisible) {
+        [context->previousWindowTitle release];
+        context->previousWindowTitle =
+            [context->settingsWindow.title copy];
+        [context->previousToolbarTitle release];
+        context->previousToolbarTitle = nil;
+    }
+    if (context->contentView == nil ||
+        context->contentView.superview != context->contentHost) {
+        [context->contentView removeFromSuperview];
+        [context->contentView release];
         WKWebViewConfiguration *configuration =
             [[WKWebViewConfiguration alloc] init];
-        dia_custom_mods_content_view = [[WKWebView alloc]
-            initWithFrame:dia_custom_mods_content_host.bounds
+        context->contentView = [[WKWebView alloc]
+            initWithFrame:context->contentHost.bounds
             configuration:configuration];
         [configuration release];
-        dia_custom_mods_content_view.autoresizingMask =
+        context->contentView.autoresizingMask =
             NSViewWidthSizable | NSViewHeightSizable;
-        dia_custom_mods_content_view.accessibilityLabel = @"Dia Mods";
-        [dia_custom_mods_content_host addSubview:dia_custom_mods_content_view
-                                      positioned:NSWindowAbove
-                                      relativeTo:nil];
+        context->contentView.accessibilityLabel = @"Dia Mods";
+        [context->contentHost addSubview:context->contentView
+                              positioned:NSWindowAbove
+                              relativeTo:nil];
     }
-    dia_custom_mods_content_view.frame = dia_custom_mods_content_host.bounds;
-    dia_custom_mods_content_view.hidden = NO;
+    context->contentView.frame = context->contentHost.bounds;
+    context->contentView.hidden = NO;
     NSURL *url = dia_custom_local_api_url(@"/mods");
     if (url != nil) {
         NSURLRequest *request = [NSURLRequest
             requestWithURL:url
                cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
            timeoutInterval:10.0];
-        [dia_custom_mods_content_view loadRequest:request];
+        [context->contentView loadRequest:request];
     }
-    dia_custom_mods_settings_window.title = @"Mods";
-    dia_custom_set_mods_toolbar_title(@"Mods");
-    dia_custom_set_mods_sidebar_selected(YES);
+    context->settingsWindow.title = @"Mods";
+    dia_custom_set_mods_toolbar_title(context, @"Mods");
+    dia_custom_set_mods_sidebar_selected(context, YES);
     dia_custom_log_status(@"mod-manager-pane-presented");
 }
 
@@ -780,7 +1077,10 @@ static NSInteger dia_custom_mods_number_of_rows(id dataSource, SEL selector,
     NSInteger count = dia_custom_mods_original_number_of_rows != NULL
         ? dia_custom_mods_original_number_of_rows(dataSource, selector, table)
         : 0;
-    return table == dia_custom_mods_native_table ? count + 1 : count;
+    DiaCustomModsPaneContext *context =
+        dia_custom_mods_context_for_table(table);
+    return context != nil && table == context->nativeTable
+        ? count + 1 : count;
 }
 
 static NSView *dia_custom_mods_sidebar_cell(NSTableView *table) {
@@ -827,8 +1127,10 @@ static NSView *dia_custom_mods_view_for_row(id delegate, SEL selector,
                                              NSTableView *table,
                                              NSTableColumn *column,
                                              NSInteger row) {
-    NSInteger nativeRows = table == dia_custom_mods_native_table
-        ? dia_custom_native_settings_row_count() : NSNotFound;
+    DiaCustomModsPaneContext *context =
+        dia_custom_mods_context_for_table(table);
+    NSInteger nativeRows = context != nil && table == context->nativeTable
+        ? dia_custom_native_settings_row_count(context) : NSNotFound;
     if (nativeRows != NSNotFound && row == nativeRows) {
         return dia_custom_mods_sidebar_cell(table);
     }
@@ -842,16 +1144,25 @@ static void dia_custom_mods_selection_changed(id delegate, SEL selector,
                                                NSNotification *notification) {
     NSTableView *table = [notification.object isKindOfClass:[NSTableView class]]
         ? notification.object : nil;
-    NSInteger modsRow = table == dia_custom_mods_native_table
-        ? dia_custom_native_settings_row_count() : NSNotFound;
-    if (modsRow != NSNotFound && table.selectedRow == modsRow) {
-        dia_custom_show_mods_pane();
+    DiaCustomModsPaneContext *context =
+        dia_custom_mods_context_for_table(table);
+    if (context != nil && context->reloadingTable) {
+        if (dia_custom_mods_original_selection_changed != NULL) {
+            dia_custom_mods_original_selection_changed(
+                delegate, selector, notification);
+        }
         return;
     }
-    if (table == dia_custom_mods_native_table &&
-        dia_custom_mods_content_view != nil &&
-        !dia_custom_mods_content_view.hidden) {
-        dia_custom_hide_mods_pane();
+    NSInteger modsRow = context != nil && table == context->nativeTable
+        ? dia_custom_native_settings_row_count(context) : NSNotFound;
+    if (modsRow != NSNotFound && table.selectedRow == modsRow) {
+        dia_custom_show_mods_pane(context);
+        return;
+    }
+    if (context != nil && table == context->nativeTable &&
+        context->contentView != nil &&
+        !context->contentView.hidden) {
+        dia_custom_hide_mods_pane(context);
     }
     if (dia_custom_mods_original_selection_changed != NULL) {
         dia_custom_mods_original_selection_changed(
@@ -859,7 +1170,9 @@ static void dia_custom_mods_selection_changed(id delegate, SEL selector,
     }
 }
 
-static BOOL dia_custom_install_mods_table_hooks(NSTableView *table) {
+static BOOL dia_custom_install_mods_table_hooks(
+    DiaCustomModsPaneContext *context,
+    NSTableView *table) {
     id dataSource = table.dataSource;
     id delegate = table.delegate;
     Class dataSourceClass = object_getClass(dataSource);
@@ -873,7 +1186,8 @@ static BOOL dia_custom_install_mods_table_hooks(NSTableView *table) {
         }
         // Settings windows are destroyed and recreated. The method hooks live
         // on their shared classes, while these receiver objects do not.
-        dia_custom_set_mods_table_objects(table, dataSource, delegate);
+        dia_custom_set_mods_table_objects(
+            context, table, dataSource, delegate);
         return YES;
     }
     SEL countSelector = @selector(numberOfRowsInTableView:);
@@ -916,21 +1230,25 @@ static BOOL dia_custom_install_mods_table_hooks(NSTableView *table) {
     }
     dia_custom_mods_data_source_class = dataSourceClass;
     dia_custom_mods_delegate_class = delegateClass;
-    dia_custom_set_mods_table_objects(table, dataSource, delegate);
+    dia_custom_set_mods_table_objects(
+        context, table, dataSource, delegate);
     dia_custom_mods_table_hooks_installed = YES;
     return YES;
 }
 
 static void dia_custom_install_mod_manager(id target) {
     if (!dia_custom_mod_enabled("mod-manager") || target == nil) return;
+    dia_custom_install_mods_window_close_observer();
     for (NSWindow *window in NSApp.windows) {
         if (!dia_custom_is_settings_window(window)) continue;
         NSTableView *table = dia_custom_find_settings_table(window.contentView);
         NSSplitView *split = dia_custom_settings_split_for_table(table);
         NSView *sidebar = dia_custom_direct_child(table, split);
-        BOOL tableChanged = dia_custom_mods_native_table != table;
+        DiaCustomModsPaneContext *context =
+            dia_custom_mods_context_for_window(window, YES);
+        BOOL tableChanged = context->nativeTable != table;
         if (table == nil || split == nil || sidebar == nil ||
-            !dia_custom_install_mods_table_hooks(table)) continue;
+            !dia_custom_install_mods_table_hooks(context, table)) continue;
         NSView *content = nil;
         for (NSView *candidate in split.subviews) {
             if (candidate != sidebar) {
@@ -939,11 +1257,34 @@ static void dia_custom_install_mod_manager(id target) {
             }
         }
         if (content == nil) continue;
-        dia_custom_mods_settings_window = window;
-        dia_custom_mods_content_host = content;
-        if (tableChanged) [table reloadData];
+        context->settingsWindow = window;
+        if (context->contentHost != content) {
+            [context->contentHost release];
+            context->contentHost = [content retain];
+        }
+        if (tableChanged) {
+            context->reloadingTable = YES;
+            [table reloadData];
+            context->reloadingTable = NO;
+        }
         dia_custom_log_status(@"mod-manager-tab-installed");
     }
+}
+
+static DiaCustomModsPaneContext *dia_custom_active_mods_context(void) {
+    NSWindow *keyWindow = NSApp.keyWindow;
+    if (dia_custom_is_settings_window(keyWindow)) {
+        DiaCustomModsPaneContext *context =
+            dia_custom_mods_context_for_window(keyWindow, NO);
+        if (context != nil) return context;
+    }
+    for (NSWindow *window in NSApp.windows) {
+        if (!dia_custom_is_settings_window(window)) continue;
+        DiaCustomModsPaneContext *context =
+            dia_custom_mods_context_for_window(window, NO);
+        if (context != nil) return context;
+    }
+    return nil;
 }
 
 static NSString *dia_custom_memory_retention_title(NSInteger days) {
@@ -2290,7 +2631,8 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 
 - (void)showDiaMods:(id)sender {
     (void)sender;
-    dia_custom_show_mods_pane();
+    dia_custom_install_mod_manager(self);
+    dia_custom_show_mods_pane(dia_custom_active_mods_context());
 }
 
 - (BOOL)openLocalSettingsFragment:(NSString *)fragment {
@@ -3060,6 +3402,9 @@ static void dia_custom_install_runtime_overrides(void) {
     }
     if (dia_custom_mod_enabled("account-bypass")) {
         dia_custom_close_account_window();
+    }
+    if (dia_custom_mod_enabled("official-dia-sync")) {
+        dia_custom_open_native_account_settings();
     }
     if (dia_custom_mod_enabled("model-picker") ||
         dia_custom_mod_enabled("developer-tools") ||

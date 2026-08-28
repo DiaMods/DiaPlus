@@ -85,6 +85,19 @@ export class ModConfigStore {
         apply: mod.rebuildOnChange ? "rebuild" : "restart",
       };
     });
+    const byID = new Map(mods.map((mod) => [mod.id, mod]));
+    for (const mod of mods.filter((candidate) => candidate.configuredEnabled)) {
+      for (const id of mod.requires ?? []) {
+        if (!byID.get(id)?.configuredEnabled) {
+          throw new Error(`${mod.id} requires Dia Mod ${id}`);
+        }
+      }
+      for (const id of new Set([...(mod.conflicts ?? []), ...(mod.replaces ?? [])])) {
+        if (byID.get(id)?.configuredEnabled) {
+          throw new Error(`${mod.id} conflicts with Dia Mod ${id}`);
+        }
+      }
+    }
     return {
       version: 1,
       title: "Dia Mods",
@@ -103,9 +116,25 @@ export class ModConfigStore {
       throw new Error(`${id} is a required safety/core mod and cannot be disabled`);
     }
     const state = await this.loadState();
+    const overrides = { ...(state?.overrides ?? {}), [id]: enabled };
+    if (enabled) {
+      for (const dependency of mod.requires ?? []) overrides[dependency] = true;
+      for (const conflict of new Set([
+        ...(mod.conflicts ?? []),
+        ...(mod.replaces ?? []),
+      ])) overrides[conflict] = false;
+      for (const candidate of manifest.mods) {
+        if ((candidate.conflicts ?? []).includes(id) ||
+            (candidate.replaces ?? []).includes(id)) {
+          overrides[candidate.id] = false;
+        }
+      }
+    } else {
+      for (const replaced of mod.replaces ?? []) overrides[replaced] = true;
+    }
     await atomicWriteJSON(this.statePath, {
       version: 1,
-      overrides: { ...(state?.overrides ?? {}), [id]: enabled },
+      overrides,
     });
     return this.publicState();
   }

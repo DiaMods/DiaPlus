@@ -26,10 +26,24 @@ mod_enabled() {
   esac
 }
 
+sign_identity="${DIA_CUSTOM_SIGN_IDENTITY:-}"
+if [[ -z "$sign_identity" ]]; then
+  sign_identity="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | \
+    /usr/bin/awk '/"Developer ID Application:/{print $2; exit}')"
+fi
+[[ -n "$sign_identity" ]] || sign_identity="-"
+sync_team_id=""
+if mod_enabled official-dia-sync; then
+  signing_details="$("$script_dir/signing-identity.sh")"
+  sign_identity="${signing_details%%$'\t'*}"
+  signing_remainder="${signing_details#*$'\t'}"
+  sync_team_id="${signing_remainder%%$'\t'*}"
+fi
+
 info="$app/Contents/Info.plist"
 previous_mods="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomEnabledMods' "$info" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c 'Print :DiaCustomEnabledModules' "$info" 2>/dev/null || true)"
-for irreversible_mod in account-bypass reports apple-models; do
+for irreversible_mod in account-bypass official-dia-sync reports apple-models; do
   if [[ ",$previous_mods," == *",$irreversible_mod,"* ]] && \
      ! mod_enabled "$irreversible_mod"; then
     print -u2 "$irreversible_mod is already patched into this app. Run './dia-custom build --replace' to disable it from a clean Dia copy."
@@ -50,8 +64,15 @@ mod_enabled identity-isolation && \
   node "$project_dir/src/patches/patch-keychain-label.js" "$app"
 mod_enabled local-ai-routing && \
   node "$project_dir/src/patches/patch-endpoint.js" "$app"
+mod_enabled local-ai-routing && \
+  node "$project_dir/src/patches/patch-no-account.js" \
+    --capabilities-only "$app"
 mod_enabled account-bypass && \
-  node "$project_dir/src/patches/patch-no-account.js" "$app"
+  node "$project_dir/src/patches/patch-no-account.js" \
+    --anonymous-only "$app"
+mod_enabled official-dia-sync && \
+  node "$project_dir/src/patches/patch-account-keychain-groups.js" \
+    "$app" "$sync_team_id"
 node "$project_dir/src/patches/embed-bootstrap.js" "$app" "$bootstrap"
 mod_enabled local-ai-routing && \
   node "$project_dir/src/patches/patch-agent-handler.js" "$app"
@@ -80,22 +101,37 @@ fi
   /usr/libexec/PlistBuddy -c "Set :DiaCustomBuildMods '$enabled_build_mods'" "$info"
 
 # A certificate-backed designated requirement stays stable across rebuilds, so
-# macOS can retain the user's TCC and Keychain decisions. Prefer Developer ID
-# when this Mac has one, while preserving an explicit/ad-hoc override for
-# contributors without a signing certificate.
-sign_identity="${DIA_CUSTOM_SIGN_IDENTITY:-}"
-if [[ -z "$sign_identity" ]]; then
-  sign_identity="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null | \
-    /usr/bin/awk '/"Developer ID Application:/{print $2; exit}')"
+# macOS can retain the user's TCC and Keychain decisions. Official Sync also
+# receives app-owned account/WebAuthn groups; the stock Dia groups are never
+# requested or reused.
+clone_entitlements="$project_dir/src/config/clone-entitlements.plist"
+if mod_enabled official-dia-sync; then
+  generated_entitlements="$project_dir/.build/signing/clone-entitlements.plist"
+  mkdir -p "${generated_entitlements:h}"
+  /bin/cp "$clone_entitlements" "$generated_entitlements"
+  /usr/libexec/PlistBuddy -c \
+    "Add :com.apple.application-identifier string $sync_team_id.local.rttm.dia" \
+    "$generated_entitlements"
+  /usr/libexec/PlistBuddy -c \
+    "Add :com.apple.developer.team-identifier string $sync_team_id" \
+    "$generated_entitlements"
+  /usr/libexec/PlistBuddy -c "Add :keychain-access-groups array" \
+    "$generated_entitlements"
+  /usr/libexec/PlistBuddy -c \
+    "Add :keychain-access-groups:0 string $sync_team_id.local.rttm.dia.account.auth.v01" \
+    "$generated_entitlements"
+  /usr/libexec/PlistBuddy -c \
+    "Add :keychain-access-groups:1 string $sync_team_id.local.rttm.dia.account.webauthn.v01" \
+    "$generated_entitlements"
+  clone_entitlements="$generated_entitlements"
 fi
-[[ -n "$sign_identity" ]] || sign_identity="-"
 
 # Sign the modified nested executable first, then seal the complete clone.
 codesign --force --sign "$sign_identity" \
   --entitlements "$project_dir/src/config/agent-runtime-entitlements.plist" \
   "$app/Contents/Resources/agent-server-resources/dist/handler"
 codesign --force --deep --sign "$sign_identity" \
-  --entitlements "$project_dir/src/config/clone-entitlements.plist" \
+  --entitlements "$clone_entitlements" \
   "$app"
 codesign --verify --strict \
   "$app/Contents/Resources/agent-server-resources/dist/handler"

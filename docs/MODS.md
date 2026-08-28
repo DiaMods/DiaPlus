@@ -9,6 +9,7 @@
 | `update-blocker` | `install.sh`, `launch.sh`, `supported-dia-builds.json` | Sparkle/feed checks and pre-copy build audit; required |
 | `local-ai-routing` | `patch-endpoint.js`, `patch-agent-handler.js`, bridge server/providers | Protocol/provider tests and bridge health; required |
 | `account-bypass` | `patch-no-account.js`, anonymous launch defaults | Per-build ARM64 layout check; clean rebuild to remove |
+| `official-dia-sync` | native account/Sync clients, isolated Keychain groups, exact-host network exception | Off by default; stable signature and clean rebuild required; atomically replaces `account-bypass` |
 | `model-picker` | native bootstrap model catalog/toolbar functions | Runtime-discovered toolbar plus View-menu fallback |
 | `developer-tools` | native bootstrap, local routing/tool pages, browser inspector | Native inspector is webpage-only; local diagnostics fail closed |
 | `mod-manager` | native Settings sidebar/content view, authenticated Mods API | Optional mods can be toggled; required safety/core mods remain locked |
@@ -28,6 +29,9 @@
 ./dia-custom mods list --json
 ./dia-custom mods disable <mod-id>
 ./dia-custom mods enable <mod-id>
+./dia-custom sync status
+./dia-custom sync enable
+./dia-custom sync disable
 ~~~
 
 Runtime and bridge mods take effect after restarting Dia Custom. Build mods must be changed with `./dia-custom build --replace`; `install` refuses to claim that an already-applied binary patch was removed. Required safety/core mods cannot be disabled through this interface. The native Settings → Mods pane uses the same profile state and clearly marks restart/rebuild requirements.
@@ -41,3 +45,5 @@ Runtime and bridge mods take effect after restarting Dia Custom. Build mods must
 5. Run `./dia-custom update`; the transactional build preserves the previous clone and profile state.
 
 This makes incompatibility explicit. A failed Report audit, for example, does not imply that Memory or the model picker needs to be rewritten.
+
+`official-dia-sync` is intentionally stricter than an ordinary optional mod. It preserves the source build's native client metadata and cryptography, uses clone-owned Keychain access groups, and opens only the two exact Dia account/Sync hosts. It never adds a custom client marker. Because a separately signed app cannot be guaranteed indistinguishable to a remote authentication service, rejection stops the flow; this project does not copy official credentials or impersonate Dia's official signature.

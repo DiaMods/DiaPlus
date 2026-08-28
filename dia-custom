@@ -15,6 +15,7 @@ case "$command" in
   update) exec "$project_dir/scripts/build.sh" --replace "$@" ;;
   mods) exec node "$project_dir/scripts/mods.js" "$@" ;;
   modules) exec node "$project_dir/scripts/mods.js" "$@" ;;
+  sync) exec "$project_dir/scripts/sync.sh" "$@" ;;
   models)
     exec /usr/bin/curl --silent --show-error --fail \
       http://127.0.0.1:8765/api/models
@@ -43,6 +44,7 @@ case "$command" in
     print '  ./dia-custom build [--replace]  Create a clone from /Applications/Dia.app'
     print '  ./dia-custom update             Rebuild only from an audited Dia app'
     print '  ./dia-custom mods               List or configure Dia Mods'
+    print '  ./dia-custom sync               Manage optional official Dia Sync'
     print '  ./dia-custom status             Show implemented and remaining work'
     ;;
   *)

@@ -7,6 +7,11 @@ import path from "node:path";
 const argumentsAfterScript = process.argv.slice(2);
 const appArgument = argumentsAfterScript.find((argument) => !argument.startsWith("--"));
 const checkOnly = argumentsAfterScript.includes("--check");
+const capabilitiesOnly = argumentsAfterScript.includes("--capabilities-only");
+const anonymousOnly = argumentsAfterScript.includes("--anonymous-only");
+if (capabilitiesOnly && anonymousOnly) {
+  throw new Error("choose either --capabilities-only or --anonymous-only");
+}
 const appPath = appArgument ? path.resolve(appArgument) : "";
 const executable = path.join(appPath, "Contents", "MacOS", "Dia");
 
@@ -108,29 +113,34 @@ if (!layout) {
 
 const patches = [
   {
+    scope: "anonymous",
     offset: layout.accountStateGuard,
     expected: bytes("c0d24a39"),
     replacement: bytes("c0d24a39"),
   },
-  { offset: layout.capabilityGateOne, expected: bytes("d31a0036"), replacement: nop },
-  { offset: layout.capabilityGateTwo, expected: bytes("d6170036"), replacement: nop },
+  { scope: "capability", offset: layout.capabilityGateOne, expected: bytes("d31a0036"), replacement: nop },
+  { scope: "capability", offset: layout.capabilityGateTwo, expected: bytes("d6170036"), replacement: nop },
   {
+    scope: "anonymous",
     offset: layout.accountState,
     expected: bytes("fa67bba9"),
     replacement: bytes("20008052"),
   },
   {
+    scope: "anonymous",
     offset: layout.accountState + 4,
     expected: bytes("f85f01a9"),
     replacement: bytes("c0035fd6"),
   },
   {
+    scope: "anonymous",
     offset: layout.authenticationMethod,
     expected: bytes("bd0344b2"),
     alternates: [bytes("c10640f9")],
     replacement: bytes("c10640f9"),
   },
   {
+    scope: "anonymous",
     offset: layout.authenticationMethod + 4,
     expected: bytes("ffc300d1"),
     alternates: [
@@ -143,16 +153,19 @@ const patches = [
     replacement: bytes("40008052"),
   },
   {
+    scope: "anonymous",
     offset: layout.authenticationMethod + 8,
     expected: bytes("f5cf00a9"),
     replacement: bytes("140080d2"),
   },
   {
+    scope: "anonymous",
     offset: layout.authenticationMethod + 12,
     expected: bytes("fd7b02a9"),
     replacement: bytes("20001fd6"),
   },
   {
+    scope: "capability",
     // Treat a missing Dia account token as an empty Swift String, releasing
     // the discarded error before the original success continuation runs.
     offset: layout.modelTokenFailure.offset,
@@ -160,12 +173,14 @@ const patches = [
     replacement: bytes(layout.modelTokenFailure.replacement),
   },
   {
+    scope: "anonymous",
     // Use Dia's anonymous AuthClient dependency instead of AuthClientImpl.
     offset: layout.authClientConstructor.offset,
     expected: bytes("a2feff97"),
     replacement: bytes(layout.authClientConstructor.replacement),
   },
   ...(layout.restoreAnonymousFallback ? [{
+    scope: "anonymous",
     // Build 85660 was used during an earlier UI-test identity experiment.
     // Accept that alternate and restore the ordinary anonymous constructor.
     offset: layout.restoreAnonymousFallback.offset,
@@ -174,6 +189,7 @@ const patches = [
     replacement: bytes(layout.restoreAnonymousFallback.expected),
   }] : []),
   {
+    scope: "capability",
     // Keep parsing and ECDH, but accept the localhost bridge's ephemeral key
     // without Dia's production-only long-term signing key.
     offset: layout.keyVerification,
@@ -181,6 +197,7 @@ const patches = [
     replacement: nop,
   },
   ...layout.cliaClosures.map((offset) => ({
+    scope: "capability",
     // The anonymous dependency's Clia flags use a constant-true closure.
     offset,
     expected: bytes(layout.cliaExpected),
@@ -188,8 +205,12 @@ const patches = [
   })),
 ];
 
+const selectedPatches = patches.filter((patch) =>
+  !capabilitiesOnly && !anonymousOnly ||
+  capabilitiesOnly && patch.scope === "capability" ||
+  anonymousOnly && patch.scope === "anonymous");
 const data = fs.readFileSync(executable);
-for (const patch of patches) {
+for (const patch of selectedPatches) {
   const current = data.subarray(
     patch.offset,
     patch.offset + patch.replacement.length,
@@ -207,8 +228,8 @@ for (const patch of patches) {
 }
 
 if (checkOnly) {
-  console.log(`Validated the audited account-patch layout for Dia build ${build}`);
+  console.log(`Validated the audited ${capabilitiesOnly ? "local capability" : anonymousOnly ? "anonymous account" : "account"} patch layout for Dia build ${build}`);
 } else {
   fs.writeFileSync(executable, data);
-  console.log(`Disabled the Dia-account gate for build ${build} in ${executable}`);
+  console.log(`${capabilitiesOnly ? "Enabled account-independent local AI" : anonymousOnly ? "Disabled the Dia-account requirement" : "Patched local AI and the Dia-account gate"} for build ${build} in ${executable}`);
 }
