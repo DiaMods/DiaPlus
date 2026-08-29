@@ -130,7 +130,7 @@ if [[ -d "$bridge_state" ]]; then
   [[ "$state_mode" == "700" ]] && pass "local bridge state directory is owner-only" || \
     fail "local bridge state directory permissions are $state_mode, expected 700"
   sensitive_permissions_ok=true
-  for state_file in config.json credentials.json memory.sqlite3 memory.sqlite3-shm memory.sqlite3-wal models.json mods.json modules.json sessions.json tool-coverage.json; do
+  for state_file in compatibility.json config.json credentials.json memory.sqlite3 memory.sqlite3-shm memory.sqlite3-wal models.json mods.json modules.json sessions.json tool-coverage.json; do
     state_path="$bridge_state/$state_file"
     [[ ! -e "$state_path" ]] || [[ "$(/usr/bin/stat -f '%Lp' "$state_path" 2>/dev/null)" == "600" ]] || \
       sensitive_permissions_ok=false

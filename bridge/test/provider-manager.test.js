@@ -91,6 +91,41 @@ test("provider catalog discovers Ollama and routes local memory before native to
   memory.database.close();
 });
 
+test("startup publishes a built-in catalog before slow discovery completes", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-cached-startup-"));
+  const config = new ConfigStore(resolve(directory, "config.json"));
+  const memory = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  let releaseApple;
+  const appleGate = new Promise((resolveGate) => { releaseApple = resolveGate; });
+  const manager = new ProviderManager({
+    configStore: config,
+    credentialStore: new CredentialStore(resolve(directory, "credentials.json")),
+    memoryStore: memory,
+    catalogPath: resolve(directory, "models.json"),
+    toolCoverageStore: new ToolCoverageStore(resolve(directory, "tool-coverage.json")),
+    appleStatusImplementation: async () => {
+      await appleGate;
+      return {
+        onDevice: { available: true },
+        privateCloud: { available: false, reason: "test" },
+      };
+    },
+    fetchImplementation: async () => { throw new Error("offline test"); },
+  });
+  const startedAt = Date.now();
+  await manager.initialize();
+  assert.ok(Date.now() - startedAt < 500);
+  assert.equal(manager.healthState().coreReady, true);
+  assert.equal(manager.healthState().catalog.state, "refreshing");
+  assert.ok(manager.catalogValue.models.some((model) => model.key === "codex:gpt-5.6-luna"));
+  assert.ok(manager.catalogValue.models.some((model) => model.key === "apple-on-device:default"));
+  releaseApple();
+  await manager.catalogRefreshPromise;
+  assert.equal(manager.healthState().catalog.state, "ready");
+  clearInterval(manager.historyRefreshTimer);
+  memory.database.close();
+});
+
 test("native web tools return to Dia while bridge-only local tools execute internally", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-native-web-"));
   const config = new ConfigStore(resolve(directory, "config.json"));

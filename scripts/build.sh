@@ -23,14 +23,18 @@ if [[ ! -d "$source_app" ]]; then
   exit 1
 fi
 
-enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
+requested_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
+enabled_mods="${DIA_CUSTOM_EFFECTIVE_MODS:-$requested_mods}"
 mod_enabled() {
   case ",${enabled_mods}," in
     *",${1},"*) return 0 ;;
     *) return 1 ;;
   esac
 }
-node "$script_dir/check-dia-build.js" "$source_app" --mods "$enabled_mods"
+node "$script_dir/check-dia-build.js" "$source_app" --mods "$enabled_mods" --allow-structural
+compatibility_report="$(/usr/bin/mktemp -t dia-custom-build-compatibility).json"
+node "$script_dir/compatibility.js" "$source_app" \
+  --mods "$requested_mods" --json > "$compatibility_report"
 
 if [[ -e "$clone_app" && "$replace" != true ]]; then
   print -u2 "Dia Custom already exists at $clone_app"
@@ -42,9 +46,35 @@ if [[ -e "$clone_app" ]] && /usr/bin/pgrep -f "$clone_app/Contents/MacOS/Dia" >/
   exit 1
 fi
 
+# A force-quit browser can leave its self-contained Node bridge orphaned. Stop
+# only the PID recorded in this profile or a process whose complete command is
+# the exact clone's bundled DiaCustomNode invocation; never kill an unrelated
+# localhost app.
+bridge_pid_file="$profile/Bridge/.state/bridge.pid"
+bridge_pids=()
+if [[ -f "$bridge_pid_file" ]]; then
+  bridge_pid="$(/usr/bin/tr -cd '0-9' < "$bridge_pid_file")"
+  [[ -z "$bridge_pid" ]] || bridge_pids+=("$bridge_pid")
+fi
+while IFS= read -r bridge_pid; do
+  [[ -z "$bridge_pid" ]] || bridge_pids+=("$bridge_pid")
+done < <(/usr/bin/pgrep -f "^${clone_app}/Contents/Helpers/DiaCustomNode ${clone_app}/Contents/Resources/DiaCustomBridge/src/server.js$" 2>/dev/null || true)
+for bridge_pid in "${bridge_pids[@]}"; do
+  bridge_command="$(ps -o command= -p "${bridge_pid:-0}" 2>/dev/null || true)"
+  expected_command="$clone_app/Contents/Helpers/DiaCustomNode $clone_app/Contents/Resources/DiaCustomBridge/src/server.js"
+  if [[ -n "$bridge_pid" && "$bridge_pid" -gt 1 &&
+        "$bridge_command" == "$expected_command" ]]; then
+    /bin/kill -TERM "$bridge_pid" >/dev/null 2>&1 || true
+    for _ in {1..30}; do
+      /bin/kill -0 "$bridge_pid" >/dev/null 2>&1 || break
+      sleep 0.1
+    done
+  fi
+done
+
 mkdir -p "$work_dir" "${profile:h}"
 temporary_app="$work_dir/Dia Custom RTTM.build.$$.app"
-trap '[[ ! -e "$temporary_app" ]] || /bin/rm -rf "$temporary_app"' EXIT
+trap '[[ ! -e "$temporary_app" ]] || /bin/rm -rf "$temporary_app"; /bin/rm -f "$compatibility_report"' EXIT
 /usr/bin/ditto "$source_app" "$temporary_app"
 
 info="$temporary_app/Contents/Info.plist"
@@ -57,7 +87,9 @@ info="$temporary_app/Contents/Info.plist"
 
 DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" \
   "$script_dir/install.sh" "$temporary_app"
+"$script_dir/verify-staged.sh" "$temporary_app" "$enabled_mods"
 
+backup_app=""
 if [[ -e "$clone_app" ]]; then
   backup_dir="$work_dir/backups/apps"
   mkdir -p "$backup_dir"
@@ -65,7 +97,31 @@ if [[ -e "$clone_app" ]]; then
   /bin/mv "$clone_app" "$backup_app"
   print "Previous clone preserved at $backup_app"
 fi
-/bin/mv "$temporary_app" "$clone_app"
+if ! /bin/mv "$temporary_app" "$clone_app"; then
+  if [[ -n "$backup_app" && -e "$backup_app" && ! -e "$clone_app" ]]; then
+    /bin/mv "$backup_app" "$clone_app"
+  fi
+  print -u2 "The staged app could not be installed; the previous clone was restored."
+  exit 1
+fi
+if ! "$script_dir/verify-staged.sh" "$clone_app" "$enabled_mods"; then
+  failed_app="$work_dir/backups/apps/Dia Custom RTTM.failed.$(/bin/date +%Y%m%d-%H%M%S).app"
+  mkdir -p "${failed_app:h}"
+  /bin/mv "$clone_app" "$failed_app"
+  if [[ -n "$backup_app" && -e "$backup_app" ]]; then
+    /bin/mv "$backup_app" "$clone_app"
+    print -u2 "Post-install verification failed; the previous clone was restored."
+  else
+    print -u2 "Post-install verification failed; the failed build was preserved at $failed_app."
+  fi
+  exit 1
+fi
+
+mkdir -p "$profile/Bridge/.state"
+/bin/chmod 700 "$profile/Bridge/.state"
+/bin/cp "$compatibility_report" "$profile/Bridge/.state/compatibility.json"
+/bin/chmod 600 "$profile/Bridge/.state/compatibility.json"
+/bin/rm -f "$compatibility_report"
 trap - EXIT
 
 /usr/bin/defaults write "$bundle_id" shouldShareUsageData -bool false

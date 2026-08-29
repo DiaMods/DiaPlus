@@ -21,6 +21,9 @@
 extern BOOL dia_custom_swift_invoke_window_presenter_action(
     const void *applicationController,
     const char *fieldName);
+extern BOOL dia_custom_swift_invoke_menu_action(
+    const void *menuOrchestrator,
+    const char *actionName);
 extern BOOL dia_custom_swift_set_native_apps_enabled(
     const void *viewModel,
     BOOL morningBriefEnabled);
@@ -202,9 +205,17 @@ static void dia_custom_start_bundled_bridge(NSString *nodePath,
     pid_t previousPID = (pid_t)pidText.intValue;
     if (previousPID > 1) {
         char executablePath[PROC_PIDPATHINFO_MAXSIZE] = {0};
-        if (proc_pidpath(previousPID, executablePath,
-                         sizeof(executablePath)) > 0 &&
-            strcmp(executablePath, nodePath.UTF8String) == 0) {
+        BOOL hasPath = proc_pidpath(previousPID, executablePath,
+                                    sizeof(executablePath)) > 0;
+        NSString *runningPath = hasPath
+            ? [NSString stringWithUTF8String:executablePath] : nil;
+        BOOL isRecordedCloneNode = hasPath &&
+            [runningPath.lastPathComponent isEqualToString:@"DiaCustomNode"] &&
+            ([runningPath containsString:@"/Dia Custom RTTM.app/"] ||
+             [runningPath containsString:@"/Dia Custom RTTM.pre-rebuild."] ||
+             [runningPath containsString:@"/Dia Custom RTTM.failed."]);
+        if (strcmp(executablePath, nodePath.UTF8String) == 0 ||
+            isRecordedCloneNode) {
             kill(previousPID, SIGTERM);
             for (NSUInteger attempt = 0; attempt < 20; ++attempt) {
                 if (kill(previousPID, 0) != 0) break;
@@ -231,18 +242,75 @@ static void dia_custom_start_bundled_bridge(NSString *nodePath,
         dia_custom_log_status(@"bundled-bridge-spawn-failed");
         return;
     }
-    NSString *newPID = [NSString stringWithFormat:@"%d\n", bridgePID];
-    [newPID writeToFile:pidPath atomically:YES
-               encoding:NSUTF8StringEncoding error:nil];
-    chmod(pidPath.fileSystemRepresentation, 0600);
     for (NSUInteger attempt = 0; attempt < 50; ++attempt) {
         if (dia_custom_bridge_is_healthy(runtimeID)) {
+            NSString *newPID = [NSString stringWithFormat:@"%d\n", bridgePID];
+            [newPID writeToFile:pidPath atomically:YES
+                       encoding:NSUTF8StringEncoding error:nil];
+            chmod(pidPath.fileSystemRepresentation, 0600);
             dia_custom_log_status(@"bundled-bridge-ready");
             return;
         }
         usleep(100000);
     }
+    kill(bridgePID, SIGTERM);
     dia_custom_log_status(@"bundled-bridge-start-timeout");
+}
+
+static NSString *dia_custom_resolved_startup_mods(NSString *state,
+                                                   NSString *bridge,
+                                                   NSString *fallback) {
+    if (state.length == 0 || bridge.length == 0) return fallback;
+    NSData *manifestData = [NSData dataWithContentsOfFile:
+        [bridge stringByAppendingPathComponent:@"config/dia-mods.json"]];
+    NSDictionary *manifest = manifestData != nil
+        ? [NSJSONSerialization JSONObjectWithData:manifestData options:0 error:nil]
+        : nil;
+    NSArray *mods = [manifest[@"mods"] isKindOfClass:[NSArray class]]
+        ? manifest[@"mods"] : nil;
+    if (mods.count == 0) return fallback;
+    NSData *stateData = [NSData dataWithContentsOfFile:
+        [state stringByAppendingPathComponent:@"mods.json"]];
+    NSDictionary *saved = stateData != nil
+        ? [NSJSONSerialization JSONObjectWithData:stateData options:0 error:nil]
+        : nil;
+    NSDictionary *overrides = [saved[@"overrides"] isKindOfClass:[NSDictionary class]]
+        ? saved[@"overrides"] : @{};
+    NSData *compatibilityData = [NSData dataWithContentsOfFile:
+        [state stringByAppendingPathComponent:@"compatibility.json"]];
+    NSDictionary *compatibility = compatibilityData != nil
+        ? [NSJSONSerialization JSONObjectWithData:compatibilityData options:0 error:nil]
+        : nil;
+    NSString *currentBuild = [NSBundle.mainBundle
+        objectForInfoDictionaryKey:@"CFBundleVersion"];
+    BOOL compatibilityMatches = [compatibility[@"build"] isKindOfClass:[NSString class]] &&
+        [compatibility[@"build"] isEqualToString:currentBuild];
+    NSMutableSet<NSString *> *unavailable = [NSMutableSet set];
+    if (compatibilityMatches && [compatibility[@"perMod"] isKindOfClass:[NSArray class]]) {
+        for (NSDictionary *entry in compatibility[@"perMod"]) {
+            if (![entry isKindOfClass:[NSDictionary class]] ||
+                ![entry[@"compatible"] isEqual:@NO]) continue;
+            if ([entry[@"id"] isKindOfClass:[NSString class]]) {
+                [unavailable addObject:entry[@"id"]];
+            }
+        }
+    }
+    NSMutableArray<NSString *> *enabled = [NSMutableArray array];
+    for (NSDictionary *mod in mods) {
+        if (![mod isKindOfClass:[NSDictionary class]]) continue;
+        NSString *identifier = [mod[@"id"] isKindOfClass:[NSString class]]
+            ? mod[@"id"] : nil;
+        if (identifier.length == 0) continue;
+        NSNumber *override = [overrides[identifier] isKindOfClass:[NSNumber class]]
+            ? overrides[identifier] : nil;
+        BOOL selected = [mod[@"required"] boolValue] ||
+            (override != nil ? override.boolValue
+                             : ![mod[@"defaultEnabled"] isEqual:@NO]);
+        if (selected && ![unavailable containsObject:identifier]) {
+            [enabled addObject:identifier];
+        }
+    }
+    return enabled.count > 0 ? [enabled componentsJoinedByString:@","] : fallback;
 }
 
 static void dia_custom_prepare_self_contained_runtime(void) {
@@ -266,6 +334,7 @@ static void dia_custom_prepare_self_contained_runtime(void) {
         objectForInfoDictionaryKey:@"DiaCustomBridgeRuntimeID"];
     NSString *mods = [NSBundle.mainBundle
         objectForInfoDictionaryKey:@"DiaCustomEnabledMods"];
+    mods = dia_custom_resolved_startup_mods(state, bridge, mods);
     dia_custom_set_environment_if_missing("DIA_CUSTOM_PROFILE", profile);
     dia_custom_set_environment_if_missing("DIA_CUSTOM_STATE_DIR", state);
     // The bridge can derive these files from DIA_CUSTOM_STATE_DIR, but the
@@ -1876,8 +1945,17 @@ static void dia_custom_install_local_memory_controls(id target, SEL action) {
     if (!dia_custom_mod_enabled("native-memory")) {
         return;
     }
+    static BOOL didInitialMemoryRefresh = NO;
     BOOL found = dia_custom_refresh_memory_controls(target, action);
-    dia_custom_fetch_local_memory_state(target, action, !found);
+    if (!didInitialMemoryRefresh) {
+        didInitialMemoryRefresh = YES;
+        dia_custom_fetch_local_memory_state(target, action, YES);
+    } else if (found) {
+        // Window update notifications can arrive every frame. Only reconcile
+        // while the native Memory pane is actually visible; the fetch helper
+        // supplies the five-second ceiling and mutations still force refresh.
+        dia_custom_fetch_local_memory_state(target, action, NO);
+    }
 }
 
 // Apps is a native Dia pane. This cache changes the pane's shipped state value
@@ -2327,6 +2405,16 @@ static void dia_custom_fetch_native_apps_state(id target, BOOL force) {
                         [dia_custom_local_apps_last_refresh release];
                         dia_custom_local_apps_last_refresh = [[NSDate date] retain];
                         dia_custom_refresh_native_apps_controls(target);
+                        // Startup asks for Apps state and checks the schedule in
+                        // the same run-loop turn. The HTTP result is necessarily
+                        // later, so retry the due check only after this selected
+                        // profile's native state has actually been installed.
+                        SEL scheduleSelector =
+                            @selector(checkLocalMorningBriefSchedule);
+                        if (dia_custom_mod_enabled("morning-brief") &&
+                            [target respondsToSelector:scheduleSelector]) {
+                            [target performSelector:scheduleSelector];
+                        }
                     } else {
                         dia_custom_log_status(@"native-apps-stale-profile-response-ignored");
                     }
@@ -2813,6 +2901,11 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 - (void)nativeMorningBriefSheetDidEnd:(NSNotification *)notification;
 - (void)pollNativeMorningBriefConfirmation:(NSDictionary *)context;
 - (void)checkLocalMorningBriefSchedule;
+- (void)postLocalMorningBriefStatus:(NSString *)status
+                          profileID:(NSString *)profileID
+                              runID:(NSString *)runID
+                              stage:(NSString *)stage
+                        diagnostics:(NSArray<NSString *> *)diagnostics;
 - (void)openModelSettings:(id)sender;
 - (void)showDiaMods:(id)sender;
 - (BOOL)openLocalSettingsFragment:(NSString *)fragment;
@@ -3141,17 +3234,111 @@ static void dia_custom_schedule_model_picker_attempts(id target,
         isKindOfClass:[NSDictionary class]] ? dia_custom_local_apps_state[@"morningBrief"] : nil;
     if (![brief[@"due"] boolValue]) return;
     // Dia's shipped MorningBriefScheduleClient observes the native `.daily`
-    // preference invoked by the Apps pane callback. Do not fabricate a second
-    // report action here: the native scheduler owns catch-up/delivery, while
-    // the bridge marks running/success when its bundled agent request arrives.
-    static NSString *lastDueDay;
+    // preference invoked by the Apps pane callback. Give it a grace period,
+    // then invoke the same WindowPresenter action it uses as a catch-up path.
+    // The bridge rechecks `due` after the delay, so a native start always wins.
+    static NSString *lastScheduledKey;
+    static NSDate *lastScheduledAt;
     NSString *day = [brief[@"localDay"] isKindOfClass:[NSString class]]
         ? brief[@"localDay"] : nil;
-    if (day != nil && ![lastDueDay isEqualToString:day]) {
-        [lastDueDay release];
-        lastDueDay = [day copy];
-        dia_custom_log_status(@"morning-brief-native-scheduler-due");
-    }
+    NSString *profileID = [brief[@"profileID"] isKindOfClass:[NSString class]]
+        ? brief[@"profileID"] : dia_custom_selected_apps_profile_id();
+    if (day.length == 0 || profileID.length == 0) return;
+    NSString *key = [NSString stringWithFormat:@"%@:%@", profileID, day];
+    if ([lastScheduledKey isEqualToString:key] && lastScheduledAt != nil &&
+        [lastScheduledAt timeIntervalSinceNow] > -(30.0 * 60.0)) return;
+    [lastScheduledKey release];
+    lastScheduledKey = [key copy];
+    [lastScheduledAt release];
+    lastScheduledAt = [[NSDate date] retain];
+    dia_custom_log_status(@"morning-brief-native-scheduler-due");
+
+    NSString *scheduledProfileID = [profileID copy];
+    NSString *scheduledDay = [day copy];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC),
+                   dispatch_get_main_queue(), ^{
+        NSURLComponents *components = [NSURLComponents componentsWithURL:
+            dia_custom_local_api_url(@"/api/apps/state")
+            resolvingAgainstBaseURL:NO];
+        components.queryItems = @[[NSURLQueryItem queryItemWithName:@"profileID"
+            value:scheduledProfileID]];
+        NSURL *url = components.URL;
+        if (url == nil) {
+            [scheduledProfileID release];
+            [scheduledDay release];
+            return;
+        }
+        [[[NSURLSession sharedSession] dataTaskWithURL:url
+            completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                NSInteger statusCode = [response isKindOfClass:[NSHTTPURLResponse class]]
+                    ? [(NSHTTPURLResponse *)response statusCode] : 0;
+                NSDictionary *state = data != nil
+                    ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+                    : nil;
+                NSDictionary *freshBrief = [state[@"morningBrief"]
+                    isKindOfClass:[NSDictionary class]] ? state[@"morningBrief"] : nil;
+                BOOL stillDue = error == nil && statusCode >= 200 && statusCode < 300 &&
+                    [freshBrief[@"due"] boolValue] &&
+                    [freshBrief[@"localDay"] isEqualToString:scheduledDay];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (!stillDue) {
+                        dia_custom_log_status(@"morning-brief-native-scheduler-started");
+                    } else {
+                        NSString *runID = [NSString stringWithFormat:
+                            @"native-%@-%@", scheduledProfileID, scheduledDay];
+                        [self postLocalMorningBriefStatus:@"running"
+                                               profileID:scheduledProfileID
+                                                   runID:runID
+                                                   stage:@"native-action-dispatched"
+                                             diagnostics:@[]];
+                        BOOL invoked = [self invokeWindowPresenterAction:
+                            "openOrGenerateCliaReport"];
+                        dia_custom_log_status(invoked
+                            ? @"morning-brief-native-fallback-invoked"
+                            : @"morning-brief-native-fallback-unavailable");
+                        if (!invoked) {
+                            [self postLocalMorningBriefStatus:@"failed"
+                                                   profileID:scheduledProfileID
+                                                       runID:runID
+                                                       stage:@"native-controller-incompatible"
+                                                 diagnostics:@[
+                                @"Dia's native openOrGenerateCliaReport action is unavailable for this build."
+                            ]];
+                        }
+                    }
+                    [scheduledProfileID release];
+                    [scheduledDay release];
+                });
+            }] resume];
+    });
+}
+
+- (void)postLocalMorningBriefStatus:(NSString *)status
+                          profileID:(NSString *)profileID
+                              runID:(NSString *)runID
+                              stage:(NSString *)stage
+                        diagnostics:(NSArray<NSString *> *)diagnostics {
+    NSDictionary *catalog = dia_custom_model_catalog();
+    NSString *token = [catalog[@"selectionToken"] isKindOfClass:[NSString class]]
+        ? catalog[@"selectionToken"] : nil;
+    NSURL *url = dia_custom_local_api_url(@"/api/apps/morning-brief/status");
+    if (token.length == 0 || url == nil) return;
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [request setValue:token forHTTPHeaderField:@"x-dia-custom-token"];
+    NSMutableDictionary *body = [NSMutableDictionary dictionaryWithDictionary:@{
+        @"status": status ?: @"failed",
+        @"profileID": profileID ?: @"Default",
+        @"diagnostics": diagnostics ?: @[],
+    }];
+    if (runID.length > 0) body[@"runID"] = runID;
+    if (stage.length > 0) body[@"stage"] = stage;
+    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request
+        completionHandler:^(__unused NSData *data,
+                            __unused NSURLResponse *response,
+                            __unused NSError *error) {}] resume];
 }
 
 - (void)toggleLocalMemory:(id)sender {
@@ -3426,6 +3613,13 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 }
 
 - (BOOL)invokeWindowPresenterAction:(const char *)fieldName {
+    id menuOrchestrator = dia_custom_object_ivar(
+        [NSApp delegate], "mainMenuOrchestrator");
+    id menuOwner = menuOrchestrator ?: [NSApp delegate];
+    if (menuOwner != nil && dia_custom_swift_invoke_menu_action(
+            (const void *)menuOwner, fieldName)) {
+        return YES;
+    }
     id applicationController = dia_custom_object_ivar([NSApp delegate], "controller");
     if (applicationController == nil) {
         return NO;

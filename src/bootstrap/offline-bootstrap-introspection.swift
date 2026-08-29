@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import AppKit
 
 @_silgen_name("swift_reflectionMirror_recursiveCount")
 private func recursiveFieldCount(_ type: Any.Type) -> Int
@@ -23,7 +24,13 @@ private func reflectedField(in value: Any,
     let mirror = Mirror(reflecting: value)
 
     if typeName == containerTypeName {
-        return mirror.children.first(where: { $0.label == fieldName })?.value
+        let normalizedName = fieldName.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        if let child = mirror.children.first(where: {
+            ($0.label ?? "").trimmingCharacters(
+                in: CharacterSet(charactersIn: "_")) == normalizedName
+        }) {
+            return reflectedVoidAction(in: child.value) ?? child.value
+        }
     }
 
     // The target is held inside DependencyValues' CachedValues dictionary as
@@ -40,6 +47,48 @@ private func reflectedField(in value: Any,
                                        fieldName: fieldName,
                                        depth: depth + 1) {
             return result
+        }
+    }
+    return nil
+}
+
+private func reflectedVoidAction(in value: Any, depth: Int = 0) -> Any? {
+    guard depth <= 12 else { return nil }
+    if value is @MainActor @Sendable () -> Void || value is () -> Void {
+        return value
+    }
+    let mirror = Mirror(reflecting: value)
+    for child in mirror.children {
+        if child.label == "keyPath" || child.label == "file" ||
+            child.label == "fileID" || child.label == "line" ||
+            child.label == "lock" {
+            continue
+        }
+        if let action = reflectedVoidAction(in: child.value, depth: depth + 1) {
+            return action
+        }
+    }
+    return nil
+}
+
+private func reflectedContainerLabels(in value: Any,
+                                      containerTypeName: String,
+                                      depth: Int = 0) -> [String]? {
+    guard depth <= 18 else { return nil }
+    let mirror = Mirror(reflecting: value)
+    if String(reflecting: Swift.type(of: value)) == containerTypeName {
+        return mirror.children.map { $0.label ?? "<unnamed>" }
+    }
+    for child in mirror.children {
+        if child.label == "keyPath" || child.label == "file" ||
+            child.label == "fileID" || child.label == "line" ||
+            child.label == "lock" {
+            continue
+        }
+        if let labels = reflectedContainerLabels(in: child.value,
+                                                  containerTypeName: containerTypeName,
+                                                  depth: depth + 1) {
+            return labels
         }
     }
     return nil
@@ -63,6 +112,80 @@ private func appendActionProbe(_ message: String) {
     }
 }
 
+private func directReflectedValue(in value: Any, named name: String) -> Any? {
+    let normalizedName = name.trimmingCharacters(
+        in: CharacterSet(charactersIn: "_"))
+    let mirror = Mirror(reflecting: value)
+    if let value = mirror.children.first(where: {
+        ($0.label ?? "").trimmingCharacters(
+            in: CharacterSet(charactersIn: "_")) == normalizedName
+    })?.value {
+        return value
+    }
+    return mirror.superclassMirror?.children.first(where: {
+        ($0.label ?? "").trimmingCharacters(
+            in: CharacterSet(charactersIn: "_")) == normalizedName
+    })?.value
+}
+
+private func reflectedMenuItem(in value: Any, depth: Int = 0) -> NSMenuItem? {
+    guard depth <= 4 else { return nil }
+    if let menuItem = value as? NSMenuItem { return menuItem }
+    for child in Mirror(reflecting: value).children {
+        if let menuItem = reflectedMenuItem(in: child.value, depth: depth + 1) {
+            return menuItem
+        }
+    }
+    return nil
+}
+
+@MainActor
+private func invokeNativeMenuAction(in orchestrator: AnyObject,
+                                    named actionName: String) -> Bool {
+    guard let itemsByAction = directReflectedValue(in: orchestrator,
+                                                   named: "menuItemsByAction") else {
+        let labels = Mirror(reflecting: orchestrator).children
+            .compactMap(\.label).joined(separator: ",")
+        appendActionProbe("\(actionName): native menu registry unavailable; type=\(String(reflecting: Swift.type(of: orchestrator))) labels=\(labels)")
+        return false
+    }
+    for entry in Mirror(reflecting: itemsByAction).children {
+        let pair = Array(Mirror(reflecting: entry.value).children)
+        guard pair.count >= 2,
+              String(describing: pair[0].value) == actionName else { continue }
+        appendActionProbe("\(actionName): found native menu action")
+        guard let menuItem = reflectedMenuItem(in: pair[1].value),
+              let action = menuItem.action else {
+            appendActionProbe("\(actionName): native menu item unavailable")
+            return false
+        }
+        let sent = NSApplication.shared.sendAction(action,
+                                                   to: menuItem.target,
+                                                   from: menuItem)
+        appendActionProbe("\(actionName): native menu action sent=\(sent)")
+        return sent
+    }
+    appendActionProbe("\(actionName): native menu action not registered")
+    return false
+}
+
+@_cdecl("dia_custom_swift_invoke_menu_action")
+@MainActor
+public func diaCustomSwiftInvokeMenuAction(
+    _ rawMenuOrchestrator: UnsafeRawPointer?,
+    _ rawActionName: UnsafePointer<CChar>?
+) -> Bool {
+    guard let rawMenuOrchestrator, let rawActionName else { return false }
+    let owner = Unmanaged<AnyObject>
+        .fromOpaque(rawMenuOrchestrator)
+        .takeUnretainedValue()
+    let orchestrator = (directReflectedValue(in: owner,
+                                             named: "mainMenuOrchestrator") ??
+        directReflectedValue(in: owner, named: "menuOrchestrator")) as AnyObject? ?? owner
+    return invokeNativeMenuAction(in: orchestrator,
+                                  named: String(cString: rawActionName))
+}
+
 @_cdecl("dia_custom_swift_invoke_window_presenter_action")
 @MainActor
 public func diaCustomSwiftInvokeWindowPresenterAction(
@@ -82,7 +205,11 @@ public func diaCustomSwiftInvokeWindowPresenterAction(
     guard let field = reflectedField(in: windowPresenterWrapper,
                                      containerTypeName: "Application.WindowPresenter",
                                      fieldName: fieldName) else {
-        appendActionProbe("\(fieldName): field not found")
+        let labels = reflectedContainerLabels(
+            in: windowPresenterWrapper,
+            containerTypeName: "Application.WindowPresenter"
+        ) ?? []
+        appendActionProbe("\(fieldName): field not found; labels=\(labels.joined(separator: ","))")
         return false
     }
 

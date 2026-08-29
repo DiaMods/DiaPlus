@@ -214,7 +214,11 @@ async function fetchPublicText(
       lookupImplementation,
     }, redirectCount + 1);
   }
-  if (!response.ok) throw new Error(`HTTP ${response.status} from ${url.hostname}`);
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status} from ${url.hostname}`);
+    if ([401, 403].includes(response.status)) error.requiresBrowserSession = true;
+    throw error;
+  }
 
   const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ?? "";
   const supported = contentType.startsWith("text/") || [
@@ -224,6 +228,23 @@ async function fetchPublicText(
   if (!supported) throw new Error(`unsupported web content type ${contentType || "unknown"}`);
   const value = await boundedBody(response);
   return { ...value, url: url.toString(), contentType };
+}
+
+function looksLikeLoginWall(page) {
+  if (!page?.contentType?.includes("html")) return false;
+  let pathname = "";
+  try {
+    pathname = new URL(page.url).pathname;
+  } catch {
+    // The URL was already validated before fetching; this is defensive only.
+  }
+  if (/(?:^|\/)(?:login|log-in|signin|sign-in|auth)(?:\/|$)/i.test(pathname)) return true;
+  const html = page.body ?? "";
+  const hasCredentialField = /<input\b[^>]*\btype\s*=\s*["']?(?:password|email)["']?/i.test(html);
+  const hasLoginLanguage = /\b(?:sign|log)\s+in\b|\bauthenticate\b|\bcontinue with (?:google|apple|microsoft)\b/i.test(
+    `${htmlTitle(html)}\n${readableHTML(html).slice(0, 2_000)}`,
+  );
+  return hasCredentialField && hasLoginLanguage;
 }
 
 function resultURL(rawHref) {
@@ -296,6 +317,15 @@ export class LocalWebTools {
           lookupImplementation: this.lookup,
         });
         const isHTML = page.contentType.includes("html");
+        if (looksLikeLoginWall(page)) {
+          return {
+            url,
+            finalURL: page.url,
+            title: isHTML ? htmlTitle(page.body) : "",
+            error: "The public fetch reached a login wall; read this URL in the signed-in browser session.",
+            requiresBrowserSession: true,
+          };
+        }
         return {
           url: page.url,
           title: isHTML ? htmlTitle(page.body) : "",
@@ -305,7 +335,11 @@ export class LocalWebTools {
           truncated: page.truncated,
         };
       } catch (error) {
-        return { url, error: String(error?.message ?? error) };
+        return {
+          url,
+          error: String(error?.message ?? error),
+          ...(error?.requiresBrowserSession ? { requiresBrowserSession: true } : {}),
+        };
       }
     }));
     return { pages };

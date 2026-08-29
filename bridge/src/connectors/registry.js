@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { cleanConnectorID } from "../apps-state.js";
+import { cleanConnectorID, cleanProfileID } from "../apps-state.js";
 import { assertAllowedConnectorURL } from "../network-policy.js";
 import { connectorManifestDirectory } from "../paths.js";
 
@@ -93,6 +93,47 @@ function toolName(connectorID, remoteName) {
   return `mcp__custom_${connectorID.replaceAll("-", "_")}__${safe}`;
 }
 
+function credentialRecordID(profileID, connectorID) {
+  return `connector.${encodeURIComponent(cleanProfileID(profileID))}.${cleanConnectorID(connectorID)}`;
+}
+
+function nativeConnectorForTool(name) {
+  const normalized = String(name ?? "").toLowerCase().replaceAll("-", "_");
+  const mappings = [
+    ["gmail", ["gmail", "email"]],
+    ["google-calendar", ["google_calendar", "calendar"]],
+    ["google-drive", ["google_drive", "drive"]],
+    ["github", ["github"]],
+    ["slack", ["slack"]],
+    ["notion", ["notion"]],
+    ["linkedin", ["linkedin"]],
+  ];
+  return mappings.find(([, needles]) => needles.some((needle) => normalized.includes(needle)))?.[0] ?? null;
+}
+
+function dynamicNativeConnectorForTool(name, connectorIDs = []) {
+  const known = nativeConnectorForTool(name);
+  if (known) return known;
+  const normalized = String(name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  return connectorIDs.find((id) => {
+    const words = String(id).toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 2);
+    return words.length > 0 && words.every((word) => normalized.includes(word));
+  }) ?? null;
+}
+
+function nativeToolResultError(content) {
+  const text = typeof content === "string" ? content : JSON.stringify(content ?? "");
+  try {
+    const value = JSON.parse(text);
+    if (value?.is_error === true || value?.success === false || value?.error) {
+      return String(value.error ?? value.message ?? "Native connector tool failed");
+    }
+  } catch { /* Native tool results are often plain text. */ }
+  return /(?:^|\b)(?:error|failed|unavailable|blocked|not connected|unauthorized)(?:\b|:)/i.test(text)
+    ? text.slice(0, 500)
+    : null;
+}
+
 async function mcpRequest(fetchImplementation, manifest, method, params, accessToken = null) {
   const endpoint = assertAllowedConnectorURL(manifest.endpoint, manifest.allowedDomains);
   const response = await fetchImplementation(endpoint, {
@@ -168,19 +209,21 @@ export class ConnectorRegistry {
   }
 
   async observeNativeTools(profileID, tools) {
-    const names = tools.map((tool) => String(tool?.name ?? "").toLowerCase());
+    const state = await this.stateStore.publicState(profileID);
+    const connectorIDs = [...new Set([
+      ...nativeSessionCatalog.map((manifest) => manifest.id),
+      ...Object.keys(state.nativeConnections),
+    ])];
     const connectors = [];
-    for (const manifest of nativeSessionCatalog) {
-      const capabilities = manifest.capabilities.filter((capability) => {
-        const words = capability.toLowerCase().split("_");
-        return names.some((name) => words.every((word) => name.includes(word)) ||
-          name.includes(manifest.id.replace("google-", "").replace("-", "_")));
-      });
-      if (capabilities.length > 0) connectors.push({
-        id: manifest.id,
-        connected: true,
-        autoConnected: true,
+    for (const connectorID of connectorIDs) {
+      const capabilities = tools
+        .filter((tool) => dynamicNativeConnectorForTool(tool?.name, connectorIDs) === connectorID)
+        .map((tool) => tool.name);
+      if (capabilities.length === 0) continue;
+      connectors.push({ id: connectorID, capabilities });
+      await this.stateStore.updateNativeConnection(profileID, connectorID, {
         capabilities,
+        schemaAvailable: true,
       });
     }
     // Schemas describe capability, not authentication. Connection truth comes
@@ -189,10 +232,53 @@ export class ConnectorRegistry {
     return connectors;
   }
 
-  async accessToken(manifest, { refresh = true } = {}) {
+  async observeNativeToolResults(profileID, payload) {
+    const state = await this.stateStore.publicState(profileID);
+    const connectorIDs = [...new Set([
+      ...nativeSessionCatalog.map((manifest) => manifest.id),
+      ...Object.keys(state.nativeConnections),
+    ])];
+    const calls = new Map();
+    for (const message of payload?.messages ?? []) {
+      for (const block of Array.isArray(message?.content) ? message.content : []) {
+        if (message.role === "assistant" && block?.type === "tool_use" && block.id) {
+          const connectorID = dynamicNativeConnectorForTool(block.name, connectorIDs);
+          if (connectorID) calls.set(block.id, { connectorID, name: block.name });
+        } else if (message.role === "user" && block?.type === "tool_result") {
+          const call = calls.get(block.tool_use_id);
+          if (!call) continue;
+          const error = nativeToolResultError(block.content);
+          const authenticationFailed = error && /not connected|unauthorized|authentication|login|sign in|blocked.*dia|dia-owned/i.test(error);
+          await this.stateStore.updateNativeConnection(profileID, call.connectorID, {
+            connected: error ? !authenticationFailed : true,
+            executionReady: !error,
+            lastSuccess: error ? null : new Date(this.now()).toISOString(),
+            lastError: error,
+          });
+        }
+      }
+    }
+  }
+
+  async credentialRecord(manifest, profileID = "Default") {
+    const recordID = credentialRecordID(profileID, manifest.id);
+    let record = await this.credentialStore.getRecord(recordID);
+    if (!record && cleanProfileID(profileID) === "Default") {
+      const legacyID = `connector.${manifest.id}`;
+      const legacy = await this.credentialStore.getRecord(legacyID);
+      if (legacy) {
+        await this.credentialStore.setRecord(recordID, legacy);
+        await this.credentialStore.delete(legacyID);
+        record = legacy;
+      }
+    }
+    return record;
+  }
+
+  async accessToken(manifest, { refresh = true, profileID = "Default" } = {}) {
     if (manifest.authentication !== "oauth") return null;
-    const recordID = `connector.${manifest.id}`;
-    const record = await this.credentialStore.getRecord(recordID);
+    const recordID = credentialRecordID(profileID, manifest.id);
+    const record = await this.credentialRecord(manifest, profileID);
     if (!record) return null;
     if (!refresh || !record.expiresAt || record.expiresAt > this.now() + 30_000) {
       return record.accessToken ?? null;
@@ -227,22 +313,33 @@ export class ConnectorRegistry {
     for (const manifest of this.manifests.values()) {
       if (manifest.execution === "native-session") {
         const observed = state.nativeConnections[manifest.id];
+        const connected = observed?.connected === true;
         result.push({
           ...manifest,
           ...observed,
-          connected: observed?.connected === true,
+          schemaAvailable: manifest.capabilities.length > 0 ||
+            observed?.schemaAvailable === true || (observed?.capabilities?.length ?? 0) > 0,
+          authenticated: connected,
+          connected,
+          executionReady: connected && !observed?.lastError,
           capabilities: observed?.capabilities?.length > 0
             ? observed.capabilities
             : manifest.capabilities,
         });
       } else {
         const record = manifest.authentication === "oauth"
-          ? await this.credentialStore.getRecord(`connector.${manifest.id}`)
+          ? await this.credentialRecord(manifest, profileID)
           : {};
+        const observed = state.bridgeConnections[manifest.id] ?? {};
+        const authenticated = manifest.authentication === "none" || Boolean(record?.accessToken);
         result.push({
           ...manifest,
-          connected: manifest.authentication === "none" || Boolean(record?.accessToken),
-          accountLabel: state.bridgeConnections[manifest.id]?.accountLabel ?? null,
+          ...observed,
+          schemaAvailable: [...this.toolMap.values()].some((item) => item.connectorID === manifest.id),
+          authenticated,
+          connected: authenticated && observed.connected !== false,
+          executionReady: authenticated && observed.executionReady !== false,
+          accountLabel: observed.accountLabel ?? null,
         });
       }
     }
@@ -257,25 +354,40 @@ export class ConnectorRegistry {
         authentication: "browser-session",
         capabilities: observed.capabilities ?? [],
         branded: true,
+        schemaAvailable: Array.isArray(observed.capabilities) && observed.capabilities.length > 0,
+        authenticated: observed.connected === true,
+        executionReady: observed.connected === true && !observed.lastError,
         ...observed,
       });
     }
     return result;
   }
 
-  async connect(id) {
+  async connect(id, { profileID = "Default" } = {}) {
     const manifest = this.manifest(id);
+    const selectedProfile = cleanProfileID(profileID);
     if (manifest.execution === "native-session") {
-      return { kind: "native-session", connector: manifest.id };
+      return { kind: "native-session", connector: manifest.id, profileID: selectedProfile };
     }
     if (manifest.authentication === "none") {
-      await this.discoverTools(manifest.id, { force: true });
-      return { kind: "connected", connector: manifest.id };
+      await this.discoverTools(manifest.id, { force: true, profileID: selectedProfile });
+      await this.stateStore.updateBridgeConnection(selectedProfile, manifest.id, {
+        connected: true,
+        authenticated: true,
+        executionReady: true,
+        lastError: null,
+      });
+      return { kind: "connected", connector: manifest.id, profileID: selectedProfile };
     }
     const state = randomBytes(32).toString("base64url");
     const verifier = randomBytes(48).toString("base64url");
     const challenge = createHash("sha256").update(verifier).digest("base64url");
-    this.oauthStates.set(state, { connectorID: manifest.id, verifier, expiresAt: this.now() + 10 * 60_000 });
+    this.oauthStates.set(state, {
+      connectorID: manifest.id,
+      profileID: selectedProfile,
+      verifier,
+      expiresAt: this.now() + 10 * 60_000,
+    });
     const url = new URL(manifest.oauth.authorizationURL);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("client_id", manifest.oauth.clientID);
@@ -284,7 +396,7 @@ export class ConnectorRegistry {
     url.searchParams.set("code_challenge", challenge);
     url.searchParams.set("code_challenge_method", "S256");
     if (manifest.oauth.scopes.length > 0) url.searchParams.set("scope", manifest.oauth.scopes.join(" "));
-    return { kind: "oauth", connector: manifest.id, authorizationURL: url.toString() };
+    return { kind: "oauth", connector: manifest.id, profileID: selectedProfile, authorizationURL: url.toString() };
   }
 
   async completeOAuth({ state, code, error }) {
@@ -309,22 +421,32 @@ export class ConnectorRegistry {
     if (!response.ok) throw new Error(`OAuth token exchange returned HTTP ${response.status}`);
     const token = await response.json();
     if (typeof token.access_token !== "string") throw new Error("OAuth token response had no access token");
-    await this.credentialStore.setRecord(`connector.${manifest.id}`, {
+    const recordID = credentialRecordID(pending.profileID, manifest.id);
+    await this.credentialStore.setRecord(recordID, {
       accessToken: token.access_token,
       refreshToken: token.refresh_token ?? null,
       tokenType: token.token_type ?? "Bearer",
       scope: token.scope ?? manifest.oauth.scopes.join(" "),
       expiresAt: token.expires_in ? this.now() + Number(token.expires_in) * 1000 : null,
     });
-    await this.discoverTools(manifest.id, { force: true });
-    return { ok: true, connector: manifest.id };
+    await this.discoverTools(manifest.id, { force: true, profileID: pending.profileID });
+    await this.stateStore.updateBridgeConnection(pending.profileID, manifest.id, {
+      connected: true,
+      authenticated: true,
+      executionReady: true,
+      lastError: null,
+    });
+    return { ok: true, connector: manifest.id, profileID: pending.profileID };
   }
 
-  async disconnect(id) {
+  async disconnect(id, { profileID = "Default" } = {}) {
     const manifest = this.manifest(id);
-    if (manifest.execution === "native-session") return { kind: "native-session", connector: id };
-    const recordID = `connector.${manifest.id}`;
-    const token = await this.credentialStore.getRecord(recordID);
+    const selectedProfile = cleanProfileID(profileID);
+    if (manifest.execution === "native-session") {
+      return { kind: "native-session", connector: id, profileID: selectedProfile };
+    }
+    const recordID = credentialRecordID(selectedProfile, manifest.id);
+    const token = await this.credentialRecord(manifest, selectedProfile);
     if (token?.accessToken && manifest.oauth?.revocationURL) {
       try {
         await this.fetch(manifest.oauth.revocationURL, {
@@ -338,18 +460,27 @@ export class ConnectorRegistry {
       }
     }
     await this.credentialStore.delete(recordID);
-    for (const [name, value] of this.toolMap) {
-      if (value.connectorID === manifest.id) this.toolMap.delete(name);
-    }
-    return { ok: true, connector: manifest.id };
+    await this.stateStore.updateBridgeConnection(selectedProfile, manifest.id, {
+      connected: false,
+      authenticated: false,
+      executionReady: false,
+      lastError: null,
+    });
+    return { ok: true, connector: manifest.id, profileID: selectedProfile };
   }
 
-  async discoverTools(id, { force = false } = {}) {
+  async discoverTools(id, { force = false, profileID = "Default" } = {}) {
     const manifest = this.manifest(id);
     if (manifest.execution !== "bridge") return [];
     const existing = [...this.toolMap.values()].filter((item) => item.connectorID === manifest.id);
     if (!force && existing.length > 0) return existing.map((item) => item.definition);
-    const result = await mcpRequest(this.fetch, manifest, "tools/list", {}, await this.accessToken(manifest));
+    const result = await mcpRequest(
+      this.fetch,
+      manifest,
+      "tools/list",
+      {},
+      await this.accessToken(manifest, { profileID }),
+    );
     for (const remote of result?.tools ?? []) {
       if (typeof remote?.name !== "string") continue;
       const name = toolName(manifest.id, remote.name);
@@ -365,27 +496,71 @@ export class ConnectorRegistry {
       .filter((item) => item.connectorID === manifest.id).map((item) => item.definition);
   }
 
-  async definitions() {
+  async definitions(profileID = "Default") {
+    const selectedProfile = cleanProfileID(profileID);
+    const eligible = new Set();
     for (const manifest of this.manifests.values()) {
       if (manifest.execution !== "bridge") continue;
-      try { await this.discoverTools(manifest.id); } catch { /* disconnected/unavailable */ }
+      const authenticated = manifest.authentication === "none" ||
+        Boolean((await this.credentialRecord(manifest, selectedProfile))?.accessToken);
+      if (!authenticated) continue;
+      try {
+        await this.discoverTools(manifest.id, { profileID: selectedProfile });
+        eligible.add(manifest.id);
+      } catch (error) {
+        await this.stateStore.updateBridgeConnection(selectedProfile, manifest.id, {
+          connected: authenticated,
+          authenticated,
+          executionReady: false,
+          lastError: String(error?.message ?? error),
+        }).catch(() => {});
+      }
     }
-    return [...this.toolMap.values()].map((item) => structuredClone(item.definition));
+    return [...this.toolMap.values()]
+      .filter((item) => eligible.has(item.connectorID))
+      .map((item) => structuredClone(item.definition));
   }
 
   isTool(name) {
     return this.toolMap.has(name);
   }
 
-  async execute(name, input) {
+  async execute(name, input, { profileID = "Default" } = {}) {
     const tool = this.toolMap.get(name);
     if (!tool) throw new Error(`unknown connector tool: ${name}`);
     const manifest = this.manifest(tool.connectorID);
-    return mcpRequest(this.fetch, manifest, "tools/call", {
-      name: tool.remoteName,
-      arguments: input ?? {},
-    }, await this.accessToken(manifest));
+    const selectedProfile = cleanProfileID(profileID);
+    try {
+      const result = await mcpRequest(this.fetch, manifest, "tools/call", {
+        name: tool.remoteName,
+        arguments: input ?? {},
+      }, await this.accessToken(manifest, { profileID: selectedProfile }));
+      await this.stateStore.updateBridgeConnection(selectedProfile, manifest.id, {
+        connected: true,
+        authenticated: true,
+        executionReady: true,
+        lastSuccess: new Date(this.now()).toISOString(),
+        lastError: null,
+      });
+      return result;
+    } catch (error) {
+      await this.stateStore.updateBridgeConnection(selectedProfile, manifest.id, {
+        connected: true,
+        authenticated: manifest.authentication === "none" ||
+          Boolean(await this.credentialRecord(manifest, selectedProfile)),
+        executionReady: false,
+        lastError: String(error?.message ?? error),
+      }).catch(() => {});
+      throw error;
+    }
   }
 }
 
-export { nativeSessionCatalog, toolName, validateManifest };
+export {
+  credentialRecordID,
+  nativeConnectorForTool,
+  dynamicNativeConnectorForTool,
+  nativeSessionCatalog,
+  toolName,
+  validateManifest,
+};

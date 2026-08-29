@@ -1,13 +1,16 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import {
   normalizeAnthropicTools,
   appendToolResults,
+  authenticatedBrowserContextState,
+  contentAsText,
   currentPageAttachmentState,
   deferredAnthropicTools,
   isDiaOwnedProductKnowledgeTool,
+  IncrementalDiaTextFormatter,
   isToolContinuation,
   latexFormattingSkillState,
   nativeToolSearchTool,
@@ -31,7 +34,7 @@ import {
 } from "./local-tools/memory.js";
 import { assertAllowedProviderURL } from "./network-policy.js";
 import { modEnabled } from "./mods.js";
-import { modelCatalogPath, profileDirectory } from "./paths.js";
+import { compatibilityStatePath, modelCatalogPath, profileDirectory } from "./paths.js";
 import { ToolCoverageStore } from "./tool-coverage.js";
 import {
   appleProviderStatus,
@@ -330,6 +333,62 @@ function nativeCurrentPageDecision(state, tools, model) {
   };
 }
 
+function nativeToolByBaseName(tools, baseName) {
+  return tools.find((tool) =>
+    tool.source === "native" &&
+    (tool.name === baseName || tool.name.endsWith(`__${baseName}`)));
+}
+
+function nativeAuthenticatedBrowserDecision(state, tools, deferredTools, toolSearch, model) {
+  if (!state?.active) return null;
+  const stageTool = {
+    read_metadata: "read_tabs",
+    read_existing: "read_tabs",
+    open_temporary: "open_tabs",
+    reread_metadata: "read_tabs",
+    read_temporary: "read_tabs",
+    close_temporary: "close_tabs",
+  }[state.stage];
+  if (!stageTool) return null;
+  const tool = nativeToolByBaseName(tools, stageTool);
+  if (!tool) {
+    const deferred = deferredTools.find((candidate) =>
+      candidate.source !== "blocked" &&
+      (candidate.name === stageTool || candidate.name.endsWith(`__${stageTool}`)));
+    if (!deferred || !toolSearch) return null;
+    return {
+      kind: "tool_use",
+      text: "",
+      toolCalls: [{
+        id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+        name: toolSearch.name,
+        input: { query: `select:${deferred.name}` },
+      }],
+      model,
+    };
+  }
+  const input = stageTool === "read_tabs"
+    ? {
+      contentPaneIDs: ["read_existing", "read_temporary"].includes(state.stage)
+        ? state.contentPaneIDs
+        : [],
+      includeFullTextContent: ["read_existing", "read_temporary"].includes(state.stage),
+    }
+    : stageTool === "open_tabs"
+      ? { urls: state.urls }
+      : { contentPaneIDs: state.contentPaneIDs };
+  return {
+    kind: "tool_use",
+    text: "",
+    toolCalls: [{
+      id: `toolu_dia_custom_${randomBytes(12).toString("hex")}`,
+      name: tool.name,
+      input,
+    }],
+    model,
+  };
+}
+
 function splitModelKey(key) {
   const separator = typeof key === "string" ? key.indexOf(":") : -1;
   if (separator < 1 || separator === key.length - 1) {
@@ -345,6 +404,47 @@ function isMorningBriefPayload(payload) {
     system: payload?.system,
   });
   return /clia[-_ ]brief|morningbrief|morning brief/i.test(metadata);
+}
+
+function morningBriefRunID(payload, profileID, reportState) {
+  const stableContext = reportState?.workingDirectory || JSON.stringify({
+    metadata: payload?.metadata ?? null,
+    agent: payload?.agent ?? null,
+  });
+  return createHash("sha256")
+    .update(`${profileID}\0${stableContext}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
+function morningBriefSourceDiagnostics(payload) {
+  const calls = new Map();
+  const diagnostics = [];
+  for (const message of payload?.messages ?? []) {
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (message.role === "assistant" && block?.type === "tool_use" && block.id) {
+        calls.set(block.id, block.name);
+      } else if (message.role === "user" && block?.type === "tool_result") {
+        const name = calls.get(block.tool_use_id);
+        if (!name || isReportUploadTool(name)) continue;
+        const text = contentAsText(block.content);
+        if (block.is_error === true || /(?:\berror\b|\bfailed\b|\bunavailable\b|\bunauthorized\b|\bnot connected\b)/i.test(text)) {
+          diagnostics.push(`${String(name).split("__").at(-1)} was unavailable; the brief continued with its other sources.`);
+        }
+      }
+    }
+  }
+  return [...new Set(diagnostics)].slice(0, 50);
+}
+
+function withMorningBriefResiliencePolicy(payload) {
+  return {
+    ...payload,
+    system: [
+      systemAsText(payload?.system),
+      "<dia-custom-morning-brief-policy>Use Dia's bundled Morning Brief agent, template, source links, and native Report workflow. If one connector or source fails, continue with the remaining live sources, local Memory, recent browsing, and tabs. Mention unavailable source categories briefly inside the Report; do not abort the whole brief.</dia-custom-morning-brief-policy>",
+    ].filter(Boolean).join("\n\n"),
+  };
 }
 
 async function atomicWriteJSON(path, value) {
@@ -417,7 +517,14 @@ export class ProviderManager {
     this.toolCoverageStore = toolCoverageStore;
     this.catalogValue = null;
     this.catalogPromise = null;
+    this.catalogRefreshPromise = null;
     this.catalogUpdatedAt = 0;
+    this.catalogState = "uninitialized";
+    this.catalogSource = null;
+    this.catalogError = null;
+    this.coreReady = false;
+    this.startupTimings = {};
+    this.compatibility = { checkedAt: null, build: null, perMod: [] };
     this.historyImportPromise = null;
     this.historyRefreshTimer = null;
     this.memoryDerivationTimer = null;
@@ -426,7 +533,9 @@ export class ProviderManager {
   }
 
   async initialize() {
+    const startedAt = performance.now();
     let config = await this.configStore.load();
+    this.startupTimings.configMilliseconds = performance.now() - startedAt;
     const selectedProviderID = splitModelKey(config.selectedModel).providerID;
     const selectedProvider = config.providers.find((provider) => provider.id === selectedProviderID);
     if (selectedProvider?.type === "apple-foundation-models" &&
@@ -434,8 +543,18 @@ export class ProviderManager {
       config = await this.configStore.select(`codex:${defaultCodexModel}`);
     }
     await this.memoryStore.open();
+    this.startupTimings.memoryMilliseconds = performance.now() - startedAt;
     await this.appsStateStore.load();
+    try {
+      const compatibility = JSON.parse(await readFile(compatibilityStatePath, "utf8"));
+      if (Array.isArray(compatibility?.perMod)) this.compatibility = compatibility;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        process.stderr.write(`Compatibility state ignored: ${String(error?.message ?? error)}\n`);
+      }
+    }
     if (modEnabled("live-connectors")) await this.connectorRegistry.initialize();
+    this.startupTimings.localStateMilliseconds = performance.now() - startedAt;
     this.memoryStore.setPrivacyFilters(config.localMemory.excludedHosts);
     if (modEnabled("native-memory") &&
         config.localMemory.enabled && config.localMemory.importBrowserHistory) {
@@ -455,8 +574,114 @@ export class ProviderManager {
       });
     }, historyRefreshMilliseconds);
     this.historyRefreshTimer.unref();
-    await this.refreshCatalog({ force: true });
+    await this.loadInitialCatalog(config);
+    this.startupTimings.catalogAvailableMilliseconds = performance.now() - startedAt;
+    this.coreReady = true;
+    this.startupTimings.coreReadyMilliseconds = performance.now() - startedAt;
+    this.catalogState = "refreshing";
+    this.catalogRefreshPromise = this.refreshCatalog({ force: true })
+      .catch((error) => {
+        this.catalogState = "error";
+        this.catalogError = String(error?.message ?? error);
+        process.stderr.write(`Model catalog background refresh failed: ${this.catalogError}\n`);
+        return this.catalogValue;
+      })
+      .finally(() => {
+        this.catalogRefreshPromise = null;
+        this.startupTimings.catalogRefreshedMilliseconds = performance.now() - startedAt;
+      });
     return this;
+  }
+
+  baselineCatalog(config) {
+    const models = config.providers.flatMap((provider) => {
+      if (!provider.enabled) return [];
+      if (provider.type === "apple-foundation-models" && !modEnabled("apple-models")) return [];
+      return provider.models.map((model) => modelRecord(provider, model,
+        provider.type === "apple-foundation-models"
+          ? { available: false, reason: "Checking Apple model availability…" }
+          : {}));
+    });
+    return {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      selectedModel: config.selectedModel,
+      models,
+      providers: config.providers.map((provider) => ({
+        id: provider.id,
+        label: provider.label,
+        type: provider.type,
+        enabled: provider.enabled,
+        modelCount: models.filter((model) => model.providerID === provider.id).length,
+        credentialConfigured: false,
+        credentialSource: null,
+      })),
+      selectionToken: config.adminToken,
+    };
+  }
+
+  async loadInitialCatalog(config) {
+    try {
+      const cached = JSON.parse(await readFile(this.catalogPath, "utf8"));
+      if (!Array.isArray(cached?.models) || !Array.isArray(cached?.providers)) {
+        throw new Error("cached model catalog has an invalid shape");
+      }
+      this.catalogValue = {
+        ...cached,
+        selectedModel: config.selectedModel,
+        selectionToken: config.adminToken,
+      };
+      this.catalogSource = "cache";
+      this.catalogState = "cached";
+      this.catalogUpdatedAt = 0;
+      await atomicWriteJSON(this.catalogPath, this.catalogValue);
+      return this.catalogValue;
+    } catch (error) {
+      if (error?.code !== "ENOENT" && !String(error?.message ?? error).includes("invalid shape")) {
+        process.stderr.write(`Cached model catalog ignored: ${String(error?.message ?? error)}\n`);
+      }
+    }
+    this.catalogValue = this.baselineCatalog(config);
+    this.catalogSource = "built-in";
+    this.catalogState = "built-in";
+    this.catalogUpdatedAt = 0;
+    await atomicWriteJSON(this.catalogPath, this.catalogValue);
+    return this.catalogValue;
+  }
+
+  healthState() {
+    const enabledBriefProfile = this.appsStateStore.value?.morningBrief?.enabledProfileID;
+    const morningBrief = enabledBriefProfile
+      ? this.appsStateStore.morningBriefStatus(enabledBriefProfile)
+      : null;
+    return {
+      coreReady: this.coreReady,
+      catalog: {
+        state: this.catalogState,
+        source: this.catalogSource,
+        modelCount: this.catalogValue?.models?.length ?? 0,
+        generatedAt: this.catalogValue?.generatedAt ?? null,
+        error: this.catalogError,
+      },
+      startupTimings: Object.fromEntries(Object.entries(this.startupTimings)
+        .map(([key, value]) => [key, Math.round(value * 10) / 10])),
+      compatibility: {
+        checkedAt: this.compatibility.checkedAt,
+        build: this.compatibility.build,
+        mods: this.compatibility.perMod.map(({ id, criticality, compatible, reason }) => {
+          if (id === "morning-brief" && morningBrief?.available === false) {
+            return {
+              id,
+              criticality,
+              compatible: false,
+              runtime: true,
+              reason: morningBrief.compatibilityReason,
+            };
+          }
+          return { id, criticality, compatible, ...(reason ? { reason } : {}) };
+        }),
+      },
+    };
   }
 
   async refreshLocalMemory(config) {
@@ -576,6 +801,8 @@ export class ProviderManager {
     }
     if (this.catalogPromise) return this.catalogPromise;
     this.catalogPromise = (async () => {
+      this.catalogState = "refreshing";
+      this.catalogError = null;
       const config = await this.configStore.load();
       const credentialStatus = await this.credentialStore.status(config.providers);
       const hasApple = config.providers.some((provider) =>
@@ -605,6 +832,8 @@ export class ProviderManager {
       await atomicWriteJSON(this.catalogPath, catalog);
       this.catalogValue = catalog;
       this.catalogUpdatedAt = Date.now();
+      this.catalogState = "ready";
+      this.catalogSource = "live-discovery";
       return catalog;
     })();
     try {
@@ -687,6 +916,7 @@ export class ProviderManager {
 
   async run(payload, {
     onReasoning,
+    onTextDelta,
     onStatus,
     onLocalToolActivity,
     onReportWriteStream,
@@ -695,16 +925,39 @@ export class ProviderManager {
     const { config, provider, model, key } = await this.selectedProvider();
     const profileID = profileIDFromPayload(payload);
     const morningBriefRun = modEnabled("morning-brief") && isMorningBriefPayload(payload);
+    const initialReportState = modEnabled("reports")
+      ? reportWorkflowState(payload)
+      : { active: false, stage: "reports-disabled" };
+    const morningBriefID = morningBriefRun
+      ? morningBriefRunID(payload, profileID, initialReportState)
+      : null;
+    let morningBriefIngested = false;
     if (morningBriefRun) {
+      const reportID = initialReportState.reportDirectory
+        ? basename(initialReportState.reportDirectory)
+        : null;
+      const status = initialReportState.completed ? "succeeded"
+        : initialReportState.stage === "failed" ? "failed"
+        : "running";
+      morningBriefIngested = status === "succeeded";
       await this.appsStateStore.recordMorningBrief({
         profileID,
-        status: "running",
+        status,
+        runID: morningBriefID,
+        stage: morningBriefIngested ? "ingested" : initialReportState.stage,
+        reportID,
+        diagnostics: status === "failed"
+          ? ["The native Reports upload failed; see the chat tool result for details."]
+          : [],
       }).catch(() => {});
     }
     const observedNativeTools = normalizeAnthropicTools(payload, { includeBlocked: true });
     const observedNativeToolNames = new Set(observedNativeTools.map((tool) => tool.name));
     const deferredTools = deferredAnthropicTools(payload);
     if (modEnabled("live-connectors")) {
+      await this.connectorRegistry.observeNativeToolResults(profileID, payload).catch((error) => {
+        process.stderr.write(`Native connector result observation failed: ${String(error?.message ?? error)}\n`);
+      });
       await this.connectorRegistry.observeNativeTools(
         profileID,
         [...observedNativeTools, ...deferredTools],
@@ -723,7 +976,7 @@ export class ProviderManager {
     if (toolSearch && !nativeTools.some((tool) => tool.name === toolSearch.name)) {
       nativeTools.push(toolSearch);
     }
-    const tools = await this.localTools.definitions(nativeTools);
+    const tools = await this.localTools.definitions(nativeTools, { profileID });
     await this.toolCoverageStore.record([...observedForCoverage.values()], tools).catch((error) => {
       process.stderr.write(`Tool coverage write failed: ${String(error?.message ?? error)}\n`);
     });
@@ -766,6 +1019,19 @@ export class ProviderManager {
       const reportState = modEnabled("reports")
         ? reportWorkflowState(currentPayload)
         : { active: false };
+      if (morningBriefRun && reportState.stage && !reportState.completed) {
+        const diagnostics = morningBriefSourceDiagnostics(currentPayload);
+        await this.appsStateStore.recordMorningBrief({
+          profileID,
+          status: reportState.stage === "failed" ? "failed" : "running",
+          runID: morningBriefID,
+          stage: reportState.stage,
+          reportID: reportState.reportDirectory ? basename(reportState.reportDirectory) : null,
+          diagnostics: reportState.stage === "failed"
+            ? ["The native Reports upload failed; see the chat tool result for details."]
+            : diagnostics,
+        }).catch(() => {});
+      }
       const nativeReportResult = nativeReportDecision(reportState, tools, key);
       if (nativeReportResult) {
         result = nativeReportResult;
@@ -785,6 +1051,26 @@ export class ProviderManager {
         if (emitStatus) await emitStatus("Reading the current page...");
         break;
       }
+      const authenticatedBrowserState = authenticatedBrowserContextState(currentPayload);
+      const nativeAuthenticatedBrowserResult = nativeAuthenticatedBrowserDecision(
+        authenticatedBrowserState,
+        tools,
+        deferredTools,
+        toolSearch,
+        key,
+      );
+      if (nativeAuthenticatedBrowserResult) {
+        result = nativeAuthenticatedBrowserResult;
+        if (emitStatus) {
+          const label = authenticatedBrowserState.stage === "open_temporary"
+            ? "Opening the page in your signed-in browser session..."
+            : authenticatedBrowserState.stage === "close_temporary"
+              ? "Closing the temporary tab..."
+              : "Reading the page from your signed-in browser session...";
+          await emitStatus(label);
+        }
+        break;
+      }
       const latexState = reportState.active
         ? { active: false }
         : latexFormattingSkillState(currentPayload);
@@ -799,15 +1085,25 @@ export class ProviderManager {
         tools,
         reportDecisionRetries,
       );
-      const providerPayload = reportWorkflowRequiresTool(currentPayload, providerTools)
+      let providerPayload = reportWorkflowRequiresTool(currentPayload, providerTools)
         ? withReportWorkflowPolicy(currentPayload, reportState, reportDecisionRetries)
         : currentPayload;
+      if (morningBriefRun) providerPayload = withMorningBriefResiliencePolicy(providerPayload);
+      const textFormatter = new IncrementalDiaTextFormatter({
+        latexEnabled: latexFormattingSkillState(currentPayload).loaded,
+      });
       result = await this.runProvider(provider, {
         payload: providerPayload,
         tools: providerTools,
         model,
         apiKey,
         onReasoning,
+        onTextDelta: provider.type === "openai-compatible" && onTextDelta
+          ? async (delta) => {
+            const formatted = textFormatter.push(delta);
+            if (formatted) await onTextDelta(formatted);
+          }
+          : null,
         onToolStart: async (call) => {
           if (emitStatus && call?.name === "Write" && reportState.active) {
             await emitStatus("Generating the Report in Dia...");
@@ -852,6 +1148,15 @@ export class ProviderManager {
           streamedReportWrite.complete = content.complete;
         },
       });
+      if (result?.kind === "final" && provider.type === "openai-compatible" && onTextDelta) {
+        const finalDelta = textFormatter.finish();
+        if (finalDelta) await onTextDelta(finalDelta);
+        result = {
+          ...result,
+          text: textFormatter.output,
+          textStreamed: textFormatter.output.length > 0,
+        };
+      }
       result.model = key;
       result = normalizeReportWriteCalls(reportState, result);
       result = loadDeferredToolSchemas(
@@ -942,13 +1247,29 @@ export class ProviderManager {
       };
     }
 
-    if (morningBriefRun && result?.kind === "final") {
-      await this.appsStateStore.recordMorningBrief({
-        profileID,
-        status: "succeeded",
-      }).catch((error) => {
-        process.stderr.write(`Morning Brief completion state failed: ${String(error?.message ?? error)}\n`);
-      });
+    if (morningBriefRun && result?.kind === "final" && !morningBriefIngested) {
+      const completedState = reportWorkflowState(currentPayload);
+      if (completedState.completed) {
+        const diagnostics = morningBriefSourceDiagnostics(currentPayload);
+        await this.appsStateStore.recordMorningBrief({
+          profileID,
+          status: "succeeded",
+          runID: morningBriefID,
+          stage: "ingested",
+          reportID: completedState.reportDirectory ? basename(completedState.reportDirectory) : null,
+          diagnostics,
+        }).catch((error) => {
+          process.stderr.write(`Morning Brief completion state failed: ${String(error?.message ?? error)}\n`);
+        });
+      } else {
+        await this.appsStateStore.recordMorningBrief({
+          profileID,
+          status: "failed",
+          runID: morningBriefID,
+          stage: completedState.stage ?? "not-ingested",
+          diagnostics: ["The Morning Brief ended before Dia ingested its native Report."],
+        }).catch(() => {});
+      }
     }
 
     const finalConfig = await this.configStore.load();

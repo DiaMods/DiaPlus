@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   legacyModulesStatePath,
+  compatibilityStatePath,
   modsManifestPath,
   modsStatePath,
 } from "./paths.js";
@@ -30,11 +31,13 @@ export class ModConfigStore {
     statePath = modsStatePath,
     legacyStatePath = legacyModulesStatePath,
     activeModIDs = enabledModIDs(),
+    compatibilityPath = compatibilityStatePath,
   } = {}) {
     this.manifestPath = manifestPath;
     this.statePath = statePath;
     this.legacyStatePath = legacyStatePath;
     this.activeModIDs = activeModIDs === null ? null : new Set(activeModIDs);
+    this.compatibilityPath = compatibilityPath;
     this.manifest = null;
   }
 
@@ -64,10 +67,14 @@ export class ModConfigStore {
   }
 
   async publicState() {
-    const [manifest, state] = await Promise.all([
+    const [manifest, state, compatibility] = await Promise.all([
       this.loadManifest(),
       this.loadState(),
+      loadJSON(this.compatibilityPath, { perMod: [] }),
     ]);
+    const compatibilityByID = new Map(
+      (compatibility?.perMod ?? []).map((entry) => [entry.id, entry]),
+    );
     const mods = manifest.mods.map((mod) => {
       const override = state?.overrides?.[mod.id];
       const configuredEnabled = mod.required ||
@@ -75,11 +82,15 @@ export class ModConfigStore {
       const active = this.activeModIDs === null
         ? configuredEnabled
         : this.activeModIDs.has(mod.id);
+      const modCompatibility = compatibilityByID.get(mod.id);
+      const unavailable = modCompatibility?.compatible === false;
       return {
         ...mod,
         configuredEnabled,
         active,
-        pending: active !== configuredEnabled,
+        pending: !unavailable && active !== configuredEnabled,
+        unavailable,
+        compatibilityReason: unavailable ? modCompatibility.reason ?? "Incompatible with this Dia build" : null,
         source: mod.required ? "required" :
           typeof override === "boolean" ? "profile" : "default",
         apply: mod.rebuildOnChange ? "rebuild" : "restart",
@@ -103,6 +114,7 @@ export class ModConfigStore {
       title: "Dia Mods",
       restartRequired: mods.some((mod) => mod.pending && !mod.rebuildOnChange),
       rebuildRequired: mods.some((mod) => mod.pending && mod.rebuildOnChange),
+      unavailableMods: mods.filter((mod) => mod.unavailable).map((mod) => mod.id),
       mods,
     };
   }

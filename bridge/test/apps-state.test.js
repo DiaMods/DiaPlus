@@ -24,12 +24,21 @@ test("Morning Brief is locally entitled, profile-exclusive, and once daily", asy
     "disabling another profile must not disable the active profile",
   );
 
-  await store.recordMorningBrief({ profileID: "Default", status: "running" });
+  await store.recordMorningBrief({ profileID: "Default", status: "running", runID: "run-1", stage: "starting" });
+  await store.recordMorningBrief({ profileID: "Default", status: "running", runID: "run-1", stage: "researching" });
+  assert.equal((await store.publicState("Default")).morningBrief.run.attempts, 1);
+  assert.equal((await store.publicState("Default")).morningBrief.run.stage, "researching");
   assert.equal((await store.publicState("Default")).morningBrief.due, false);
-  await store.recordMorningBrief({ profileID: "Default", status: "failed", diagnostics: ["Gmail unavailable"] });
+  await store.recordMorningBrief({ profileID: "Default", status: "failed", runID: "run-1", diagnostics: ["Gmail unavailable"] });
+  assert.equal((await store.publicState("Default")).morningBrief.available, true);
+  assert.equal((await store.publicState("Default")).morningBrief.due, false);
+  now = new Date(now.getTime() + 30 * 60_000 + 1);
   assert.equal((await store.publicState("Default")).morningBrief.due, true);
-  await store.recordMorningBrief({ profileID: "Default", status: "succeeded" });
+  await store.recordMorningBrief({ profileID: "Default", status: "succeeded", runID: "run-1", stage: "ingested", reportID: "report-1" });
   assert.equal((await store.publicState("Default")).morningBrief.due, false);
+  assert.equal((await store.publicState("Default")).morningBrief.lastSuccess.reportID, "report-1");
+  await store.recordMorningBrief({ profileID: "Default", status: "failed", runID: "late-error" });
+  assert.equal((await store.publicState("Default")).morningBrief.run.status, "succeeded");
 
   await store.setMorningBrief({ enabled: true, profileID: "Work" });
   assert.equal((await store.publicState("Default")).morningBrief.enabled, false);
@@ -39,9 +48,22 @@ test("Morning Brief is locally entitled, profile-exclusive, and once daily", asy
     true,
     "a successful run from another profile must not suppress this profile",
   );
+  await store.recordMorningBrief({ profileID: "Work", status: "succeeded", runID: "work-run", reportID: "work-report" });
   await store.setMorningBrief({ enabled: true, profileID: "Default" });
+  assert.equal((await store.publicState("Default")).morningBrief.lastSuccess.reportID, "report-1");
+  assert.equal((await store.publicState("Work")).morningBrief.lastSuccess.reportID, "work-report");
 
-  now = new Date(2026, 7, 28, 12, 0);
+  now = new Date(2026, 7, 28, 6, 0);
+  await store.setMorningBrief({ enabled: true, profileID: "Work" });
+  await store.recordMorningBrief({
+    profileID: "Work",
+    status: "failed",
+    stage: "native-controller-incompatible",
+  });
+  assert.equal((await store.publicState("Work")).morningBrief.available, false);
+
+  now = new Date(2026, 7, 29, 12, 0);
+  await store.setMorningBrief({ enabled: true, profileID: "Default" });
   assert.equal((await store.publicState("Default")).morningBrief.due, true, "launch catch-up remains due after 11 AM");
   const stat = await import("node:fs/promises").then(({ stat }) => stat(path));
   assert.equal(stat.mode & 0o077, 0);
@@ -65,6 +87,26 @@ test("native observations preserve only connection metadata", async () => {
   const state = await store.publicState("Default");
   assert.equal(state.nativeConnections.gmail.connected, true);
   assert.equal("cookie" in state.nativeConnections.gmail, false);
+});
+
+test("bridge connector state is isolated per profile and migrates the legacy shape", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-apps-"));
+  const path = resolve(directory, "apps.json");
+  await import("node:fs/promises").then(({ writeFile }) => writeFile(path, JSON.stringify({
+    version: 1,
+    bridgeConnections: { sample: { connected: true, accountLabel: "legacy@example.com" } },
+  })));
+  const store = new AppsStateStore(path);
+  assert.equal((await store.publicState("Default")).bridgeConnections.sample.connected, true);
+  assert.deepEqual((await store.publicState("Work")).bridgeConnections, {});
+  await store.updateBridgeConnection("Work", "sample", {
+    connected: true,
+    authenticated: true,
+    executionReady: true,
+    lastSuccess: "2026-08-29T12:00:00.000Z",
+  });
+  assert.equal((await store.publicState("Work")).bridgeConnections.sample.executionReady, true);
+  assert.equal((await store.publicState("Default")).bridgeConnections.sample.accountLabel, "legacy@example.com");
 });
 
 test("older Apps state without a profile remains disabled", async () => {

@@ -90,3 +90,19 @@ test("native Report Write input can stream top-down before the tool block closes
   });
   assert.equal(stream.hasNativeToolStream("write-report"), false);
 });
+
+test("final text deltas share one native Dia text block", () => {
+  const recorder = responseRecorder();
+  const stream = new AnthropicStreamWriter(recorder.response, {
+    messageID: "message-stream",
+    model: "ollama:qwen",
+  });
+  stream.startMessage();
+  stream.appendText("First ");
+  stream.appendText("second.");
+  stream.finish({ stopReason: "end_turn" });
+  const events = recorder.events();
+  assert.equal(events.filter((entry) => entry.data?.content_block?.type === "text").length, 1);
+  assert.equal(events.filter((entry) => entry.data?.delta?.type === "text_delta")
+    .map((entry) => entry.data.delta.text).join(""), "First second.");
+});

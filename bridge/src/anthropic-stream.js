@@ -127,6 +127,7 @@ export class AnthropicStreamWriter {
     this.reasoningNeedsSeparator = false;
     this.localActivities = new Map();
     this.nativeToolStreams = new Map();
+    this.textIndex = null;
   }
 
   startMessage() {
@@ -204,7 +205,41 @@ export class AnthropicStreamWriter {
     this.reasoningNeedsSeparator = false;
   }
 
+  startText() {
+    if (this.textIndex !== null) return this.textIndex;
+    this.stopThinking();
+    const index = this.nextIndex;
+    this.nextIndex += 1;
+    this.textIndex = index;
+    writeEvent(this.response, "content_block_start", {
+      type: "content_block_start",
+      index,
+      content_block: { type: "text", text: "" },
+    });
+    return index;
+  }
+
+  appendText(delta) {
+    if (typeof delta !== "string" || !delta) return;
+    const index = this.startText();
+    writeEvent(this.response, "content_block_delta", {
+      type: "content_block_delta",
+      index,
+      delta: { type: "text_delta", text: delta },
+    });
+  }
+
+  stopText() {
+    if (this.textIndex === null) return;
+    writeEvent(this.response, "content_block_stop", {
+      type: "content_block_stop",
+      index: this.textIndex,
+    });
+    this.textIndex = null;
+  }
+
   writeLocalToolUse(call) {
+    this.stopText();
     this.stopThinking();
     const activity = localActivity(call);
     this.localActivities.set(call.id, activity);
@@ -234,6 +269,7 @@ export class AnthropicStreamWriter {
   }
 
   writeLocalToolResult(call, result) {
+    this.stopText();
     this.stopThinking();
     const activity = this.localActivities.get(call.id) ?? localActivity(call);
     const index = this.nextIndex;
@@ -250,27 +286,13 @@ export class AnthropicStreamWriter {
   }
 
   writeText(text) {
-    this.stopThinking();
-    const index = this.nextIndex;
-    this.nextIndex += 1;
-    writeEvent(this.response, "content_block_start", {
-      type: "content_block_start",
-      index,
-      content_block: { type: "text", text: "" },
-    });
-    writeEvent(this.response, "content_block_delta", {
-      type: "content_block_delta",
-      index,
-      delta: { type: "text_delta", text },
-    });
-    writeEvent(this.response, "content_block_stop", {
-      type: "content_block_stop",
-      index,
-    });
+    this.appendText(text);
+    this.stopText();
   }
 
   startNativeToolCall(call) {
     if (!call?.id || this.nativeToolStreams.has(call.id)) return;
+    this.stopText();
     this.stopThinking();
     const index = this.nextIndex;
     this.nextIndex += 1;
@@ -322,6 +344,7 @@ export class AnthropicStreamWriter {
   }
 
   finish({ stopReason, outputTokens = 0 }) {
+    this.stopText();
     this.stopThinking();
     writeEvent(this.response, "message_delta", {
       type: "message_delta",

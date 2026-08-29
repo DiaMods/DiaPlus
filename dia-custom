@@ -13,7 +13,8 @@ case "$command" in
   bridge) exec "$project_dir/scripts/launch.sh" --bridge-only "$@" ;;
   doctor) exec "$project_dir/scripts/doctor.sh" "$@" ;;
   test) exec "$project_dir/scripts/test.sh" "$@" ;;
-  update) exec "$project_dir/scripts/build.sh" --replace "$@" ;;
+  update) exec "$project_dir/scripts/update.sh" "$@" ;;
+  compatibility) exec node "$project_dir/scripts/compatibility.js" "${1:-/Applications/Dia.app}" "${@:2}" ;;
   mods) exec node "$project_dir/scripts/mods.js" "$@" ;;
   modules) exec node "$project_dir/scripts/mods.js" "$@" ;;
   migrate) exec "$project_dir/scripts/migrate.sh" "$@" ;;
@@ -44,7 +45,8 @@ case "$command" in
     print '  ./dia-custom openai-key         Configure OpenAI API access privately'
     print '  ./dia-custom install            Refresh patches in an existing clone'
     print '  ./dia-custom build [--replace]  Create a clone from /Applications/Dia.app'
-    print '  ./dia-custom update             Rebuild only from an audited Dia app'
+    print '  ./dia-custom compatibility      Check every Mod against a Dia app'
+    print '  ./dia-custom update             Safely stage, verify, and install a Dia update'
     print '  ./dia-custom mods               List or configure Dia Mods'
     print '  ./dia-custom migrate            Import safe local data from official Dia'
     print '  ./dia-custom status             Show implemented and remaining work'

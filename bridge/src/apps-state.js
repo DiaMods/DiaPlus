@@ -5,6 +5,7 @@ import { appsStatePath } from "./paths.js";
 
 const profilePattern = /^[^/\\\0]{1,120}$/;
 const connectorPattern = /^[a-z0-9][a-z0-9._-]{0,119}$/i;
+const morningBriefRetryMilliseconds = 30 * 60_000;
 
 function cleanProfileID(value) {
   const profileID = typeof value === "string" && profilePattern.test(value.trim())
@@ -29,7 +30,7 @@ async function atomicWriteJSON(path, value) {
 
 function defaultState() {
   return {
-    version: 1,
+    version: 3,
     advancedChat: { enabled: true, entitledLocally: true },
     morningBrief: {
       enabledProfileID: null,
@@ -40,6 +41,23 @@ function defaultState() {
     nativeConnections: {},
     bridgeConnections: {},
   };
+}
+
+function normalizeMorningBriefRuns(rawRuns) {
+  if (!rawRuns || typeof rawRuns !== "object" || Array.isArray(rawRuns)) return {};
+  const normalized = {};
+  for (const [key, value] of Object.entries(rawRuns)) {
+    if (value?.profileID && value?.status) {
+      const profileID = cleanProfileID(value.profileID);
+      normalized[profileID] = { ...(normalized[profileID] ?? {}), [key]: value };
+      continue;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const profileID = cleanProfileID(key);
+    normalized[profileID] = Object.fromEntries(Object.entries(value)
+      .filter(([day, run]) => /^\d{4}-\d{2}-\d{2}$/.test(day) && run?.status));
+  }
+  return normalized;
 }
 
 function normalizeState(raw) {
@@ -54,15 +72,15 @@ function normalizeState(raw) {
     morningBrief: {
       ...initial.morningBrief,
       enabledProfileID,
-      runs: raw?.morningBrief?.runs && typeof raw.morningBrief.runs === "object"
-        ? raw.morningBrief.runs
-        : {},
+      runs: normalizeMorningBriefRuns(raw?.morningBrief?.runs),
     },
     nativeConnections: raw?.nativeConnections && typeof raw.nativeConnections === "object"
       ? raw.nativeConnections
       : {},
     bridgeConnections: raw?.bridgeConnections && typeof raw.bridgeConnections === "object"
-      ? raw.bridgeConnections
+      ? (Object.values(raw.bridgeConnections).some((value) => value?.connected !== undefined)
+        ? { Default: raw.bridgeConnections }
+        : raw.bridgeConnections)
       : {},
   };
 }
@@ -114,10 +132,12 @@ export class AppsStateStore {
     const state = await this.load();
     const profileID = cleanProfileID(payload?.profileID);
     const connections = {};
+    const existingConnections = state.nativeConnections[profileID] ?? {};
     for (const item of Array.isArray(payload?.connectors) ? payload.connectors : []) {
       try {
         const id = cleanConnectorID(item?.id);
         connections[id] = {
+          ...(existingConnections[id] ?? {}),
           connected: item?.connected === true,
           autoConnected: item?.autoConnected === true,
           accountLabel: typeof item?.accountLabel === "string"
@@ -137,32 +157,102 @@ export class AppsStateStore {
     return this.save();
   }
 
+  async updateNativeConnection(profileID, connectorID, patch = {}) {
+    const state = await this.load();
+    const selectedProfile = cleanProfileID(profileID);
+    const id = cleanConnectorID(connectorID);
+    const current = state.nativeConnections[selectedProfile]?.[id] ?? {};
+    state.nativeConnections[selectedProfile] = {
+      ...(state.nativeConnections[selectedProfile] ?? {}),
+      [id]: {
+        ...current,
+        ...patch,
+        accountLabel: typeof patch.accountLabel === "string"
+          ? patch.accountLabel.slice(0, 200)
+          : current.accountLabel ?? null,
+        capabilities: Array.isArray(patch.capabilities)
+          ? patch.capabilities.filter((value) => typeof value === "string").slice(0, 100)
+          : current.capabilities ?? [],
+        lastError: typeof patch.lastError === "string"
+          ? patch.lastError.slice(0, 500)
+          : patch.lastError === null ? null : current.lastError ?? null,
+        observedAt: this.now().toISOString(),
+      },
+    };
+    return this.save();
+  }
+
+  async updateBridgeConnection(profileID, connectorID, patch = {}) {
+    const state = await this.load();
+    const selectedProfile = cleanProfileID(profileID);
+    const id = cleanConnectorID(connectorID);
+    const profiles = state.bridgeConnections;
+    const current = profiles[selectedProfile]?.[id] ?? {};
+    profiles[selectedProfile] = {
+      ...(profiles[selectedProfile] ?? {}),
+      [id]: {
+        ...current,
+        connected: patch.connected ?? current.connected ?? false,
+        authenticated: patch.authenticated ?? current.authenticated ?? false,
+        executionReady: patch.executionReady ?? current.executionReady ?? false,
+        accountLabel: typeof patch.accountLabel === "string"
+          ? patch.accountLabel.slice(0, 200)
+          : current.accountLabel ?? null,
+        lastSuccess: typeof patch.lastSuccess === "string"
+          ? patch.lastSuccess
+          : current.lastSuccess ?? null,
+        lastError: typeof patch.lastError === "string"
+          ? patch.lastError.slice(0, 500)
+          : patch.lastError === null ? null : current.lastError ?? null,
+        observedAt: this.now().toISOString(),
+      },
+    };
+    return this.save();
+  }
+
   morningBriefStatus(profileID = "Default") {
     if (!this.value) throw new Error("apps state has not been loaded");
     const selectedProfile = cleanProfileID(profileID);
     const now = this.now();
     const day = localDay(now);
-    const candidateRun = this.value.morningBrief.runs[day] ?? null;
-    const run = candidateRun?.profileID === selectedProfile ? candidateRun : null;
+    const profileRuns = this.value.morningBrief.runs[selectedProfile] ?? {};
+    const run = profileRuns[day] ?? null;
     const enabled = this.value.morningBrief.enabledProfileID === selectedProfile;
     const afterWindowStart = now.getHours() >= this.value.morningBrief.windowStartHour;
     const finished = run?.status === "succeeded";
     const pending = run?.status === "running" &&
-      Date.parse(run.updatedAt ?? 0) > now.getTime() - 30 * 60_000;
+      Date.parse(run.updatedAt ?? 0) > now.getTime() - morningBriefRetryMilliseconds;
+    const coolingDown = run?.status === "failed" &&
+      Date.parse(run.updatedAt ?? 0) > now.getTime() - morningBriefRetryMilliseconds;
+    const controllerAvailable = run?.stage !== "native-controller-incompatible";
     return {
       enabled,
       eligible: true,
+      available: controllerAvailable,
+      ...(controllerAvailable ? {} : {
+        compatibilityReason: "Dia's native Morning Brief controller is unavailable for this build.",
+      }),
       profileID: selectedProfile,
       enabledProfileID: this.value.morningBrief.enabledProfileID,
       localDay: day,
       windowStartHour: this.value.morningBrief.windowStartHour,
       windowEndHour: this.value.morningBrief.windowEndHour,
-      due: enabled && afterWindowStart && !finished && !pending,
+      due: enabled && afterWindowStart && !finished && !pending && !coolingDown,
       run,
+      lastSuccess: Object.entries(profileRuns)
+        .filter(([, value]) => value?.status === "succeeded")
+        .sort(([left], [right]) => right.localeCompare(left))[0]?.[1] ?? null,
     };
   }
 
-  async recordMorningBrief({ profileID = "Default", status, diagnostics = [] }) {
+  async recordMorningBrief({
+    profileID = "Default",
+    status,
+    diagnostics = [],
+    stage = null,
+    runID = null,
+    reportID = null,
+  }) {
     if (!["running", "succeeded", "failed"].includes(status)) {
       throw new Error("invalid Morning Brief status");
     }
@@ -173,15 +263,31 @@ export class AppsStateStore {
     }
     const now = this.now();
     const day = localDay(now);
-    const previous = state.morningBrief.runs[day];
-    state.morningBrief.runs[day] = {
+    const profileRuns = state.morningBrief.runs[selectedProfile] ?? {};
+    const previous = profileRuns[day];
+    const sameRun = (typeof runID === "string" && runID && previous?.runID === runID) ||
+      (status === "running" && previous?.status === "running");
+    if (previous?.status === "succeeded" && status !== "succeeded") {
+      return state;
+    }
+    state.morningBrief.runs[selectedProfile] = {
+      ...profileRuns,
+      [day]: {
       profileID: selectedProfile,
       status,
-      attempts: status === "running" ? (previous?.attempts ?? 0) + 1 : previous?.attempts ?? 1,
+      attempts: status === "running" && !sameRun
+        ? (previous?.attempts ?? 0) + 1
+        : previous?.attempts ?? 1,
       updatedAt: now.toISOString(),
+      ...(typeof runID === "string" && runID ? { runID } : previous?.runID ? { runID: previous.runID } : {}),
+      ...(typeof stage === "string" && stage ? { stage } : previous?.stage ? { stage: previous.stage } : {}),
+      ...(typeof reportID === "string" && reportID
+        ? { reportID }
+        : previous?.reportID ? { reportID: previous.reportID } : {}),
       diagnostics: Array.isArray(diagnostics)
         ? diagnostics.filter((item) => typeof item === "string").slice(0, 50)
         : [],
+      },
     };
     return this.save();
   }
@@ -194,7 +300,7 @@ export class AppsStateStore {
       profileID: cleanProfileID(profileID),
       morningBrief: this.morningBriefStatus(profileID),
       nativeConnections: state.nativeConnections[cleanProfileID(profileID)] ?? {},
-      bridgeConnections: state.bridgeConnections,
+      bridgeConnections: state.bridgeConnections[cleanProfileID(profileID)] ?? {},
     };
   }
 }

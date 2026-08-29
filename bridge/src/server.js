@@ -235,6 +235,9 @@ async function streamProviderAsAnthropic(response, payload) {
       onReasoning: async (delta) => {
         stream.writeReasoning(delta);
       },
+      onTextDelta: async (delta) => {
+        stream.appendText(delta);
+      },
       onStatus: async (status) => {
         stream.writeStatus(status);
       },
@@ -309,7 +312,7 @@ async function streamProviderAsAnthropic(response, payload) {
     }
     stream.writeNativeToolCalls(remainingCalls);
   }
-  else stream.writeText(result.text);
+  else if (!result.textStreamed) stream.writeText(result.text);
   stream.finish({
     stopReason: isToolUse ? "tool_use" : "end_turn",
     outputTokens: result.usage?.output_tokens ?? 0,
@@ -523,6 +526,7 @@ async function handleRequest(request, response) {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({
       ok: true,
+      ...providerManager.healthState(),
       mode: captureEnabled ? "capture" : "bridge",
       selectedModel,
       enabledMods: enabledModIDs(),
@@ -665,9 +669,13 @@ async function handleRequest(request, response) {
       if (!modEnabled("live-connectors")) throw new Error("live-connectors mod is disabled");
       const connectorID = decodeURIComponent(connectorAction[1]);
       const action = connectorAction[2];
+      const payload = JSON.parse((await readBody(request)).toString("utf8") || "{}");
+      if (typeof payload.profileID !== "string" || !payload.profileID.trim()) {
+        throw new Error("profileID is required");
+      }
       const value = action === "disconnect"
-        ? await providerManager.connectorRegistry.disconnect(connectorID)
-        : await providerManager.connectorRegistry.connect(connectorID);
+        ? await providerManager.connectorRegistry.disconnect(connectorID, payload)
+        : await providerManager.connectorRegistry.connect(connectorID, payload);
       jsonResponse(response, 200, value);
     } catch (error) {
       jsonResponse(response, 400, { error: String(error?.message ?? error) });

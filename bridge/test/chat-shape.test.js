@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildDecisionPrompt,
   buildExactToolGuide,
+  authenticatedBrowserContextState,
   currentPageAttachmentState,
   deferredAnthropicTools,
   normalizeAnthropicTools,
@@ -17,6 +18,7 @@ import {
   latexFormattingSkillState,
   nativeToolSearchTool,
   normalizeDiaLatexFormatting,
+  IncrementalDiaTextFormatter,
 } from "../src/chat-shape.js";
 
 const reportTools = [
@@ -80,6 +82,93 @@ test("recognizes only an active native tool continuation", () => {
       { role: "user", content: "A new request" },
     ],
   }), false);
+});
+
+test("authenticated browser fallback reuses existing tabs and closes only proven temporary tabs", () => {
+  const seed = () => ({
+    messages: [
+      { role: "user", content: "Read my private dashboard" },
+      { role: "assistant", content: [{
+        type: "tool_use", id: "fetch", name: "mcp__dia-tools__fetch_web_content",
+        input: { urls: ["https://example.com/dashboard"] },
+      }] },
+      { role: "user", content: [{
+        type: "tool_result", tool_use_id: "fetch",
+        content: JSON.stringify({ pages: [{
+          url: "https://example.com/dashboard",
+          error: "login wall",
+          requiresBrowserSession: true,
+        }] }),
+      }] },
+    ],
+  });
+  const existing = seed();
+  assert.equal(authenticatedBrowserContextState(existing).stage, "read_metadata");
+  existing.messages.push(
+    { role: "assistant", content: [{
+      type: "tool_use", id: "metadata", name: "mcp__dia-tools__read_tabs",
+      input: { contentPaneIDs: [], includeFullTextContent: false },
+    }] },
+    { role: "user", content: [{
+      type: "tool_result", tool_use_id: "metadata",
+      content: JSON.stringify({ contentPanes: [{ contentPaneID: "user-pane", url: "https://example.com/dashboard" }] }),
+    }] },
+  );
+  assert.deepEqual(authenticatedBrowserContextState(existing).contentPaneIDs, ["user-pane"]);
+  assert.equal(authenticatedBrowserContextState(existing).stage, "read_existing");
+  existing.messages.push(
+    { role: "assistant", content: [{
+      type: "tool_use", id: "full", name: "mcp__dia-tools__read_tabs",
+      input: { contentPaneIDs: ["user-pane"], includeFullTextContent: true },
+    }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "full", content: "Private dashboard content" }] },
+  );
+  assert.equal(authenticatedBrowserContextState(existing).stage, "loaded_existing");
+
+  const temporary = seed();
+  temporary.messages.push(
+    { role: "assistant", content: [{
+      type: "tool_use", id: "before", name: "read_tabs",
+      input: { contentPaneIDs: [], includeFullTextContent: false },
+    }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "before", content: '{"contentPanes":[]}' }] },
+  );
+  assert.equal(authenticatedBrowserContextState(temporary).stage, "open_temporary");
+  temporary.messages.push(
+    { role: "assistant", content: [{ type: "tool_use", id: "open", name: "open_tabs", input: { urls: ["https://example.com/dashboard"] } }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "open", content: '{"success":true}' }] },
+    { role: "assistant", content: [{
+      type: "tool_use", id: "after", name: "read_tabs",
+      input: { contentPaneIDs: [], includeFullTextContent: false },
+    }] },
+    { role: "user", content: [{
+      type: "tool_result", tool_use_id: "after",
+      content: JSON.stringify({ contentPanes: [{ contentPaneID: "agent-pane", url: "https://example.com/dashboard" }] }),
+    }] },
+  );
+  assert.equal(authenticatedBrowserContextState(temporary).stage, "read_temporary");
+  temporary.messages.push(
+    { role: "assistant", content: [{
+      type: "tool_use", id: "temp-full", name: "read_tabs",
+      input: { contentPaneIDs: ["agent-pane"], includeFullTextContent: true },
+    }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "temp-full", content: "Private dashboard content" }] },
+  );
+  const close = authenticatedBrowserContextState(temporary);
+  assert.equal(close.stage, "close_temporary");
+  assert.deepEqual(close.contentPaneIDs, ["agent-pane"]);
+});
+
+test("incremental text formatting removes progress prefixes and preserves native LaTeX chunks", () => {
+  const prose = new IncrementalDiaTextFormatter();
+  assert.equal(prose.push("I'm gathering the details."), "");
+  assert.equal(prose.push(" The answer is 42."), "The answer is 42.");
+  assert.equal(prose.finish(), "");
+  assert.equal(prose.output, "The answer is 42.");
+
+  const math = new IncrementalDiaTextFormatter({ latexEnabled: true });
+  assert.equal(math.push("The result is $$x^2$$.\n\nNext"), "The result is ```{latex}\nx^2\n```.\n\n");
+  assert.equal(math.finish(), "Next");
 });
 
 test("requires Dia's native Read before answering from current-page context", () => {

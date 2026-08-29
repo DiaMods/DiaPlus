@@ -422,6 +422,182 @@ export function currentPageAttachmentState(payload) {
   };
 }
 
+function toolBaseName(name) {
+  if (typeof name !== "string") return "";
+  const separator = name.lastIndexOf("__");
+  return separator >= 0 ? name.slice(separator + 2) : name;
+}
+
+function parseToolResultValue(block) {
+  const text = contentAsText(block?.content).trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function collectPaneMetadata(value, output = [], seen = new Set()) {
+  if (value == null || seen.has(value)) return output;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed !== value) collectPaneMetadata(parsed, output, seen);
+    } catch {
+      const pattern = /(?:contentPaneID|contentPaneId|content_pane_id)["'\s:=]+([A-Za-z0-9._:-]{2,200})[\s\S]{0,500}?\b(?:url|URL)["'\s:=]+(https?:\\?\/\\?\/[^\s"'<>]+)/g;
+      for (const match of value.matchAll(pattern)) {
+        output.push({
+          id: match[1],
+          url: match[2].replaceAll("\\/", "/").replace(/[),.;]+$/, ""),
+        });
+      }
+    }
+    return output;
+  }
+  if (typeof value !== "object") return output;
+  seen.add(value);
+  const id = value.contentPaneID ?? value.contentPaneId ?? value.content_pane_id ??
+    value.paneID ?? value.paneId;
+  const url = value.url ?? value.URL ?? value.currentURL ?? value.currentUrl;
+  if (typeof id === "string" && typeof url === "string") output.push({ id, url });
+  for (const child of Object.values(value)) collectPaneMetadata(child, output, seen);
+  return output;
+}
+
+function sameBrowserTarget(left, right) {
+  try {
+    const first = new URL(left);
+    const second = new URL(right);
+    return first.origin === second.origin && (
+      first.pathname === second.pathname ||
+      first.pathname === "/" || second.pathname === "/"
+    );
+  } catch {
+    return left === right;
+  }
+}
+
+/**
+ * Public HTTP fetches deliberately have no access to Chromium cookies. When a
+ * fetch reports an authentication wall, this deterministic state machine asks
+ * Dia's native tab harness to read the page. Existing tabs are never closed;
+ * a temporary tab is closed only when its new content-pane ID can be proven by
+ * comparing native metadata before and after open_tabs.
+ */
+export function authenticatedBrowserContextState(payload) {
+  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+  let requestIndex = -1;
+  for (let index = 0; index < messages.length; index += 1) {
+    if (messages[index]?.role === "user" && containsUserRequest(messages[index].content)) {
+      requestIndex = index;
+    }
+  }
+  if (requestIndex < 0) return { active: false, stage: "inactive" };
+
+  const calls = [];
+  const results = new Map();
+  for (const [offset, message] of messages.slice(requestIndex + 1).entries()) {
+    const messageIndex = requestIndex + 1 + offset;
+    for (const block of Array.isArray(message?.content) ? message.content : []) {
+      if (message.role === "assistant" && block?.type === "tool_use" && block.id) {
+        calls.push({ ...block, messageIndex, baseName: toolBaseName(block.name) });
+      } else if (message.role === "user" && block?.type === "tool_result") {
+        results.set(block.tool_use_id, { ...block, messageIndex });
+      }
+    }
+  }
+
+  const targetURLs = [];
+  for (const call of calls.filter(({ baseName }) => baseName === "fetch_web_content")) {
+    const result = results.get(call.id);
+    const value = parseToolResultValue(result);
+    for (const page of Array.isArray(value?.pages) ? value.pages : []) {
+      if (page?.requiresBrowserSession === true && typeof page.url === "string") {
+        targetURLs.push(page.url);
+      }
+    }
+  }
+  const urls = [...new Set(targetURLs)].slice(0, 10);
+  if (urls.length === 0) return { active: false, stage: "inactive" };
+
+  const reads = calls.filter(({ baseName }) => baseName === "read_tabs");
+  const opens = calls.filter(({ baseName }) => baseName === "open_tabs");
+  const closes = calls.filter(({ baseName }) => baseName === "close_tabs");
+  const metadataReads = reads.filter((call) =>
+    call.input?.includeFullTextContent === false &&
+    Array.isArray(call.input?.contentPaneIDs) && call.input.contentPaneIDs.length === 0);
+  const initialMetadata = metadataReads.find((call) => call.messageIndex < (opens[0]?.messageIndex ?? Infinity));
+  if (!initialMetadata) {
+    return { active: true, stage: "read_metadata", urls };
+  }
+  const initialResult = results.get(initialMetadata.id);
+  if (!initialResult) return { active: false, stage: "reading_metadata", urls };
+  if (nativeReadResultFailed(initialResult)) {
+    return { active: false, stage: "failed", urls, error: contentAsText(initialResult.content) };
+  }
+  const initialPanes = collectPaneMetadata(parseToolResultValue(initialResult));
+  const existingIDs = [...new Set(initialPanes
+    .filter((pane) => urls.some((url) => sameBrowserTarget(pane.url, url)))
+    .map((pane) => pane.id))];
+
+  if (existingIDs.length > 0) {
+    const fullRead = reads.find((call) =>
+      call.input?.includeFullTextContent === true &&
+      existingIDs.some((id) => call.input?.contentPaneIDs?.includes(id)));
+    if (!fullRead) return { active: true, stage: "read_existing", urls, contentPaneIDs: existingIDs };
+    const fullResult = results.get(fullRead.id);
+    if (!fullResult) return { active: false, stage: "reading_existing", urls };
+    return nativeReadResultFailed(fullResult)
+      ? { active: false, stage: "failed", urls, error: contentAsText(fullResult.content) }
+      : { active: false, loaded: true, stage: "loaded_existing", urls, contentPaneIDs: existingIDs };
+  }
+
+  const open = opens[0];
+  if (!open) return { active: true, stage: "open_temporary", urls };
+  if (!results.get(open.id)) return { active: false, stage: "opening_temporary", urls };
+  if (nativeReadResultFailed(results.get(open.id))) {
+    return { active: false, stage: "failed", urls, error: contentAsText(results.get(open.id).content) };
+  }
+  const afterOpenMetadata = metadataReads.find((call) => call.messageIndex > open.messageIndex);
+  if (!afterOpenMetadata) return { active: true, stage: "reread_metadata", urls };
+  const afterOpenResult = results.get(afterOpenMetadata.id);
+  if (!afterOpenResult) return { active: false, stage: "rereading_metadata", urls };
+  if (nativeReadResultFailed(afterOpenResult)) {
+    return { active: false, stage: "failed", urls, error: contentAsText(afterOpenResult.content) };
+  }
+  const initialIDs = new Set(initialPanes.map((pane) => pane.id));
+  const temporaryIDs = [...new Set(collectPaneMetadata(parseToolResultValue(afterOpenResult))
+    .filter((pane) => !initialIDs.has(pane.id) && urls.some((url) => sameBrowserTarget(pane.url, url)))
+    .map((pane) => pane.id))];
+  if (temporaryIDs.length === 0) {
+    return { active: false, stage: "failed", urls, error: "Dia did not expose a new matching content pane." };
+  }
+  const fullRead = reads.find((call) =>
+    call.messageIndex > afterOpenMetadata.messageIndex &&
+    call.input?.includeFullTextContent === true &&
+    temporaryIDs.some((id) => call.input?.contentPaneIDs?.includes(id)));
+  if (!fullRead) return { active: true, stage: "read_temporary", urls, contentPaneIDs: temporaryIDs };
+  const fullResult = results.get(fullRead.id);
+  if (!fullResult) return { active: false, stage: "reading_temporary", urls };
+  if (nativeReadResultFailed(fullResult)) {
+    return { active: false, stage: "failed", urls, error: contentAsText(fullResult.content) };
+  }
+  const close = closes.find((call) =>
+    call.messageIndex > fullRead.messageIndex &&
+    temporaryIDs.every((id) => call.input?.contentPaneIDs?.includes(id)));
+  if (!close) return { active: true, stage: "close_temporary", urls, contentPaneIDs: temporaryIDs };
+  const closeResult = results.get(close.id);
+  if (!closeResult) return { active: false, stage: "closing_temporary", urls };
+  return {
+    active: false,
+    loaded: true,
+    stage: nativeReadResultFailed(closeResult) ? "loaded_close_failed" : "loaded_temporary",
+    urls,
+    contentPaneIDs: temporaryIDs,
+  };
+}
+
 function reportArtifactFolder(request) {
   const slug = request.text.normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -872,6 +1048,74 @@ export function normalizeDiaLatexFormatting(text, { enabled = true } = {}) {
     (_match, amount) => `$${amount}`);
   output = normalizeInlineDollarMath(output);
   return output;
+}
+
+/**
+ * Converts provider deltas into text that Dia can render immediately. Normal
+ * prose is emitted as it arrives. Math-enabled turns retain only the current
+ * paragraph so split LaTeX delimiters can be normalized before that paragraph
+ * is sent to Dia. The first sentence is briefly retained to remove the common
+ * "I'm gathering..." progress prefix without ever retracting visible text.
+ */
+export class IncrementalDiaTextFormatter {
+  constructor({ latexEnabled = false } = {}) {
+    this.latexEnabled = latexEnabled;
+    this.prefixPending = true;
+    this.buffer = "";
+    this.output = "";
+  }
+
+  emit(value) {
+    if (!value) return "";
+    this.output += value;
+    return value;
+  }
+
+  resolvePrefix({ final = false } = {}) {
+    if (!this.prefixPending) return;
+    const candidate = this.buffer.trimStart();
+    const sentence = candidate.match(/^([^\n.!?]{0,240}[.!?])(?:[ \t]*\n+|[ \t]+)([\s\S]+)$/);
+    if (sentence) {
+      this.buffer = stripLeadingProgressNarration(candidate);
+      this.prefixPending = false;
+      return;
+    }
+    const firstBoundary = candidate.search(/[\n.!?]/);
+    const completeFirstSentence = candidate.match(/^([^\n.!?]{0,240}[.!?])\s*$/);
+    const looksLikeProgressOnly = completeFirstSentence &&
+      stripLeadingProgressNarration(`${completeFirstSentence[1]} Completed answer.`) === "Completed answer.";
+    if (!final && looksLikeProgressOnly) return;
+    if (final || candidate.length > 260 || firstBoundary >= 0) {
+      this.buffer = candidate;
+      this.prefixPending = false;
+    }
+  }
+
+  push(delta) {
+    if (typeof delta !== "string" || !delta) return "";
+    this.buffer += delta;
+    this.resolvePrefix();
+    if (this.prefixPending) return "";
+    if (!this.latexEnabled) {
+      const value = this.buffer;
+      this.buffer = "";
+      return this.emit(value);
+    }
+    const boundary = this.buffer.lastIndexOf("\n\n");
+    if (boundary < 0) return "";
+    const complete = this.buffer.slice(0, boundary + 2);
+    this.buffer = this.buffer.slice(boundary + 2);
+    return this.emit(normalizeDiaLatexFormatting(complete));
+  }
+
+  finish() {
+    this.resolvePrefix({ final: true });
+    const value = normalizeDiaLatexFormatting(this.buffer, {
+      enabled: this.latexEnabled,
+    });
+    this.buffer = "";
+    return this.emit(value);
+  }
 }
 
 export const toolDecisionSchema = {

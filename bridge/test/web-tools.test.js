@@ -62,3 +62,22 @@ test("search and fetch execute in the local bridge with bounded readable text", 
   assert.doesNotMatch(fetched.pages[0].content, /secret/);
   assert.equal(calls.length, 2);
 });
+
+test("authenticated responses and login walls request native browser-session reading", async () => {
+  const unauthorized = new LocalWebTools({
+    lookupImplementation: publicLookup,
+    fetchImplementation: async () => new Response("sign in", { status: 401 }),
+  });
+  const denied = await unauthorized.fetchContent({ urls: ["https://example.com/private"] });
+  assert.equal(denied.pages[0].requiresBrowserSession, true);
+
+  const loginWall = new LocalWebTools({
+    lookupImplementation: publicLookup,
+    fetchImplementation: async () => new Response(`
+      <!doctype html><title>Sign in</title><form><input type="email"><input type="password"></form>
+    `, { headers: { "content-type": "text/html" } }),
+  });
+  const redirected = await loginWall.fetchContent({ urls: ["https://example.com/account"] });
+  assert.equal(redirected.pages[0].requiresBrowserSession, true);
+  assert.equal(redirected.pages[0].url, "https://example.com/account");
+});

@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `identity-isolation` | `scripts/build.sh`, `patch-keychain-label.js`, entitlements | Bundle/profile/Keychain/signature checks in `doctor`; required |
 | `network-isolation` | `patch-endpoint.js`, native URL hook, launch host rules, `network-policy.js` | Network-policy tests plus current-run destination log; required |
-| `update-blocker` | `install.sh`, `launch.sh`, `supported-dia-builds.json` | Sparkle/feed checks and pre-copy build audit; required |
+| `update-blocker` | `install.sh`, `update.sh`, `compatibility.js` | Sparkle/feed checks, per-Mod validation, staged swap, and rollback; required |
 | `local-ai-routing` | `patch-endpoint.js`, `patch-agent-handler.js`, bridge server/providers | Protocol/provider tests and bridge health; required |
 | `account-bypass` | `patch-no-account.js`, anonymous launch defaults | Per-build ARM64 layout check; clean rebuild to remove |
 | `dia-import` | `prepare-dia-import.js`, `patch-dia-import.js`, native importer runtime hook | Owner-only sanitized staging; no account, password, cookie, Keychain, or service access |
@@ -29,9 +29,7 @@
 ./dia-custom mods list --json
 ./dia-custom mods disable <mod-id>
 ./dia-custom mods enable <mod-id>
-./dia-custom sync status
-./dia-custom sync enable
-./dia-custom sync disable
+./dia-custom compatibility /Applications/Dia.app
 ~~~
 
 Runtime and bridge mods take effect after restarting Dia Custom. Build mods must be changed with `./dia-custom build --replace`; `install` refuses to claim that an already-applied binary patch was removed. Required safety/core mods cannot be disabled through this interface. The native Settings → Mods pane uses the same profile state and clearly marks restart/rebuild requirements.
@@ -39,10 +37,10 @@ Runtime and bridge mods take effect after restarting Dia Custom. Build mods must
 ## Updating for a new Dia release
 
 1. Leave the existing clone installed and let only official Dia update.
-2. Run `./dia-custom test`. An unknown official build fails before modification.
-3. Audit failing mods separately using the ownership table above.
-4. Add the new build to `supported-dia-builds.json` only after every enabled mod passes its structural/source tests.
-5. Run `./dia-custom update`; the transactional build preserves the previous clone and profile state.
+2. Run `./dia-custom compatibility /Applications/Dia.app` to see every critical and optional result without changing either app.
+3. Run `./dia-custom update`. Critical failures abort; optional failures require confirmation or `--allow-disable-incompatible`.
+4. The updater verifies a staged clone, backs up the current app, swaps it, and rolls back automatically if live post-install verification fails.
+5. Audit any unavailable Mod independently. It reactivates automatically when a later Dia build passes its validator.
 
 This makes incompatibility explicit. A failed Report audit, for example, does not imply that Memory or the model picker needs to be rewritten.
 

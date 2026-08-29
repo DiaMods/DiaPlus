@@ -20,9 +20,10 @@ fi
 # and start it directly from the signed app bundle.
 /bin/launchctl remove local.rttm.dia.bridge >/dev/null 2>&1 || true
 
-enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
-enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build)"
-node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods"
+enabled_mods="${DIA_CUSTOM_EFFECTIVE_MODS:-$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)}"
+enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" \
+  node "$script_dir/mods.js" resolved --scope build)"
+node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" --allow-structural
 mod_enabled() {
   case ",${enabled_mods}," in
     *",${1},"*) return 0 ;;

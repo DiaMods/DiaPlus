@@ -96,6 +96,7 @@ test("OpenAI-compatible chat completions make completed tool results explicit", 
 test("OpenAI Responses API stream maps output and reasoning summaries", async () => {
   const originalFetch = globalThis.fetch;
   const reasoning = [];
+  const textDeltas = [];
   globalThis.fetch = async (url, options) => {
     assert.equal(String(url), "https://api.openai.com/v1/responses");
     assert.equal(options.headers.authorization, "Bearer test-key");
@@ -113,11 +114,13 @@ test("OpenAI Responses API stream maps output and reasoning summaries", async ()
       tools: [],
       model: "gpt-test",
       onReasoning: (value) => reasoning.push(value),
+      onTextDelta: (value) => textDeltas.push(value),
     });
     assert.equal(result.kind, "final");
     assert.equal(result.text, "Done");
     assert.equal(result.usage.output_tokens, 2);
     assert.deepEqual(reasoning, ["Checking context."]);
+    assert.deepEqual(textDeltas, ["Done"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

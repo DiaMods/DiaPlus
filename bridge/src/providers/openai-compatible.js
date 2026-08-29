@@ -148,6 +148,7 @@ async function runChatCompletions({
   model,
   apiKey,
   onReasoning,
+  onTextDelta,
   onToolStart,
   onToolInputDelta,
 }) {
@@ -176,7 +177,10 @@ async function runChatCompletions({
     try { chunk = JSON.parse(event.data); } catch { continue; }
     if (chunk.usage) usage = chunk.usage;
     const delta = chunk.choices?.[0]?.delta ?? {};
-    if (typeof delta.content === "string") text += delta.content;
+    if (typeof delta.content === "string") {
+      text += delta.content;
+      if (delta.content && onTextDelta) await onTextDelta(delta.content);
+    }
     const reasoning = delta.reasoning_content ?? delta.reasoning ?? delta.thinking;
     if (typeof reasoning === "string" && reasoning && onReasoning) {
       await onReasoning(reasoning);
@@ -236,6 +240,7 @@ async function runResponses({
   model,
   apiKey,
   onReasoning,
+  onTextDelta,
   onToolStart,
   onToolInputDelta,
 }) {
@@ -266,6 +271,7 @@ async function runResponses({
     const type = item.type ?? event.event;
     if (type === "response.output_text.delta" && typeof item.delta === "string") {
       text += item.delta;
+      if (onTextDelta) await onTextDelta(item.delta);
     }
     if (
       ["response.reasoning_summary_text.delta", "response.reasoning_text.delta"].includes(type) &&

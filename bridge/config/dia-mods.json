@@ -7,6 +7,8 @@
       "scope": ["build", "launch"],
       "defaultEnabled": true,
       "required": true,
+      "criticality": "critical",
+      "compatibilityValidator": "app-bundle",
       "rebuildOnChange": true,
       "description": "Keeps Dia Custom's bundle, profile, Keychain label, and permissions separate from official Dia."
     },
@@ -16,6 +18,8 @@
       "scope": ["build", "runtime", "bridge", "launch"],
       "defaultEnabled": true,
       "required": true,
+      "criticality": "critical",
+      "compatibilityValidator": "network-bootstrap",
       "rebuildOnChange": true,
       "description": "Blocks Dia and The Browser Company service, telemetry, crash, registry, and updater destinations while allowing normal browsing and selected providers."
     },
@@ -25,6 +29,8 @@
       "scope": ["build", "launch"],
       "defaultEnabled": true,
       "required": true,
+      "criticality": "critical",
+      "compatibilityValidator": "updater-plist",
       "rebuildOnChange": true,
       "description": "Disables the clone's native updater and permits rebuilds only from audited Dia builds."
     },
@@ -34,6 +40,8 @@
       "scope": ["build", "bridge"],
       "defaultEnabled": true,
       "required": true,
+      "criticality": "critical",
+      "compatibilityValidator": "local-ai-routing",
       "rebuildOnChange": true,
       "description": "Routes Dia's native chat protocol to the localhost provider bridge and preserves the agent sandbox."
     },
@@ -43,6 +51,8 @@
       "scope": ["build", "runtime", "launch"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "anonymous-account",
       "rebuildOnChange": true,
       "description": "Uses Dia's anonymous dependency path so local chat can run without a Dia account."
     },
@@ -52,6 +62,8 @@
       "scope": ["build", "runtime", "launch"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "native-importer",
       "rebuildOnChange": true,
       "description": "Adds official Dia to the native browser importer through a sanitized, owner-only local staging copy."
     },
@@ -61,6 +73,8 @@
       "scope": ["runtime"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "model-picker",
       "rebuildOnChange": false,
       "description": "Populates Dia's chat toolbar and View menu with models from the local catalog."
     },
@@ -70,6 +84,8 @@
       "scope": ["runtime"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "developer-tools",
       "rebuildOnChange": false,
       "description": "Exposes local routing and tool diagnostics plus Dia's native webpage developer tools."
     },
@@ -79,6 +95,8 @@
       "scope": ["runtime", "bridge"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "mod-manager",
       "rebuildOnChange": false,
       "description": "Adds a dedicated Mods tab to Dia Settings for configuring optional Dia Mods."
     },
@@ -88,6 +106,8 @@
       "scope": ["runtime", "bridge"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "native-memory",
       "rebuildOnChange": false,
       "description": "Redirects Dia's native Memory settings and recall behavior to the local profile-aware memory store."
     },
@@ -97,6 +117,8 @@
       "scope": ["build", "bridge"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "native-reports",
       "rebuildOnChange": true,
       "description": "Enables Dia's native report workflow, sandbox validation, and Reports-library ingestion for the anonymous clone."
     },
@@ -106,6 +128,8 @@
       "scope": ["bridge"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "bridge-owned",
       "rebuildOnChange": false,
       "description": "Replaces Dia-service web search and fetch with the bounded local public-web client."
     },
@@ -115,6 +139,8 @@
       "scope": ["bridge"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "bridge-owned",
       "rebuildOnChange": false,
       "description": "Adds owner-controlled imported records and people lookup to the local tool layer."
     },
@@ -124,6 +150,8 @@
       "scope": ["runtime", "bridge", "launch"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "native-apps",
       "rebuildOnChange": false,
       "description": "Feeds Dia's shipped Apps preference pane local Advanced Chat, profile, eligibility, and connection state."
     },
@@ -133,6 +161,8 @@
       "scope": ["runtime", "bridge"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "live-connectors",
       "rebuildOnChange": false,
       "description": "Preserves browser-session connector tools and adds direct, owner-controlled OAuth/MCP adapters."
     },
@@ -142,6 +172,8 @@
       "scope": ["runtime", "bridge", "launch"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "morning-brief",
       "rebuildOnChange": false,
       "description": "Enables Dia's bundled Morning Brief UI and schedules its native Reports workflow with local state."
     },
@@ -151,6 +183,8 @@
       "scope": ["build", "bridge"],
       "defaultEnabled": true,
       "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "apple-helper",
       "rebuildOnChange": true,
       "description": "Builds and exposes the optional Apple on-device model helper."
     }

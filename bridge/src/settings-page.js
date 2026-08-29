@@ -536,7 +536,9 @@ export function renderModsPage(adminToken) {
         ? 'Rebuild Dia Custom to apply pending build changes.'
         : value.restartRequired
           ? 'Restart Dia Custom to apply pending changes.'
-          : 'All configured mods are active.';
+          : value.unavailableMods.length
+            ? value.unavailableMods.length + ' configured mod(s) are temporarily unavailable for this Dia build.'
+            : 'All configured mods are active.';
       list.replaceChildren();
       for (const mod of value.mods) {
         const row = document.createElement('div'); row.className = 'mod';
@@ -544,7 +546,8 @@ export function renderModsPage(adminToken) {
         const title = document.createElement('div'); title.className = 'title'; title.textContent = mod.label;
         const description = document.createElement('div'); description.className = 'description'; description.textContent = mod.description;
         const meta = document.createElement('div'); meta.className = 'meta';
-        meta.textContent = mod.required ? 'Required safety/core mod' :
+        meta.textContent = mod.unavailable ? 'Temporarily unavailable · ' + mod.compatibilityReason :
+          mod.required ? 'Required safety/core mod' :
           (mod.rebuildOnChange ? 'Rebuild after changes' : 'Restart after changes') +
           (mod.requiresStableSignature ? ' · stable signing required' : '') +
           (mod.pending ? ' · change pending' : '');
@@ -556,7 +559,7 @@ export function renderModsPage(adminToken) {
         }
         const toggle = document.createElement('input');
         toggle.type = 'checkbox'; toggle.role = 'switch';
-        toggle.checked = mod.configuredEnabled; toggle.disabled = mod.required;
+        toggle.checked = mod.configuredEnabled; toggle.disabled = mod.required || mod.unavailable;
         toggle.setAttribute('aria-label', 'Enable ' + mod.label);
         toggle.addEventListener('change', async () => {
           const enabled = toggle.checked; toggle.disabled = true;

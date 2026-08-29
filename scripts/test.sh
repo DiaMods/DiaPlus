@@ -25,6 +25,8 @@ done
 node --check "$project_dir/scripts/mods.js"
 node --check "$project_dir/scripts/modules.js"
 node --check "$project_dir/scripts/check-dia-build.js"
+node --check "$project_dir/scripts/compatibility.js"
+node --check "$project_dir/scripts/update-policy.js"
 mod_test_profile="$(/usr/bin/mktemp -d -t dia-custom-mods)"
 trap '/bin/rm -rf "$mod_test_profile"' EXIT
 /usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES node "$project_dir/scripts/mods.js" \
@@ -101,6 +103,26 @@ if /usr/bin/grep -q 'Enabling the Morning Brief for %@' \
   exit 1
 fi
 print "ok    Morning Brief switching preserves Dia's native confirmation UI"
+if ! /usr/bin/grep -q '15 \* NSEC_PER_SEC' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q '"openOrGenerateCliaReport"' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q 'performSelector:scheduleSelector' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   /usr/bin/grep -q 'dia_custom_fetch_local_memory_state(target, action, !found)' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c"; then
+  print -u2 "native Morning Brief fallback or event-driven Memory refresh is incomplete"
+  exit 1
+fi
+print "ok    Morning Brief uses the guarded native action and Memory avoids frame polling"
+
+node "$project_dir/scripts/compatibility.js" "$source_app" \
+  --mods "$enabled_mods" --json | node -e '
+    let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{
+      const v=JSON.parse(s);
+      if(!v.compatible||v.perMod.length===0) process.exit(1);
+    })'
+print "ok    every enabled Dia Mod has a compatibility result"
 
 if ! /usr/bin/grep -q 'dia_custom_swift_enable_advanced_new_tab_surface' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \

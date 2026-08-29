@@ -22,7 +22,7 @@ export class LocalToolRegistry {
     this.connectorRegistry = connectorRegistry;
   }
 
-  async definitions(nativeTools) {
+  async definitions(nativeTools, { profileID = "Default" } = {}) {
     const config = await this.configStore.load();
     const byName = new Map(nativeTools.map((tool) => [tool.name, tool]));
     if (modEnabled("native-memory") && config.localMemory.enabled) {
@@ -38,7 +38,7 @@ export class LocalToolRegistry {
     }
     if (modEnabled("live-connectors") && config.localConnectors.enabled &&
         this.connectorRegistry) {
-      for (const tool of await this.connectorRegistry.definitions()) byName.set(tool.name, tool);
+      for (const tool of await this.connectorRegistry.definitions(profileID)) byName.set(tool.name, tool);
     }
     return [...byName.values()];
   }
@@ -71,7 +71,7 @@ export class LocalToolRegistry {
       if (!modEnabled("live-connectors")) throw new Error("live-connectors mod is disabled");
       const config = await this.configStore.load();
       if (!config.localConnectors.enabled) throw new Error("local connectors are disabled");
-      return this.connectorRegistry.execute(call.name, call.input);
+      return this.connectorRegistry.execute(call.name, call.input, context);
     }
     throw new Error(`unknown local tool: ${call.name}`);
   }

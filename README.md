@@ -42,6 +42,7 @@ Useful commands:
 ./dia-custom openai-key         Save or clear the OpenAI key privately
 ./dia-custom test               Run provider, tool, patch, and build checks
 ./dia-custom update             Rebuild only from an audited /Applications/Dia.app
+./dia-custom compatibility      Validate every Mod against a Dia app
 ./dia-custom mods               List or configure Dia Mods
 ./dia-custom migrate            Open native import from official Dia
 ./dia-custom status             Print the exact verified/remaining status
@@ -58,9 +59,9 @@ Server-dependent tools have local replacements:
 - **memory_search** and **memory_query** search the private local index;
 - Dia product-knowledge tools are intentionally unavailable because they require Dia's service.
 
-The settings page records every eager and on-demand tool Dia exposes. It labels each route as native, local override, native on-demand, or blocked, so a future Dia update reveals its tool changes without a hard-coded allowlist.
+The settings page records every eager and on-demand tool Dia exposes. It labels each route as native, local override, native on-demand, or blocked, so a future Dia update reveals its tool changes without a hard-coded allowlist. When public fetch reaches an authentication wall, the model is directed through Dia's native `open_tabs`, `read_tabs`, and `close_tabs` workflow. Existing signed-in tabs are reused and never closed; only a tab proven to have been opened for that read may be closed. Cookies remain inside Chromium.
 
-Chat output retains Dia's native rich formatting. Standard Markdown tables render through Dia's table view. Math and science requests deterministically load Dia's own `latex-formatting` skill, then a narrow compatibility pass repairs common `$...$`, `$$...$$`, `\\(...\\)`, `\\[...\\]`, and fenced `latex` output from local models into Dia's required inline/block markers. Dia's bundled SwiftMath views still perform the rendering; the bridge does not draw replacement tables or equations.
+Chat output retains Dia's native rich formatting. Standard Markdown tables render through Dia's table view. Math and science requests deterministically load Dia's own `latex-formatting` skill, then a narrow compatibility pass repairs common `$...$`, `$$...$$`, `\\(...\\)`, `\\[...\\]`, and fenced `latex` output from local models into Dia's required inline/block markers. Dia's bundled SwiftMath views still perform the rendering; the bridge does not draw replacement tables or equations. OpenAI Responses, Ollama, RChat, and compatible Chat Completions providers stream final text incrementally through one native Dia text block; Codex and Apple remain buffered until their structured adapters can expose safe deltas.
 
 ## Memory and connectors
 
@@ -83,7 +84,7 @@ Connector JSON may be an array or `{ "records": [...] }`. Records can contain `i
 
 Dia's native Apps pane is also locally enabled. Browser-session connectors—currently Gmail, Calendar, Drive, GitHub, Slack, Notion, LinkedIn, plus future native capabilities detected from Dia—keep authentication and cookies inside Chromium and return their tools through Dia's native progress UI. Direct third-party MCP connectors can be added by copying a manifest based on **examples/connectors/sample-mcp.json** into **Bridge/.state/connectors/** and restarting the bridge. Those adapters use explicit allowed domains, direct OAuth with PKCE/refresh/revocation, owner-only token storage, and namespaced generic tool presentation. Dia-owned authentication services remain blocked.
 
-The native Apps layout owns the Advanced Chat, Profile, Morning Brief, and Connected Apps presentation; Dia Custom changes its real local view-model state rather than injecting replacement controls. Morning Brief uses Dia's bundled `clia-brief` agent and Report template with the selected model. It is exclusive to one profile, runs once per local day beginning at 5 AM, catches up on launch, retries an abandoned run, and lands in Dia's native Reports library.
+The native Apps layout owns the Advanced Chat, Profile, Morning Brief, and Connected Apps presentation; Dia Custom changes its real local view-model state rather than injecting replacement controls. Morning Brief uses Dia's bundled `clia-brief` agent and Report template with the selected model. It is exclusive to one profile, runs once per local day beginning at 5 AM, catches up on launch, retries recoverable failures after 30 minutes, and counts success only after Dia ingests the artifact into its native Reports library. Source failures are retained as diagnostics so a partial brief can still be delivered. If Dia omits the private native controller from a build/profile, only this optional Mod reports a runtime incompatibility.
 
 ## Native Reports
 
@@ -109,7 +110,7 @@ Three distinct sandboxes remain enabled:
 
 Browser internet access happens through native/local browser tools. Report files are written through Dia's sandboxed native tools. Disabling these sandboxes is neither required nor the Report fix.
 
-The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. That command checks **src/config/supported-dia-builds.json before copying or replacing anything**; an unknown build leaves the working clone untouched. Rebuilds preserve provider state and also fail closed if a private integration point changes shape. Builds 85660, 85823, and 86064 are currently audited on Apple silicon. A newly released upstream build needs one compatibility audit in this project; once listed, the update itself remains a single command.
+The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. The updater validates every Mod before replacing anything. A critical identity, network, updater, or AI-routing failure aborts immediately; optional incompatibilities are listed and require an interactive choice (or explicit `--allow-disable-incompatible`). The new app is built and verified in staging, the previous clone is backed up, and a failed post-install check restores it transactionally. A later compatible build automatically reactivates previously unavailable optional Mods. Builds 85660, 85823, and 86064 are currently audited on Apple silicon.
 
 ## Dia Mods
 
@@ -149,12 +150,12 @@ Official Dia Sync remains research-only because a modified bundle cannot retain 
 | **bridge/src/connectors/** | Native-session and direct OAuth/MCP connector registry |
 | **bridge/src/apps-state.js** | Native Apps and once-daily Morning Brief state |
 | **bridge/src/artifact-safety.js** | Active-context Report upload and outbound-network gate |
-| **bridge/src/server.js** | Dia protocols, streaming, and local administration API |
+| **bridge/src/server.js** | Dia protocols, streaming, health, and local administration API |
 | **src/bootstrap/** | Native picker/import hooks, Developer menu, and service-host blocking |
 | **src/patches/** | Guarded identity, endpoint, account, handler, and Report patches |
 | **bridge/config/dia-mods.json** | Dia Mods manifest, defaults, scope, and rebuild policy |
 | **src/config/supported-dia-builds.json** | Audited Dia-build allowlist used before install/update |
-| **scripts/** | Build, install, launch, update, doctor, and test workflows |
+| **scripts/** | Build, compatibility, staged verification, update, doctor, and test workflows |
 | **research/** | Build-analysis tools and notes; never runtime code |
 
 See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), and [Status](docs/STATUS.md) for exact boundaries.
