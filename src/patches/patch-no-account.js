@@ -98,6 +98,29 @@ const layouts = {
     cliaExpected: "2884ffb008112991",
     cliaReplacement: "0884ff9008311291",
   },
+  "86261": {
+    accountStateGuard: 0x075362c,
+    accountStateGuardExpected: "c0524439",
+    capabilityGateOne: 0x07d73dc,
+    capabilityGateOneExpected: "131c0036",
+    capabilityGateTwo: 0x07e9994,
+    accountState: 0x29b2374,
+    authenticationMethod: 0x0754674,
+    modelTokenFailure: {
+      offset: 0x423dc44,
+      expected: "e05240f996c25694000000900080389104000014",
+      replacement: "e00314aaf6c25694ff5a00f9150080d21300fcd2",
+    },
+    authClientConstructor: {
+      offset: 0x2998ecc,
+      expected: "9efeff97",
+      replacement: "0c9a9897",
+    },
+    keyVerification: 0x284d024,
+    cliaClosures: [0x0fbf790, 0x0fbf7a8, 0x0fbf7cc],
+    cliaExpected: "6883ff9008412891",
+    cliaReplacement: "2883fff008611191",
+  },
 };
 
 const layout = layouts[build];
@@ -111,10 +134,15 @@ const patches = [
   {
     scope: "anonymous",
     offset: layout.accountStateGuard,
-    expected: bytes("c0d24a39"),
-    replacement: bytes("c0d24a39"),
+    expected: bytes(layout.accountStateGuardExpected ?? "c0d24a39"),
+    replacement: bytes(layout.accountStateGuardExpected ?? "c0d24a39"),
   },
-  { scope: "capability", offset: layout.capabilityGateOne, expected: bytes("d31a0036"), replacement: nop },
+  {
+    scope: "capability",
+    offset: layout.capabilityGateOne,
+    expected: bytes(layout.capabilityGateOneExpected ?? "d31a0036"),
+    replacement: nop,
+  },
   { scope: "capability", offset: layout.capabilityGateTwo, expected: bytes("d6170036"), replacement: nop },
   {
     scope: "anonymous",
@@ -172,7 +200,7 @@ const patches = [
     scope: "anonymous",
     // Use Dia's anonymous AuthClient dependency instead of AuthClientImpl.
     offset: layout.authClientConstructor.offset,
-    expected: bytes("a2feff97"),
+    expected: bytes(layout.authClientConstructor.expected ?? "a2feff97"),
     replacement: bytes(layout.authClientConstructor.replacement),
   },
   ...(layout.restoreAnonymousFallback ? [{

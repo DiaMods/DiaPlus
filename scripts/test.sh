@@ -28,6 +28,7 @@ node --check "$project_dir/scripts/modules.js"
 node --check "$project_dir/scripts/check-dia-build.js"
 node --check "$project_dir/scripts/compatibility.js"
 node --check "$project_dir/scripts/update-policy.js"
+node "$project_dir/scripts/test-compatibility.js" "$source_app"
 mod_test_profile="$(/usr/bin/mktemp -d -t dia-custom-mods)"
 trap '/bin/rm -rf "$mod_test_profile"' EXIT
 /usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES node "$project_dir/scripts/mods.js" \

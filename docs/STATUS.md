@@ -1,6 +1,6 @@
 # Status
 
-Last audited against Dia 1.46.0, build 86064, on 2026-08-29. Builds 85660 and 85823 remain in the guarded patch table.
+Last audited against Dia 1.47.0, build 86261, on 2026-09-03. Builds 85660, 85823, and 86064 remain in the guarded patch table.
 
 ## Verified on this Mac
 

@@ -45,8 +45,10 @@ function runNodeCheck(script, args) {
     });
     return { compatible: true };
   } catch (error) {
-    const detail = String(error?.stderr || error?.message || error)
-      .trim().split("\n").at(-1).replace(/^Error:\s*/, "");
+    const lines = String(error?.stderr || error?.message || error)
+      .trim().split("\n").map((line) => line.trim()).filter(Boolean);
+    const detail = (lines.find((line) => /^Error:\s*/.test(line)) ?? lines.at(-1) ??
+      "compatibility check failed").replace(/^Error:\s*/, "");
     return { compatible: false, reason: detail.slice(0, 500) };
   }
 }
@@ -60,7 +62,8 @@ async function validate(name, app, context) {
   switch (name) {
     case "app-bundle":
       try {
-        await access(executable, constants.R_OK);
+        await access(resolve(app, "Contents/MacOS/Dia"), constants.R_OK);
+        await access(resolve(app, "Contents/Info.plist"), constants.R_OK);
         return { compatible: plist(app, "CFBundleIdentifier").length > 0 };
       } catch {
         return { compatible: false, reason: "Dia executable or Info.plist is unavailable" };
@@ -125,10 +128,24 @@ async function validate(name, app, context) {
       return containsEvery(executable, ["AppsPreferencePaneView", "onEnableMorningBriefTapped"])
         ? { compatible: true }
         : { compatible: false, reason: "native Apps pane state or callbacks changed" };
-    case "live-connectors":
-      return schema.includes(Buffer.from("connector")) && schema.includes(Buffer.from("read_tabs"))
+    case "live-connectors": {
+      let tools = [];
+      try {
+        tools = JSON.parse(schema.toString("utf8")).tools ?? [];
+      } catch {
+        return { compatible: false, reason: "native tool schema is not valid JSON" };
+      }
+      const capabilities = new Set(tools.flatMap((tool) =>
+        tool?._meta?.["dia/requiredCapabilities"] ?? []));
+      const hasTabs = tools.some((tool) => tool?.name === "read_tabs" &&
+        tool?._meta?.["dia/requiredCapabilities"]?.includes("tabs"));
+      const hasSessionConnector = [
+        "gmail", "gcalendar", "gdrive", "github", "slack", "notionAutomatic", "linkedin",
+      ].some((capability) => capabilities.has(capability));
+      return hasTabs && hasSessionConnector
         ? { compatible: true }
         : { compatible: false, reason: "native connector/tab schemas changed" };
+    }
     case "morning-brief":
       return containsEvery(executable, [
         "MorningBriefScheduleClient", "openOrGenerateCliaReport", "AppsPreferencePaneView",

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-27",
+  "updatedAt": "2026-09-03",
   "builds": {
     "85660": {
       "status": "audited",
@@ -53,6 +53,30 @@
       "status": "audited",
       "version": "1.46.0",
       "notes": "Current live-tested Dia Custom compatibility baseline.",
+      "mods": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "local-ai-routing",
+        "account-bypass",
+        "dia-import",
+        "model-picker",
+        "developer-tools",
+        "mod-manager",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
+        "apple-models"
+      ]
+    },
+    "86261": {
+      "status": "audited",
+      "version": "1.47.0",
+      "notes": "Audited Dia 1.47 compatibility baseline.",
       "mods": [
         "identity-isolation",
         "network-isolation",
