@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
+import { currentAgentContextID } from "./artifact-safety.js";
 import {
   normalizeAnthropicTools,
   appendToolResults,
@@ -403,11 +404,56 @@ function isMorningBriefPayload(payload) {
     agent: payload?.agent,
     system: payload?.system,
   });
-  return /clia[-_ ]brief|morningbrief|morning brief/i.test(metadata);
+  if (/clia[-_ ]brief|morningbrief|morning brief/i.test(metadata)) return true;
+
+  // Dia's bundled background agents call the localhost Anthropic endpoint
+  // without forwarding the X-BCNY-SubFeature header from their native RUN
+  // message. The clia-brief spec is still distinguishable from an ordinary
+  // chat by its audited model and notification/work-source tool set. Tools
+  // are loaded lazily, so do not require Claude Code's built-in tool list:
+  // that list changes between handler releases. Keep
+  // this structural signature deliberately narrow so other native agents are
+  // not accidentally treated as a scheduled brief.
+  const toolNames = new Set((payload?.tools ?? [])
+    .map((tool) => String(tool?.name ?? ""))
+    .filter(Boolean));
+  const hasTool = (shortName) => [...toolNames].some((name) =>
+    name === shortName || name.endsWith(`__${shortName}`));
+  const sourceToolCount = [
+    "read_google_calendar",
+    "get_google_team_availability",
+    "search_gmail",
+    "search_google_drive",
+    "list_google_drive_notifications",
+    "search_outlook",
+    "read_outlook_calendar",
+    "list_sharepoint_notifications",
+    "slack_activity",
+    "teams_activity",
+    "github_search",
+    "linkedin_search",
+  ].filter(hasTool).length;
+  const hasBriefFeed = [
+    "list_google_drive_notifications",
+    "list_sharepoint_notifications",
+    "list_notion_notifications",
+    "list_figma_notifications",
+    "list_canva_notifications",
+    "slack_activity",
+    "teams_activity",
+  ].some(hasTool);
+  // Claude SDK may append a dated/runtime suffix to the model alias from the
+  // shipped spec. The Opus 4.6 family marker plus the unique notification
+  // feed remains narrow enough to identify this audited background agent.
+  const bundledBriefModel = /(?:^|[-/])opus-4-6(?:$|[-[/:])/i.test(
+    String(payload?.model ?? ""),
+  );
+  return bundledBriefModel && hasBriefFeed && sourceToolCount >= 2 &&
+    !hasTool("upload_artifact");
 }
 
-function morningBriefRunID(payload, profileID, reportState) {
-  const stableContext = reportState?.workingDirectory || JSON.stringify({
+function morningBriefRunID(payload, profileID, reportState, contextID = null) {
+  const stableContext = reportState?.workingDirectory || contextID || JSON.stringify({
     metadata: payload?.metadata ?? null,
     agent: payload?.agent ?? null,
   });
@@ -442,7 +488,7 @@ function withMorningBriefResiliencePolicy(payload) {
     ...payload,
     system: [
       systemAsText(payload?.system),
-      "<dia-custom-morning-brief-policy>Use Dia's bundled Morning Brief agent, template, source links, and native Report workflow. If one connector or source fails, continue with the remaining live sources, local Memory, recent browsing, and tabs. Mention unavailable source categories briefly inside the Report; do not abort the whole brief.</dia-custom-morning-brief-policy>",
+      "<dia-custom-morning-brief-policy>Use Dia's bundled Morning Brief agent, template, source links, and native Report workflow. If one connector or source fails, continue with the remaining live sources, local Memory, recent browsing, and tabs. Mention unavailable source categories briefly inside the Report; do not abort the whole brief. Your final message MUST be only the single valid JSON object required by the loaded Morning Brief skill, with no summary prose, markdown fence, or preamble. Dia's native handler merges that JSON into its shipped template and uploads the Report after your response, so do not substitute a conversational summary.</dia-custom-morning-brief-policy>",
     ].filter(Boolean).join("\n\n"),
   };
 }
@@ -496,6 +542,7 @@ export class ProviderManager {
     toolCoverageStore = new ToolCoverageStore(),
     appsStateStore = new AppsStateStore(),
     connectorRegistry = null,
+    profileDirectoryPath = profileDirectory,
   } = {}) {
     this.configStore = configStore;
     this.credentialStore = credentialStore;
@@ -515,6 +562,7 @@ export class ProviderManager {
     this.appleStatus = appleStatusImplementation;
     this.catalogPath = catalogPath;
     this.toolCoverageStore = toolCoverageStore;
+    this.profileDirectory = profileDirectoryPath;
     this.catalogValue = null;
     this.catalogPromise = null;
     this.catalogRefreshPromise = null;
@@ -530,6 +578,99 @@ export class ProviderManager {
     this.memoryDerivationTimer = null;
     this.memoryDerivationProfiles = new Set();
     this.memoryDerivationRunning = false;
+    this.morningBriefIngestionMonitors = new Map();
+  }
+
+  async nativeMorningBriefArtifact(profileID, contextID, startedAt) {
+    if (!this.profileDirectory ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          .test(contextID ?? "")) return null;
+    const profile = typeof profileID === "string" &&
+      /^[A-Za-z0-9 _.-]{1,120}$/.test(profileID)
+      ? profileID
+      : "Default";
+    const contextRoot = resolve(
+      this.profileDirectory,
+      "User Data",
+      profile,
+      "AgentArtifacts",
+      contextID,
+    );
+    let entries;
+    try {
+      entries = await readdir(contextRoot, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    }
+    const candidates = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory() ||
+          !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(entry.name)) {
+        continue;
+      }
+      const indexPath = resolve(contextRoot, entry.name, "site", "index.html");
+      try {
+        const details = await stat(indexPath);
+        if (details.isFile() && details.mtimeMs >= startedAt - 5_000) {
+          candidates.push({ reportID: entry.name, mtimeMs: details.mtimeMs });
+        }
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+    return candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)[0] ?? null;
+  }
+
+  scheduleMorningBriefIngestionMonitor({ profileID, contextID, runID }) {
+    if (!contextID || this.morningBriefIngestionMonitors.has(runID)) return;
+    const startedAt = Date.now();
+    let attempts = 0;
+    const check = async () => {
+      attempts += 1;
+      try {
+        const artifact = await this.nativeMorningBriefArtifact(
+          profileID,
+          contextID,
+          startedAt,
+        );
+        if (artifact) {
+          this.morningBriefIngestionMonitors.delete(runID);
+          await this.appsStateStore.recordMorningBrief({
+            profileID,
+            status: "succeeded",
+            runID,
+            stage: "ingested",
+            reportID: artifact.reportID,
+            diagnostics: [],
+          });
+          return;
+        }
+      } catch (error) {
+        process.stderr.write(
+          `Morning Brief ingestion check failed: ${String(error?.message ?? error)}\n`,
+        );
+      }
+      if (attempts >= 60) {
+        this.morningBriefIngestionMonitors.delete(runID);
+        await this.appsStateStore.recordMorningBrief({
+          profileID,
+          status: "failed",
+          runID,
+          stage: "native-report-not-ingested",
+          diagnostics: [
+            "Dia's bundled Morning Brief finished, but its native Report was not ingested.",
+          ],
+        }).catch(() => {});
+        return;
+      }
+      const timer = setTimeout(check, 1_000);
+      timer.unref?.();
+      this.morningBriefIngestionMonitors.set(runID, timer);
+    };
+    const timer = setTimeout(check, 250);
+    timer.unref?.();
+    this.morningBriefIngestionMonitors.set(runID, timer);
   }
 
   async initialize() {
@@ -925,11 +1066,19 @@ export class ProviderManager {
     const { config, provider, model, key } = await this.selectedProvider();
     const profileID = profileIDFromPayload(payload);
     const morningBriefRun = modEnabled("morning-brief") && isMorningBriefPayload(payload);
+    const nativeMorningBriefContextID = morningBriefRun
+      ? currentAgentContextID(payload, this.profileDirectory)
+      : null;
     const initialReportState = modEnabled("reports")
       ? reportWorkflowState(payload)
       : { active: false, stage: "reports-disabled" };
     const morningBriefID = morningBriefRun
-      ? morningBriefRunID(payload, profileID, initialReportState)
+      ? morningBriefRunID(
+        payload,
+        profileID,
+        initialReportState,
+        nativeMorningBriefContextID,
+      )
       : null;
     let morningBriefIngested = false;
     if (morningBriefRun) {
@@ -1260,6 +1409,19 @@ export class ProviderManager {
           diagnostics,
         }).catch((error) => {
           process.stderr.write(`Morning Brief completion state failed: ${String(error?.message ?? error)}\n`);
+        });
+      } else if (nativeMorningBriefContextID) {
+        await this.appsStateStore.recordMorningBrief({
+          profileID,
+          status: "running",
+          runID: morningBriefID,
+          stage: "awaiting-native-template",
+          diagnostics: morningBriefSourceDiagnostics(currentPayload),
+        }).catch(() => {});
+        this.scheduleMorningBriefIngestionMonitor({
+          profileID,
+          contextID: nativeMorningBriefContextID,
+          runID: morningBriefID,
         });
       } else {
         await this.appsStateStore.recordMorningBrief({

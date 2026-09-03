@@ -125,7 +125,6 @@ static void dia_custom_install_process_arguments(NSString *profile) {
     NSArray<NSString *> *singleArguments = @[
         [@"--user-data-dir=" stringByAppendingString:
             [profile stringByAppendingPathComponent:@"User Data"]],
-        @"--disable-background-networking",
         @"--disable-component-update",
         @"--remote-debugging-port=9223",
         @"--use-mock-keychain",
@@ -3619,6 +3618,27 @@ static void dia_custom_schedule_model_picker_attempts(id target,
     if (menuOwner != nil && dia_custom_swift_invoke_menu_action(
             (const void *)menuOwner, fieldName)) {
         return YES;
+    }
+    // WindowController+CliaReport installs the manual Cmd-Shift-M command on
+    // Dia's normal responder chain even when MainMenuOrchestrator has not yet
+    // registered a concrete menu item. This is the same native action the
+    // user's shortcut invokes and keeps its queueing/report UI intact.
+    NSString *actionName = [NSString stringWithUTF8String:fieldName];
+    SEL responderAction = actionName.length > 0
+        ? NSSelectorFromString(actionName) : NULL;
+    if (responderAction != NULL &&
+        [NSApp sendAction:responderAction to:nil from:nil]) {
+        return YES;
+    }
+    for (NSWindow *window in NSApp.windows) {
+        id windowController = window.windowController;
+        if (responderAction != NULL &&
+            [windowController respondsToSelector:responderAction] &&
+            [NSApp sendAction:responderAction
+                           to:windowController
+                         from:nil]) {
+            return YES;
+        }
     }
     id applicationController = dia_custom_object_ivar([NSApp delegate], "controller");
     if (applicationController == nil) {

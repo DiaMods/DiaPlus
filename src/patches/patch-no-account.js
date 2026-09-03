@@ -3,6 +3,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { assertPatchableCustomApp } from "./custom-app-guard.js";
 
 const argumentsAfterScript = process.argv.slice(2);
 const appArgument = argumentsAfterScript.find((argument) => !argument.startsWith("--"));
@@ -15,12 +16,7 @@ if (capabilitiesOnly && anonymousOnly) {
 const appPath = appArgument ? path.resolve(appArgument) : "";
 const executable = path.join(appPath, "Contents", "MacOS", "Dia");
 
-if (!checkOnly && (
-  path.basename(path.dirname(appPath)) !== "work" ||
-  !path.basename(appPath).startsWith("Dia Custom")
-)) {
-  throw new Error(`refusing to patch a non-clone executable: ${executable}`);
-}
+if (!checkOnly) assertPatchableCustomApp(appPath);
 
 const build = execFileSync(
   "/usr/libexec/PlistBuddy",

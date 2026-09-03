@@ -2,15 +2,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { assertPatchableCustomApp } from "./custom-app-guard.js";
 
 const appPath = process.argv[2] ? path.resolve(process.argv[2]) : "";
 
-if (
-  path.basename(path.dirname(appPath)) !== "work" ||
-  !path.basename(appPath).startsWith("Dia Custom")
-) {
-  throw new Error(`refusing to patch a non-clone app: ${appPath}`);
-}
+assertPatchableCustomApp(appPath);
 
 const executable = path.join(
   appPath,

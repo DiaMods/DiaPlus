@@ -1,14 +1,13 @@
 import { chmod, copyFile, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertPatchableCustomApp } from "./custom-app-guard.js";
 
 if (!process.argv[2]) {
   throw new Error("usage: embed-bootstrap.js /path/to/Dia Custom.app [bootstrap.dylib]");
 }
 const app = resolve(process.argv[2]);
-if (basename(dirname(app)) !== "work" || !basename(app).startsWith("Dia Custom")) {
-  throw new Error(`refusing to modify a non-clone app: ${app}`);
-}
+assertPatchableCustomApp(app);
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const sourceDylib = process.argv[3]

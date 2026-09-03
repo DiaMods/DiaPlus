@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import { assertPatchableCustomApp } from "./custom-app-guard.js";
 
 const checkOnly = process.argv[2] === "--check";
 const appArgument = process.argv[checkOnly ? 3 : 2];
@@ -9,10 +10,7 @@ if (!appArgument) {
   throw new Error("usage: patch-dia-import.js [--check] /path/to/Dia Custom.app");
 }
 const app = resolve(appArgument);
-if (!checkOnly &&
-    (basename(dirname(app)) !== "work" || !basename(app).startsWith("Dia Custom"))) {
-  throw new Error(`refusing to patch a non-clone app: ${app}`);
-}
+if (!checkOnly) assertPatchableCustomApp(app);
 
 const executable = resolve(
   app,

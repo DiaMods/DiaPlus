@@ -15,7 +15,7 @@ import {
   currentAgentContextID,
   nativeToolSafetyEvents,
 } from "./artifact-safety.js";
-import { ProviderManager } from "./provider-manager.js";
+import { isMorningBriefPayload, ProviderManager } from "./provider-manager.js";
 import {
   captureDirectory,
   sessionPath,
@@ -332,8 +332,22 @@ async function respondToAnthropicRequest(response, body) {
   }
   const toolCount = Array.isArray(payload.tools) ? payload.tools.length : 0;
   const { key: selectedModel } = await providerManager.selectedProvider();
+  const morningBriefRequest = isMorningBriefPayload(payload);
+  const requestLabel = morningBriefRequest
+    ? "native Morning Brief"
+    : "native new chat";
+  const hasMorningBriefFeed = (payload.tools ?? []).some((tool) =>
+    /(?:notifications|slack_activity|teams_activity)$/i.test(String(tool?.name ?? "")));
+  if (!morningBriefRequest && hasMorningBriefFeed) {
+    const runtimeModel = String(payload?.model ?? "unknown")
+      .replace(/[^a-z0-9_./:[\]-]/gi, "?")
+      .slice(0, 120);
+    process.stdout.write(
+      `Morning Brief signature diagnostic: runtime model ${runtimeModel}\n`,
+    );
+  }
   process.stdout.write(
-    `Routing Dia Custom native new chat to ${selectedModel} (${toolCount} native tools)\n`,
+    `Routing Dia Custom ${requestLabel} to ${selectedModel} (${toolCount} native tools)\n`,
   );
   const result = await streamProviderAsAnthropic(response, payload);
   if (result.kind === "tool_use") {
@@ -341,7 +355,7 @@ async function respondToAnthropicRequest(response, body) {
       `Returned ${result.toolCalls.length} native Dia tool call(s): ${result.toolCalls.map((call) => call.name).join(", ")}\n`,
     );
   } else {
-    process.stdout.write(`Returned ${selectedModel} response to Dia Custom native new chat\n`);
+    process.stdout.write(`Returned ${selectedModel} response to Dia Custom ${requestLabel}\n`);
   }
   return true;
 }

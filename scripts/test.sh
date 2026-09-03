@@ -22,6 +22,7 @@ node "$project_dir/research/tools/parse-swift-fields.js" \
 for patcher in "$project_dir"/src/patches/*.js; do
   node --check "$patcher"
 done
+node "$project_dir/scripts/test-custom-app-guard.js"
 node --check "$project_dir/scripts/mods.js"
 node --check "$project_dir/scripts/modules.js"
 node --check "$project_dir/scripts/check-dia-build.js"

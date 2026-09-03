@@ -1,12 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import { assertPatchableCustomApp } from "./custom-app-guard.js";
 
 const app = process.argv[2]
   ? resolve(process.argv[2])
   : "";
-if (basename(dirname(app)) !== "work" || !basename(app).startsWith("Dia Custom")) {
-  throw new Error(`refusing to patch a non-clone app: ${app}`);
-}
+assertPatchableCustomApp(app);
 const executable = resolve(app, "Contents/MacOS/Dia");
 const mappings = [
   {

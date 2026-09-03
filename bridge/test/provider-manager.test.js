@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -7,8 +7,67 @@ import { ConfigStore } from "../src/config.js";
 import { CredentialStore } from "../src/credentials.js";
 import { reportWorkflowState } from "../src/chat-shape.js";
 import { MemoryStore } from "../src/local-tools/memory.js";
-import { ProviderManager } from "../src/provider-manager.js";
+import { isMorningBriefPayload, ProviderManager } from "../src/provider-manager.js";
 import { ToolCoverageStore } from "../src/tool-coverage.js";
+
+test("bundled clia-brief requests retain their identity after native header loss", () => {
+  const backgroundTools = [
+    "Read",
+    "ToolSearch",
+    "mcp__dia-tools__list_google_drive_notifications",
+    "mcp__dia-tools__search_google_drive",
+    "mcp__dia-tools__github_search",
+  ].map((name) => ({ name }));
+  assert.equal(isMorningBriefPayload({
+    model: "claude-opus-4-6[1m]",
+    tools: backgroundTools,
+  }), true);
+  assert.equal(isMorningBriefPayload({
+    model: "vertex/claude-opus-4-6[1m]-202608",
+    tools: backgroundTools,
+  }), true);
+  assert.equal(isMorningBriefPayload({
+    model: "claude-opus-4-6[1m]",
+    tools: [...backgroundTools, { name: "mcp__dia-tools__upload_artifact" }],
+  }), false);
+  assert.equal(isMorningBriefPayload({
+    model: "claude-opus-4-6[1m]",
+    tools: [
+      { name: "mcp__dia-tools__search_google_drive" },
+      { name: "mcp__dia-tools__github_search" },
+    ],
+  }), false);
+  assert.equal(isMorningBriefPayload({
+    metadata: { subFeature: "clia-brief" },
+    model: "anything",
+    tools: [],
+  }), true);
+});
+
+test("Morning Brief ingestion accepts only a newly ingested native Report", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-brief-ingestion-"));
+  const contextID = "DEF70F35-BB3C-416F-B3D2-379495D6CE09";
+  const reportDirectory = resolve(
+    directory,
+    "User Data/Default/AgentArtifacts",
+    contextID,
+    "morning-brief-2026-08-30/site",
+  );
+  await mkdir(reportDirectory, { recursive: true });
+  await writeFile(resolve(reportDirectory, "index.html"), "<!doctype html>");
+  const manager = new ProviderManager({ profileDirectoryPath: directory });
+  const artifact = await manager.nativeMorningBriefArtifact(
+    "Default",
+    contextID,
+    Date.now() - 1_000,
+  );
+  assert.equal(artifact.reportID, "morning-brief-2026-08-30");
+  assert.equal(await manager.nativeMorningBriefArtifact(
+    "Default",
+    "../../outside",
+    Date.now() - 1_000,
+  ), null);
+});
 
 test("provider catalog discovers Ollama and routes local memory before native tools", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-manager-"));

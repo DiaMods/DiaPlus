@@ -145,7 +145,6 @@ fi
 launch_args=(
   -customApplicationDataBaseURLPath "$profile"
   --user-data-dir="$profile/User Data"
-  --disable-background-networking
   --disable-component-update
   --remote-debugging-port="$debug_port"
   --use-mock-keychain
