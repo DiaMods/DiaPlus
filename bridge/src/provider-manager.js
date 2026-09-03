@@ -48,6 +48,7 @@ import { runOpenAICompatibleProvider } from "./providers/openai-compatible.js";
 const catalogLifetimeMilliseconds = 60_000;
 const maximumLocalToolRounds = 6;
 const maximumReportDecisionRetries = 2;
+const initialHistoryRefreshDelayMilliseconds = 1_000;
 const historyRefreshMilliseconds = 5 * 60_000;
 const memoryDerivationDelayMilliseconds = 8_000;
 const nativeLocalToolNames = new Set([
@@ -574,6 +575,7 @@ export class ProviderManager {
     this.startupTimings = {};
     this.compatibility = { checkedAt: null, build: null, perMod: [] };
     this.historyImportPromise = null;
+    this.historyImportTimer = null;
     this.historyRefreshTimer = null;
     this.memoryDerivationTimer = null;
     this.memoryDerivationProfiles = new Set();
@@ -697,24 +699,6 @@ export class ProviderManager {
     if (modEnabled("live-connectors")) await this.connectorRegistry.initialize();
     this.startupTimings.localStateMilliseconds = performance.now() - startedAt;
     this.memoryStore.setPrivacyFilters(config.localMemory.excludedHosts);
-    if (modEnabled("native-memory") &&
-        config.localMemory.enabled && config.localMemory.importBrowserHistory) {
-      this.historyImportPromise = this.refreshLocalMemory(config)
-        .then((count) => {
-          if (count > 0) process.stdout.write(`Imported ${count} local browsing history entries\n`);
-          return count;
-        })
-        .catch((error) => {
-          process.stderr.write(`Local memory import failed: ${String(error?.message ?? error)}\n`);
-          return 0;
-        });
-    }
-    this.historyRefreshTimer = setInterval(() => {
-      this.configStore.load().then((current) => this.refreshLocalMemory(current)).catch((error) => {
-        process.stderr.write(`Local history refresh failed: ${String(error?.message ?? error)}\n`);
-      });
-    }, historyRefreshMilliseconds);
-    this.historyRefreshTimer.unref();
     await this.loadInitialCatalog(config);
     this.startupTimings.catalogAvailableMilliseconds = performance.now() - startedAt;
     this.coreReady = true;
@@ -731,6 +715,30 @@ export class ProviderManager {
         this.catalogRefreshPromise = null;
         this.startupTimings.catalogRefreshedMilliseconds = performance.now() - startedAt;
       });
+    if (modEnabled("native-memory") &&
+        config.localMemory.enabled && config.localMemory.importBrowserHistory) {
+      this.historyImportTimer = setTimeout(() => {
+        this.historyImportTimer = null;
+        this.historyImportPromise = this.refreshLocalMemory(config)
+          .then((count) => {
+            if (count > 0) {
+              process.stdout.write(`Imported ${count} local browsing history entries\n`);
+            }
+            return count;
+          })
+          .catch((error) => {
+            process.stderr.write(`Local memory import failed: ${String(error?.message ?? error)}\n`);
+            return 0;
+          });
+      }, initialHistoryRefreshDelayMilliseconds);
+      this.historyImportTimer.unref();
+    }
+    this.historyRefreshTimer = setInterval(() => {
+      this.configStore.load().then((current) => this.refreshLocalMemory(current)).catch((error) => {
+        process.stderr.write(`Local history refresh failed: ${String(error?.message ?? error)}\n`);
+      });
+    }, historyRefreshMilliseconds);
+    this.historyRefreshTimer.unref();
     return this;
   }
 

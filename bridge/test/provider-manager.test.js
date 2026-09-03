@@ -176,11 +176,14 @@ test("startup publishes a built-in catalog before slow discovery completes", asy
   assert.ok(Date.now() - startedAt < 500);
   assert.equal(manager.healthState().coreReady, true);
   assert.equal(manager.healthState().catalog.state, "refreshing");
+  assert.equal(manager.historyImportPromise, null);
+  assert.ok(manager.historyImportTimer);
   assert.ok(manager.catalogValue.models.some((model) => model.key === "codex:gpt-5.6-luna"));
   assert.ok(manager.catalogValue.models.some((model) => model.key === "apple-on-device:default"));
   releaseApple();
   await manager.catalogRefreshPromise;
   assert.equal(manager.healthState().catalog.state, "ready");
+  clearTimeout(manager.historyImportTimer);
   clearInterval(manager.historyRefreshTimer);
   memory.database.close();
 });

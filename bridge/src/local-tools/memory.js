@@ -353,6 +353,9 @@ export class MemoryStore {
     this.embeddingDisabledReason = null;
     this.excludedHosts = [];
     this.database = null;
+    this.entryLookupStatement = null;
+    this.entryUpsertStatement = null;
+    this.embeddingDeleteStatement = null;
   }
 
   setPrivacyFilters(excludedHosts = []) {
@@ -419,7 +422,12 @@ export class MemoryStore {
         INSERT INTO entries_fts(entries_fts, rowid, title, url, content)
         VALUES ('delete', old.id, old.title, old.url, old.content);
       END;
-      CREATE TRIGGER IF NOT EXISTS entries_au AFTER UPDATE ON entries BEGIN
+      DROP TRIGGER IF EXISTS entries_au;
+      CREATE TRIGGER entries_au AFTER UPDATE OF title, url, content ON entries
+      WHEN old.title IS NOT new.title
+        OR old.url IS NOT new.url
+        OR old.content IS NOT new.content
+      BEGIN
         INSERT INTO entries_fts(entries_fts, rowid, title, url, content)
         VALUES ('delete', old.id, old.title, old.url, old.content);
         INSERT INTO entries_fts(rowid, title, url, content)
@@ -443,10 +451,25 @@ export class MemoryStore {
     this.database.exec(`
       CREATE INDEX IF NOT EXISTS entries_profile_type_time
         ON entries(profile_id, entry_type, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS entries_profile_type_url
+        ON entries(profile_id, entry_type, url);
+    `);
+    const needsProfileMigration = [
+      "SELECT 1 FROM entries WHERE entry_type = 'connector' AND profile_id != '*' LIMIT 1",
+      `SELECT 1 FROM entries
+       WHERE profile_id = 'Default' AND entry_type = 'navigation'
+         AND uri != 'navigation:Default:' || url
+       LIMIT 1`,
+      `SELECT 1 FROM entries
+       WHERE profile_id = 'Default' AND entry_type = 'conversation'
+         AND uri LIKE 'dia-custom-chat:%'
+         AND uri NOT LIKE 'dia-custom-chat:Default:%'
+       LIMIT 1`,
+    ].some((query) => this.database.prepare(query).get() !== undefined);
+    if (needsProfileMigration) this.database.exec(`
+      BEGIN IMMEDIATE;
       UPDATE entries SET profile_id = '*'
         WHERE entry_type = 'connector' AND profile_id != '*';
-
-      BEGIN IMMEDIATE;
       INSERT OR IGNORE INTO memory_sources(memory_entry_id, source_entry_id)
         SELECT links.memory_entry_id, scoped.id
         FROM entries legacy
@@ -470,7 +493,14 @@ export class MemoryStore {
         ))
         WHERE scoped.entry_type = 'navigation'
           AND scoped.profile_id = 'Default'
-          AND scoped.uri = 'navigation:Default:' || scoped.url;
+          AND scoped.uri = 'navigation:Default:' || scoped.url
+          AND EXISTS (
+            SELECT 1 FROM entries legacy
+            WHERE legacy.entry_type = 'navigation'
+              AND legacy.profile_id = scoped.profile_id
+              AND legacy.url = scoped.url
+              AND legacy.uri != scoped.uri
+          );
       DELETE FROM entries
         WHERE entry_type = 'navigation'
           AND profile_id = 'Default'
@@ -506,10 +536,10 @@ export class MemoryStore {
   }
 
   upsert(entry) {
-    const existing = this.database.prepare(
+    this.entryLookupStatement ??= this.database.prepare(
       "SELECT id, title, url, content FROM entries WHERE uri = ?",
-    ).get(entry.uri);
-    this.database.prepare(`
+    );
+    this.entryUpsertStatement ??= this.database.prepare(`
       INSERT INTO entries
         (uri, entry_type, title, url, content, source, profile_id, derived_at,
          memory_kind, confidence, created_at, updated_at)
@@ -524,7 +554,9 @@ export class MemoryStore {
         memory_kind=COALESCE(excluded.memory_kind, entries.memory_kind),
         confidence=COALESCE(excluded.confidence, entries.confidence),
         updated_at=MAX(entries.updated_at, excluded.updated_at)
-    `).run(
+    `);
+    const existing = this.entryLookupStatement.get(entry.uri);
+    this.entryUpsertStatement.run(
       entry.uri,
       entry.entryType,
       entry.title ?? "",
@@ -543,8 +575,10 @@ export class MemoryStore {
       existing.url !== (entry.url ?? "") ||
       existing.content !== (entry.content ?? "")
     )) {
-      this.database.prepare("DELETE FROM entry_embeddings WHERE entry_id = ?")
-        .run(existing.id);
+      this.embeddingDeleteStatement ??= this.database.prepare(
+        "DELETE FROM entry_embeddings WHERE entry_id = ?",
+      );
+      this.embeddingDeleteStatement.run(existing.id);
     }
   }
 

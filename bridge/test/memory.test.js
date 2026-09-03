@@ -250,5 +250,42 @@ test("local memory migration deduplicates legacy unscoped navigation URIs", asyn
   ).all("https://example.test/profile-migration");
   assert.equal(rows.length, 1);
   assert.equal(rows[0].uri, "navigation:Default:https://example.test/profile-migration");
+  migrated.database.exec(`
+    CREATE TABLE migration_update_audit (entry_id INTEGER);
+    CREATE TRIGGER migration_update_audit_trigger AFTER UPDATE ON entries BEGIN
+      INSERT INTO migration_update_audit(entry_id) VALUES (new.id);
+    END;
+  `);
   migrated.database.close();
+
+  const reopened = new MemoryStore(path, null);
+  await reopened.open();
+  assert.equal(
+    reopened.database.prepare("SELECT COUNT(*) AS count FROM migration_update_audit").get().count,
+    0,
+  );
+  reopened.database.close();
+});
+
+test("local memory does not rewrite full-text rows for identical upserts", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-memory-fts-update-"));
+  const store = new MemoryStore(resolve(directory, "memory.sqlite3"), null);
+  await store.open();
+  const entry = {
+    uri: "navigation:Default:https://example.test/stable",
+    entryType: "navigation",
+    title: "Stable entry",
+    url: "https://example.test/stable",
+    content: "Unchanged local memory content",
+    source: "chromium-history",
+    profileID: "Default",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  store.upsert(entry);
+  const before = store.database.prepare("SELECT total_changes() AS count").get().count;
+  store.upsert(entry);
+  const after = store.database.prepare("SELECT total_changes() AS count").get().count;
+  assert.equal(after - before, 1);
+  store.database.close();
 });
