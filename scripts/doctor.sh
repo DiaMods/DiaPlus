@@ -52,9 +52,15 @@ if [[ -d "$app" ]]; then
   custom_auto_update="$(/usr/libexec/PlistBuddy -c 'Print :SUAutomaticallyUpdate' "$app/Contents/Info.plist" 2>/dev/null)"
   custom_update_interval="$(/usr/libexec/PlistBuddy -c 'Print :SUScheduledCheckInterval' "$app/Contents/Info.plist" 2>/dev/null)"
   custom_update_feed="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$app/Contents/Info.plist" 2>/dev/null)"
+  custom_url_schemes="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes' "$app/Contents/Info.plist" 2>/dev/null)"
   custom_build_mods="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBuildMods' "$app/Contents/Info.plist" 2>/dev/null || \
     /usr/libexec/PlistBuddy -c 'Print :DiaCustomBuildModules' "$app/Contents/Info.plist" 2>/dev/null)"
   [[ "$custom_id" == "local.rttm.dia" ]] && pass "custom bundle id is local.rttm.dia" || fail "custom bundle id is $custom_id"
+  if [[ "$custom_url_schemes" == *http* && "$custom_url_schemes" == *https* ]]; then
+    pass "external web URLs can be routed to the custom bundle"
+  else
+    fail "custom bundle is not registered for http/https URLs"
+  fi
   [[ -z "${source_build:-}" || "$custom_build" == "$source_build" ]] && pass "custom build matches installed Dia ($custom_build)" || warn "custom build $custom_build differs from installed Dia ${source_build:-unknown}"
   if node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" >/dev/null 2>&1; then
     pass "custom build uses an audited compatibility manifest"
@@ -130,13 +136,27 @@ if [[ -d "$bridge_state" ]]; then
   [[ "$state_mode" == "700" ]] && pass "local bridge state directory is owner-only" || \
     fail "local bridge state directory permissions are $state_mode, expected 700"
   sensitive_permissions_ok=true
-  for state_file in compatibility.json config.json credentials.json memory.sqlite3 memory.sqlite3-shm memory.sqlite3-wal models.json mods.json modules.json sessions.json tool-coverage.json; do
+  for state_file in compatibility.json config.json credentials.json latest-install-transaction.json memory.sqlite3 memory.sqlite3-shm memory.sqlite3-wal models.json mods.json modules.json sessions.json tool-coverage.json; do
     state_path="$bridge_state/$state_file"
     [[ ! -e "$state_path" ]] || [[ "$(/usr/bin/stat -f '%Lp' "$state_path" 2>/dev/null)" == "600" ]] || \
       sensitive_permissions_ok=false
   done
   [[ "$sensitive_permissions_ok" == true ]] && pass "provider, session, catalog, and memory files are owner-only" || \
     fail "one or more sensitive bridge-state files are not mode 600"
+  if [[ -f "$bridge_state/latest-install-transaction.json" ]]; then
+    if node -e '
+      const fs = require("node:fs");
+      const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      if (!value.profileSnapshot || !value.backupApp ||
+          !fs.existsSync(value.profileSnapshot) || !fs.existsSync(value.backupApp)) {
+        process.exit(1);
+      }
+    ' "$bridge_state/latest-install-transaction.json"; then
+      pass "latest install has matching app and full-profile rollback points"
+    else
+      warn "latest install rollback record is incomplete or its backup was moved"
+    fi
+  fi
 fi
 if bridge_health="$(/usr/bin/curl --silent --fail --max-time 1 http://127.0.0.1:8765/health 2>/dev/null)"; then
   selected_model="$(print -r -- "$bridge_health" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.stdout.write(JSON.parse(s).selectedModel||"unknown"))')"

@@ -119,7 +119,10 @@ fi
   -- /usr/bin/env "${bridge_environment[@]}" "$node_bin" "$bridge_dir/src/server.js"
 
 bridge_ready=false
-for _ in {1..50}; do
+# A mature profile can spend several seconds indexing local history before the
+# bridge begins listening. Keep launch fail-closed, but do not misreport that
+# expected one-time/local indexing work as a startup failure.
+for _ in {1..300}; do
   if /usr/bin/curl --silent --fail --max-time 1 http://127.0.0.1:8765/health >/dev/null 2>&1; then
     bridge_ready=true
     break

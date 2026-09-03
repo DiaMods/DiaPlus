@@ -145,7 +145,9 @@ The public web client and selected remote providers run in the bridge because th
 
 ## Isolation and upgrades
 
-The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL/document registration. No account token, cookie, saved password, Keychain item, chat, Memory, or open session is copied from official Dia. The optional local importer stages only explicitly supported browser data with owner-only permissions.
+The clone has a separate bundle ID, profile, user-data directory, Keychain label, updater state, and URL registration. Its own `http`/`https` declarations let Launch Services and external automation address Dia Custom without sharing official Dia's bundle identity; document associations are removed. No account token, cookie, saved password, Keychain item, chat, Memory, or open session is copied from official Dia. The optional local importer stages only explicitly supported browser data with owner-only permissions.
+
+Dia 1.46's anonymous application dependency incorrectly disables the native File -> New Window and New Incognito Window items even though its window controller remains operational. The bootstrap marks those two concrete native items and ignores only the false disabled-state writes directed at them, restoring both menu selection and their native keyboard shortcuts without replacing either target or window-creation path.
 
 Most patches locate unique strings, signatures, Swift metadata, or runtime view structures. The native Report controller gate and its setup target, Report validator, and hidden Prompt Tools entry points are found semantically rather than by fixed file offsets. Prompt Tools offsets are retained for compatibility research, but the current production controller is not constructed because its initializer requires Dia's unavailable task-local dependency context. The anonymous account/capability patch still has a small audited table for builds 85660, 85823, and 86064.
 

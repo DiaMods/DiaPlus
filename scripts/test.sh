@@ -74,11 +74,26 @@ if /usr/bin/grep -q 'official-dia-sync' \
 fi
 print "ok    Official Dia migration uses the native importer without Sync access"
 node "$project_dir/scripts/test-dia-import.js"
+node "$project_dir/scripts/test-profile-integrity.js"
+if ! /usr/bin/grep -q 'snapshot-profile.sh' "$project_dir/scripts/build.sh" || \
+   ! /usr/bin/grep -q 'preflight-profile.sh' "$project_dir/scripts/build.sh" || \
+   ! /usr/bin/grep -q 'snapshot-profile.sh' "$project_dir/scripts/install.sh" || \
+   ! /usr/bin/grep -q 'latest-install-transaction.json' "$project_dir/scripts/build.sh"; then
+  print -u2 "install/update profile transaction guard is incomplete"
+  exit 1
+fi
+print "ok    install/update paths snapshot and preflight the complete browser profile"
 node "$project_dir/scripts/test-profile-consolidation.js"
 zsh -n "$project_dir/dia-custom" "$project_dir"/scripts/*.sh
 "$script_dir/build-bootstrap.sh" "$source_app" >/dev/null
 if ! /usr/bin/grep -q 'dia_custom_prepare_self_contained_runtime' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q 'dia_custom_schedule_window_menu_repair' \
+    "$project_dir/src/bootstrap/offline-bootstrap.c" || \
+   ! /usr/bin/grep -q "CFBundleURLTypes:0:CFBundleURLName" \
+    "$project_dir/scripts/build.sh" || \
+   /usr/bin/grep -q 'Delete :CFBundleURLTypes' \
+    "$project_dir/scripts/build.sh" || \
    ! /usr/bin/grep -q -- '--disable-sync' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
    ! /usr/bin/grep -q -- '--host-resolver-rules=' \
@@ -92,7 +107,7 @@ if ! /usr/bin/grep -q 'dia_custom_prepare_self_contained_runtime' \
   print -u2 "double-click self-contained runtime is incomplete"
   exit 1
 fi
-print "ok    app bundle owns the double-click bridge and launch policy"
+print "ok    app bundle owns launch policy, external URL routing, and native window commands"
 if ! /usr/bin/grep -q 'onEnableMorningBriefTapped' \
     "$project_dir/src/bootstrap/offline-bootstrap.c"; then
   print -u2 "native Morning Brief confirmation action is not wired"

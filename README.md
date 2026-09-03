@@ -23,8 +23,10 @@ official Dia app:
 This installs **Dia Custom RTTM.app** in Applications, configures its isolated
 profile, prepares the safe native Dia import, and launches it. Afterward, open
 Dia Custom normally from Applications; no terminal command or development
-folder is needed to run it. Use `./dia-custom doctor` whenever you want to
-verify the installed app.
+folder is needed to run it. The clone registers `http` and `https` under its
+own bundle ID, so it can be selected as the default browser and targeted by
+external apps without changing official Dia. Use `./dia-custom doctor`
+whenever you want to verify the installed app.
 
 Choose a model from View → Developer → AI Model. Dia Custom also inserts a compact picker into the chat toolbar: it remains before the attachment button in side chat and sits immediately before the microphone on New Tab. Provider, credential, memory, connector, and tool settings are available at:
 
@@ -110,7 +112,7 @@ Three distinct sandboxes remain enabled:
 
 Browser internet access happens through native/local browser tools. Report files are written through Dia's sandboxed native tools. Disabling these sandboxes is neither required nor the Report fix.
 
-The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. The updater validates every Mod before replacing anything. A critical identity, network, updater, or AI-routing failure aborts immediately; optional incompatibilities are listed and require an interactive choice (or explicit `--allow-disable-incompatible`). The new app is built and verified in staging, the previous clone is backed up, and a failed post-install check restores it transactionally. A later compatible build automatically reactivates previously unavailable optional Mods. Builds 85660, 85823, and 86064 are currently audited on Apple silicon.
+The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. The updater validates every Mod before replacing anything. A critical identity, network, updater, or AI-routing failure aborts immediately; optional incompatibilities are listed and require an interactive choice (or explicit `--allow-disable-incompatible`). Before any replacement, it takes an owner-only APFS snapshot of the complete closed browser profile—including open sessions, `tabs.db` and its WAL, extension packages, and extension-local data. The staged app is then launched against a disposable clone of that snapshot with all network access blocked. If Chromium rejects extension registrations, removes package/data directories, or drops session or pinned-tab storage, the replacement is aborted before the live profile or installed app is touched. The previous app and matching profile snapshot remain linked in an install transaction as an additional rollback point. A later compatible build automatically reactivates previously unavailable optional Mods. Builds 85660, 85823, and 86064 are currently audited on Apple silicon.
 
 ## Dia Mods
 

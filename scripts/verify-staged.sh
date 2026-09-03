@@ -13,6 +13,8 @@ mod_enabled() {
 }
 
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info")" == "local.rttm.dia" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$info")" == "http" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:1' "$info")" == "https" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUEnableAutomaticChecks' "$info")" == "false" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUAutomaticallyUpdate' "$info")" == "false" ]]
 /usr/bin/codesign --verify --deep --strict "$app"

@@ -9,6 +9,7 @@ clone_app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 bundle_id="local.rttm.dia"
 replace=false
+install_stamp="$(/bin/date +%Y%m%d-%H%M%S)"
 
 if [[ "${1:-}" == "--replace" ]]; then
   replace=true
@@ -72,6 +73,14 @@ for bridge_pid in "${bridge_pids[@]}"; do
   fi
 done
 
+profile_snapshot=""
+if [[ -f "$profile/User Data/Local State" ]]; then
+  profile_snapshot="$(DIA_CUSTOM_APP="$clone_app" \
+    "$script_dir/snapshot-profile.sh" "$profile" "$work_dir/backups/profiles" \
+      "pre-rebuild.$install_stamp")"
+  print "Browser profile preserved at $profile_snapshot"
+fi
+
 mkdir -p "$work_dir" "${profile:h}"
 temporary_app="$work_dir/Dia Custom RTTM.build.$$.app"
 trap '[[ ! -e "$temporary_app" ]] || /bin/rm -rf "$temporary_app"; /bin/rm -f "$compatibility_report"' EXIT
@@ -82,18 +91,26 @@ info="$temporary_app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName 'Dia Custom RTTM'" "$info"
 /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Dia Custom RTTM'" "$info" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Dia Custom RTTM'" "$info"
-/usr/libexec/PlistBuddy -c "Delete :CFBundleURLTypes" "$info" 2>/dev/null || true
+# Keep the standard web URL declarations under the clone's distinct bundle ID.
+# Removing these made Launch Services and external automation unable to route a
+# requested background tab to Dia Custom, even though its AppleScript tab API
+# and Chromium controller were healthy.
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLName 'Dia Custom Website URL'" "$info"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleDocumentTypes" "$info" 2>/dev/null || true
 
 DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" \
+  DIA_CUSTOM_SKIP_PROFILE_SNAPSHOT=1 \
   "$script_dir/install.sh" "$temporary_app"
 "$script_dir/verify-staged.sh" "$temporary_app" "$enabled_mods"
+if [[ -n "$profile_snapshot" ]]; then
+  "$script_dir/preflight-profile.sh" "$temporary_app" "$profile_snapshot"
+fi
 
 backup_app=""
 if [[ -e "$clone_app" ]]; then
   backup_dir="$work_dir/backups/apps"
   mkdir -p "$backup_dir"
-  backup_app="$backup_dir/Dia Custom RTTM.pre-rebuild.$(/bin/date +%Y%m%d-%H%M%S).app"
+  backup_app="$backup_dir/Dia Custom RTTM.pre-rebuild.$install_stamp.app"
   /bin/mv "$clone_app" "$backup_app"
   print "Previous clone preserved at $backup_app"
 fi
@@ -119,6 +136,14 @@ fi
 
 mkdir -p "$profile/Bridge/.state"
 /bin/chmod 700 "$profile/Bridge/.state"
+if [[ -n "$profile_snapshot" ]]; then
+  transaction_file="$work_dir/backups/transactions/Dia Custom RTTM.pre-rebuild.$install_stamp.json"
+  node "$script_dir/record-install-transaction.js" "$transaction_file" \
+    "$clone_app" "$backup_app" "$profile" "$profile_snapshot"
+  /bin/cp "$transaction_file" "$profile/Bridge/.state/latest-install-transaction.json"
+  /bin/chmod 600 "$profile/Bridge/.state/latest-install-transaction.json"
+  print "Install rollback record: $transaction_file"
+fi
 /bin/cp "$compatibility_report" "$profile/Bridge/.state/compatibility.json"
 /bin/chmod 600 "$profile/Bridge/.state/compatibility.json"
 /bin/rm -f "$compatibility_report"

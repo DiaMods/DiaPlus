@@ -16,6 +16,21 @@ if /usr/bin/pgrep -f "$app/Contents/MacOS/Dia" >/dev/null; then
   exit 1
 fi
 
+profile_snapshot=""
+backup_app=""
+if [[ "${DIA_CUSTOM_SKIP_PROFILE_SNAPSHOT:-0}" != "1" &&
+      -f "$profile/User Data/Local State" ]]; then
+  install_stamp="$(/bin/date +%Y%m%d-%H%M%S)"
+  profile_snapshot="$(DIA_CUSTOM_APP="$app" \
+    "$script_dir/snapshot-profile.sh" "$profile" "$work_dir/backups/profiles" \
+      "pre-install.$install_stamp")"
+  print "Browser profile preserved at $profile_snapshot"
+  backup_app="$work_dir/backups/apps/Dia Custom RTTM.pre-install.$install_stamp.app"
+  mkdir -p "${backup_app:h}"
+  /bin/cp -cR "$app" "$backup_app"
+  print "Current app preserved at $backup_app"
+fi
+
 # Retire the development launchd bridge. Installed builds carry their runtime
 # and start it directly from the signed app bundle.
 /bin/launchctl remove local.rttm.dia.bridge >/dev/null 2>&1 || true
@@ -117,6 +132,17 @@ codesign --verify --strict \
   "$app/Contents/Resources/agent-server-resources/dist/handler"
 codesign --verify --deep --strict "$app"
 "$app/Contents/Helpers/DiaCustomNode" -e 'import("node:sqlite")' >/dev/null
+
+if [[ -n "$profile_snapshot" ]]; then
+  transaction_file="$work_dir/backups/transactions/Dia Custom RTTM.pre-install.$install_stamp.json"
+  node "$script_dir/record-install-transaction.js" "$transaction_file" \
+    "$app" "$backup_app" "$profile" "$profile_snapshot"
+  mkdir -p "$profile/Bridge/.state"
+  /bin/chmod 700 "$profile/Bridge/.state"
+  /bin/cp "$transaction_file" "$profile/Bridge/.state/latest-install-transaction.json"
+  /bin/chmod 600 "$profile/Bridge/.state/latest-install-transaction.json"
+  print "Install rollback record: $transaction_file"
+fi
 
 if [[ "$sign_identity" == "-" ]]; then
   print "Installed Dia Custom with an ad-hoc signature in $app"

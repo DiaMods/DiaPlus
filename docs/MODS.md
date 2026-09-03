@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `identity-isolation` | `scripts/build.sh`, `patch-keychain-label.js`, entitlements | Bundle/profile/Keychain/signature checks in `doctor`; required |
 | `network-isolation` | `patch-endpoint.js`, native URL hook, launch host rules, `network-policy.js` | Network-policy tests plus current-run destination log; required |
-| `update-blocker` | `install.sh`, `update.sh`, `compatibility.js` | Sparkle/feed checks, per-Mod validation, staged swap, and rollback; required |
+| `update-blocker` | `install.sh`, `update.sh`, `compatibility.js`, profile integrity guard | Sparkle/feed checks, full-profile snapshot, isolated first-launch preflight, staged swap, and paired app/profile rollback; required |
 | `local-ai-routing` | `patch-endpoint.js`, `patch-agent-handler.js`, bridge server/providers | Protocol/provider tests and bridge health; required |
 | `account-bypass` | `patch-no-account.js`, anonymous launch defaults | Per-build ARM64 layout check; clean rebuild to remove |
 | `dia-import` | `prepare-dia-import.js`, `patch-dia-import.js`, native importer runtime hook | Owner-only sanitized staging; no account, password, cookie, Keychain, or service access |

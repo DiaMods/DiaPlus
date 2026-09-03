@@ -601,6 +601,82 @@ static NSMenuItem *dia_custom_find_menu_item(NSMenu *menu,
     return nil;
 }
 
+// Dia 1.46's anonymous dependency repeatedly sets both native window items to
+// disabled even though the same controller creates windows through AppleScript
+// and Tabs -> Move to Window -> New Window. Mark only those two concrete menu
+// items, then ignore the false `setEnabled:NO` writes directed at them. Dia's
+// original targets, actions, validation side effects, and every other menu
+// item's state remain untouched.
+typedef void (*DiaCustomSetMenuItemEnabledIMP)(id, SEL, BOOL);
+static DiaCustomSetMenuItemEnabledIMP dia_custom_original_set_menu_item_enabled;
+static const void *dia_custom_window_menu_item_key =
+    &dia_custom_window_menu_item_key;
+static BOOL dia_custom_window_menu_enabled_hook_installed = NO;
+
+static void dia_custom_set_menu_item_enabled(id item, SEL selector,
+                                              BOOL enabled) {
+    if (objc_getAssociatedObject(item, dia_custom_window_menu_item_key) != nil) {
+        enabled = YES;
+    }
+    dia_custom_original_set_menu_item_enabled(item, selector, enabled);
+}
+
+static BOOL dia_custom_install_window_menu_enabled_hook(void) {
+    if (dia_custom_window_menu_enabled_hook_installed) return YES;
+    Method method = class_getInstanceMethod([NSMenuItem class],
+                                            @selector(setEnabled:));
+    if (method == NULL) return NO;
+    dia_custom_original_set_menu_item_enabled =
+        (DiaCustomSetMenuItemEnabledIMP)method_getImplementation(method);
+    method_setImplementation(method,
+                             (IMP)dia_custom_set_menu_item_enabled);
+    dia_custom_window_menu_enabled_hook_installed = YES;
+    return YES;
+}
+
+static NSUInteger dia_custom_mark_window_menu_items(NSMenu *menu) {
+    NSUInteger marked = 0;
+    for (NSMenuItem *item in menu.itemArray) {
+        SEL action = item.action;
+        BOOL isNativeWindowItem =
+            action == sel_registerName("newWindow:") ||
+            action == sel_registerName("newIncognitoWindow:") ||
+            [item.title isEqualToString:@"New Window"] ||
+            [item.title isEqualToString:@"New Incognito Window"];
+        if (isNativeWindowItem) {
+            objc_setAssociatedObject(item, dia_custom_window_menu_item_key,
+                                     @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            item.enabled = YES;
+            marked += 1;
+        }
+        if (item.submenu != nil) {
+            marked += dia_custom_mark_window_menu_items(item.submenu);
+        }
+    }
+    return marked;
+}
+
+static void dia_custom_schedule_window_menu_repair(NSUInteger attempt) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        dia_custom_install_window_menu_enabled_hook();
+        NSUInteger marked = NSApp.mainMenu != nil
+            ? dia_custom_mark_window_menu_items(NSApp.mainMenu) : 0;
+        if (marked >= 2) {
+            dia_custom_log_status(@"native-window-menu-items-repaired");
+            return;
+        }
+        if (attempt >= 20) {
+            dia_custom_log_status(@"native-window-menu-items-unavailable");
+            return;
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                     250 * NSEC_PER_MSEC),
+                       dispatch_get_main_queue(), ^{
+            dia_custom_schedule_window_menu_repair(attempt + 1);
+        });
+    });
+}
+
 typedef id (*DiaCustomObjectGetterIMP)(id, SEL);
 static DiaCustomObjectGetterIMP dia_custom_arc_import_original_name;
 static DiaCustomObjectGetterIMP dia_custom_arc_import_original_app_path;
@@ -3881,6 +3957,13 @@ static void dia_custom_install_runtime_overrides(void) {
     }
 
     dia_custom_prepare_self_contained_runtime();
+    // The menu exists a few seconds before Dia's anonymous browser context is
+    // ready. Enabling these commands during that gap exposes Dia's generic
+    // "Something went wrong" alert, so wait until normal startup has settled.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC),
+                   dispatch_get_main_queue(), ^{
+        dia_custom_schedule_window_menu_repair(0);
+    });
 
     if (dia_custom_mod_enabled("network-isolation")) {
         dia_custom_schedule_network_log();
