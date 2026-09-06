@@ -87,6 +87,16 @@ print "ok    install/update paths snapshot and preflight the complete browser pr
 node "$project_dir/scripts/test-profile-consolidation.js"
 zsh -n "$project_dir/dia-custom" "$project_dir"/scripts/*.sh
 "$script_dir/build-bootstrap.sh" "$source_app" >/dev/null
+startup_test_dir="$project_dir/.build/bootstrap"
+xcrun clang -c -Os -x objective-c -fblocks \
+  -I "$startup_test_dir" "$script_dir/test-ui-startup.m" \
+  -o "$startup_test_dir/test-ui-startup.o"
+xcrun swiftc -parse-as-library -O "$project_dir/src/bootstrap/offline-bootstrap-introspection.swift" \
+  "$startup_test_dir/test-ui-startup.o" \
+  "$startup_test_dir/offline-bootstrap-arm64.o" \
+  -framework Foundation -framework AppKit -framework WebKit \
+  -o "$startup_test_dir/test-ui-startup"
+"$startup_test_dir/test-ui-startup"
 if ! /usr/bin/grep -q 'dia_custom_prepare_self_contained_runtime' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
    ! /usr/bin/grep -q 'dia_custom_schedule_window_menu_repair' \

@@ -2960,7 +2960,10 @@ static void dia_custom_schedule_model_picker_attempts(id target,
     });
 }
 
+static void dia_custom_install_developer_menu(void);
+
 @interface DiaCustomDeveloperMenuController : NSObject
+- (void)applicationReady:(NSNotification *)notification;
 - (void)openPromptTools:(id)sender;
 - (void)openNativeModelPicker:(id)sender;
 - (void)selectCustomModel:(id)sender;
@@ -2992,6 +2995,11 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 @end
 
 @implementation DiaCustomDeveloperMenuController
+- (void)applicationReady:(NSNotification *)notification {
+    dia_custom_install_developer_menu();
+    [self windowBecameKey:notification];
+}
+
 - (NSString *)modelKeyFromSender:(id)sender {
     if ([sender isKindOfClass:[NSPopUpButton class]]) {
         return [[[sender selectedItem] representedObject]
@@ -3104,8 +3112,12 @@ static void dia_custom_schedule_model_picker_attempts(id target,
 }
 
 - (void)windowBecameKey:(NSNotification *)notification {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC),
-                   dispatch_get_main_queue(), ^{
+    // Apply available views in the notification turn; later window updates
+    // reconcile views that Dia constructs asynchronously.
+    static BOOL refreshing = NO;
+    if (refreshing) return;
+    refreshing = YES;
+    @try {
         if (dia_custom_mod_enabled("model-picker")) {
             dia_custom_install_custom_model_picker(self,
                 @selector(selectCustomModel:));
@@ -3124,7 +3136,9 @@ static void dia_custom_schedule_model_picker_attempts(id target,
         if (dia_custom_mod_enabled("mod-manager")) {
             dia_custom_install_mod_manager(self);
         }
-    });
+    } @finally {
+        refreshing = NO;
+    }
 }
 
 - (void)windowDidUpdate:(NSNotification *)notification {
@@ -3802,150 +3816,155 @@ static void dia_custom_install_native_apps_action_hooks(void) {
 }
 
 static void dia_custom_install_developer_menu(void) {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8000 * NSEC_PER_MSEC),
-                   dispatch_get_main_queue(), ^{
-        BOOL modelPickerEnabled = dia_custom_mod_enabled("model-picker");
-        BOOL developerToolsEnabled = dia_custom_mod_enabled("developer-tools");
-        BOOL modManagerEnabled = dia_custom_mod_enabled("mod-manager");
-        BOOL memoryEnabled = dia_custom_mod_enabled("native-memory");
-        BOOL nativeAppsEnabled = dia_custom_mod_enabled("native-apps");
-        BOOL morningBriefEnabled = dia_custom_mod_enabled("morning-brief");
-        if (!modelPickerEnabled && !developerToolsEnabled && !modManagerEnabled && !memoryEnabled &&
-            !nativeAppsEnabled && !morningBriefEnabled) {
-            return;
-        }
+    BOOL modelPickerEnabled = dia_custom_mod_enabled("model-picker");
+    BOOL developerToolsEnabled = dia_custom_mod_enabled("developer-tools");
+    if (!modelPickerEnabled && !developerToolsEnabled) {
+        return;
+    }
 
-        NSMenu *viewMenu = nil;
-        for (NSMenuItem *item in [[NSApp mainMenu] itemArray]) {
-            if ([[item title] isEqualToString:@"View"]) {
-                viewMenu = [item submenu];
+    NSMenu *viewMenu = nil;
+    for (NSMenuItem *item in [[NSApp mainMenu] itemArray]) {
+        if ([[item title] isEqualToString:@"View"]) {
+            viewMenu = [item submenu];
+            break;
+        }
+    }
+    if (viewMenu == nil) {
+        return;
+    }
+
+    NSMenu *developerMenu = nil;
+    if (modelPickerEnabled || developerToolsEnabled) {
+        for (NSMenuItem *item in [viewMenu itemArray]) {
+            if ([[item title] isEqualToString:@"Developer"]) {
+                developerMenu = [item submenu];
                 break;
             }
         }
-        if (viewMenu == nil) {
-            return;
+        if (developerMenu == nil) {
+            developerMenu = [[NSMenu alloc] initWithTitle:@"Developer"];
+            NSMenuItem *developerItem = [[NSMenuItem alloc]
+                initWithTitle:@"Developer" action:nil keyEquivalent:@""];
+            [developerItem setSubmenu:developerMenu];
+            [viewMenu addItem:developerItem];
         }
+    }
 
-        NSMenu *developerMenu = nil;
-        if (modelPickerEnabled || developerToolsEnabled) {
-            for (NSMenuItem *item in [viewMenu itemArray]) {
-                if ([[item title] isEqualToString:@"Developer"]) {
-                    developerMenu = [item submenu];
-                    break;
-                }
-            }
-            if (developerMenu == nil) {
-                developerMenu = [[NSMenu alloc] initWithTitle:@"Developer"];
-                NSMenuItem *developerItem = [[NSMenuItem alloc]
-                    initWithTitle:@"Developer" action:nil keyEquivalent:@""];
-                [developerItem setSubmenu:developerMenu];
-                [viewMenu addItem:developerItem];
-            }
-        }
+    if (modelPickerEnabled &&
+        [developerMenu itemWithTitle:@"AI Model"] == nil) {
+        [developerMenu addItem:[NSMenuItem separatorItem]];
+        dia_custom_model_menu = [[NSMenu alloc] initWithTitle:@"AI Model"];
+        NSMenuItem *modelMenuItem = [[NSMenuItem alloc]
+            initWithTitle:@"AI Model" action:nil keyEquivalent:@""];
+        [modelMenuItem setSubmenu:dia_custom_model_menu];
+        [developerMenu addItem:modelMenuItem];
+        dia_custom_rebuild_model_menu(dia_custom_developer_menu_controller,
+            @selector(selectCustomModel:));
 
-        dia_custom_developer_menu_controller =
-            [[DiaCustomDeveloperMenuController alloc] init];
-        dia_custom_install_native_apps_action_hooks();
-        if (modelPickerEnabled &&
-            [developerMenu itemWithTitle:@"AI Model"] == nil) {
-            [developerMenu addItem:[NSMenuItem separatorItem]];
-            dia_custom_model_menu = [[NSMenu alloc] initWithTitle:@"AI Model"];
-            NSMenuItem *modelMenuItem = [[NSMenuItem alloc]
-                initWithTitle:@"AI Model" action:nil keyEquivalent:@""];
-            [modelMenuItem setSubmenu:dia_custom_model_menu];
-            [developerMenu addItem:modelMenuItem];
-            dia_custom_rebuild_model_menu(dia_custom_developer_menu_controller,
-                @selector(selectCustomModel:));
+        NSMenuItem *modelSettings = [[NSMenuItem alloc]
+            initWithTitle:@"Model Providers & Settings…"
+                   action:@selector(openModelSettings:)
+            keyEquivalent:@""];
+        [modelSettings setTarget:dia_custom_developer_menu_controller];
+        [developerMenu addItem:modelSettings];
 
-            NSMenuItem *modelSettings = [[NSMenuItem alloc]
-                initWithTitle:@"Model Providers & Settings…"
-                       action:@selector(openModelSettings:)
-                keyEquivalent:@""];
-            [modelSettings setTarget:dia_custom_developer_menu_controller];
-            [developerMenu addItem:modelSettings];
+        NSMenuItem *modelPicker = [[NSMenuItem alloc]
+            initWithTitle:@"Native Model Picker"
+                   action:@selector(openNativeModelPicker:)
+            keyEquivalent:@""];
+        [modelPicker setTarget:dia_custom_developer_menu_controller];
+        [developerMenu addItem:modelPicker];
+    }
 
-            NSMenuItem *modelPicker = [[NSMenuItem alloc]
-                initWithTitle:@"Native Model Picker"
-                       action:@selector(openNativeModelPicker:)
-                keyEquivalent:@""];
-            [modelPicker setTarget:dia_custom_developer_menu_controller];
-            [developerMenu addItem:modelPicker];
-        }
+    if (developerToolsEnabled &&
+        [developerMenu itemWithTitle:@"Prompt & Model Routing…"] == nil) {
+        NSMenuItem *promptTools = [[NSMenuItem alloc]
+            initWithTitle:@"Prompt & Model Routing…"
+                   action:@selector(openPromptTools:)
+            keyEquivalent:@""];
+        [promptTools setTarget:dia_custom_developer_menu_controller];
+        [developerMenu addItem:promptTools];
 
-        if (developerToolsEnabled &&
-            [developerMenu itemWithTitle:@"Prompt & Model Routing…"] == nil) {
-            NSMenuItem *promptTools = [[NSMenuItem alloc]
-                initWithTitle:@"Prompt & Model Routing…"
-                       action:@selector(openPromptTools:)
-                keyEquivalent:@""];
-            [promptTools setTarget:dia_custom_developer_menu_controller];
-            [developerMenu addItem:promptTools];
+        NSMenuItem *browserTools = [[NSMenuItem alloc]
+            initWithTitle:@"Browser Developer Tools"
+                   action:@selector(openBrowserDeveloperTools:)
+            keyEquivalent:@""];
+        [browserTools setTarget:dia_custom_developer_menu_controller];
+        [developerMenu addItem:browserTools];
 
-            NSMenuItem *browserTools = [[NSMenuItem alloc]
-                initWithTitle:@"Browser Developer Tools"
-                       action:@selector(openBrowserDeveloperTools:)
-                keyEquivalent:@""];
-            [browserTools setTarget:dia_custom_developer_menu_controller];
-            [developerMenu addItem:browserTools];
+        NSMenuItem *agentServerDashboard = [[NSMenuItem alloc]
+            initWithTitle:@"Agent & Tool Dashboard…"
+                   action:@selector(openAgentServerDashboard:)
+            keyEquivalent:@""];
+        [agentServerDashboard setTarget:dia_custom_developer_menu_controller];
+        [developerMenu addItem:agentServerDashboard];
 
-            NSMenuItem *agentServerDashboard = [[NSMenuItem alloc]
-                initWithTitle:@"Agent & Tool Dashboard…"
-                       action:@selector(openAgentServerDashboard:)
-                keyEquivalent:@""];
-            [agentServerDashboard setTarget:dia_custom_developer_menu_controller];
-            [developerMenu addItem:agentServerDashboard];
+        NSMenuItem *logLevels = [[NSMenuItem alloc]
+            initWithTitle:@"Open Diagnostics Folder"
+                   action:@selector(openLogLevels:)
+            keyEquivalent:@""];
+        [logLevels setTarget:dia_custom_developer_menu_controller];
+        [developerMenu addItem:logLevels];
+    }
 
-            NSMenuItem *logLevels = [[NSMenuItem alloc]
-                initWithTitle:@"Open Diagnostics Folder"
-                       action:@selector(openLogLevels:)
-                keyEquivalent:@""];
-            [logLevels setTarget:dia_custom_developer_menu_controller];
-            [developerMenu addItem:logLevels];
-        }
-
-        if (modelPickerEnabled) {
-            dia_custom_install_custom_model_picker(
-                dia_custom_developer_menu_controller,
-                @selector(selectCustomModel:));
-            dia_custom_schedule_model_picker_attempts(
-                dia_custom_developer_menu_controller,
-                @selector(selectCustomModel:),
-                0);
-        }
-        if (memoryEnabled) {
-            dia_custom_install_local_memory_controls(
-                dia_custom_developer_menu_controller,
-                @selector(toggleLocalMemory:));
-        }
-        if (nativeAppsEnabled) {
-            dia_custom_refresh_advanced_new_tab_surface();
-            dia_custom_fetch_native_apps_state(
-                dia_custom_developer_menu_controller, YES);
-        }
-        if (morningBriefEnabled) {
-            [dia_custom_developer_menu_controller checkLocalMorningBriefSchedule];
-        }
-        if (modManagerEnabled) {
-            dia_custom_install_mod_manager(
-                dia_custom_developer_menu_controller);
-        }
-        [[NSNotificationCenter defaultCenter]
-            addObserver:dia_custom_developer_menu_controller
-               selector:@selector(windowBecameKey:)
-                   name:NSWindowDidBecomeKeyNotification
-                 object:nil];
-        [[NSNotificationCenter defaultCenter]
-            addObserver:dia_custom_developer_menu_controller
-               selector:@selector(windowDidUpdate:)
-                   name:NSWindowDidUpdateNotification
-                 object:nil];
-        [[NSNotificationCenter defaultCenter]
-            addObserver:dia_custom_developer_menu_controller
-               selector:@selector(nativeMorningBriefSheetDidEnd:)
-                   name:NSWindowDidEndSheetNotification
-                 object:nil];
+    static BOOL loggedInstallation = NO;
+    if (!loggedInstallation) {
+        loggedInstallation = YES;
         dia_custom_log_status(@"developer-menu-installed");
+    }
+}
 
+static void dia_custom_retry_developer_menu(unsigned attempt) {
+    dia_custom_install_developer_menu();
+    if (dia_custom_find_menu_item(NSApp.mainMenu, @[@"View"]) != nil) return;
+    if (attempt >= 100) {
+        dia_custom_log_status(@"developer-menu-awaiting-window");
+        return;
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
+                   dispatch_get_main_queue(), ^{
+        dia_custom_retry_developer_menu(attempt + 1);
+    });
+}
+
+static void dia_custom_install_ui_runtime(void) {
+    if (dia_custom_developer_menu_controller != nil) return;
+    dia_custom_developer_menu_controller =
+        [[DiaCustomDeveloperMenuController alloc] init];
+    // Register before AppKit launches so the first window is observed.
+    [[NSNotificationCenter defaultCenter]
+        addObserver:dia_custom_developer_menu_controller
+           selector:@selector(applicationReady:)
+               name:NSApplicationWillFinishLaunchingNotification
+             object:nil];
+    [[NSNotificationCenter defaultCenter]
+        addObserver:dia_custom_developer_menu_controller
+           selector:@selector(applicationReady:)
+               name:NSApplicationDidFinishLaunchingNotification
+             object:nil];
+    [[NSNotificationCenter defaultCenter]
+        addObserver:dia_custom_developer_menu_controller
+           selector:@selector(applicationReady:)
+               name:NSWindowDidBecomeKeyNotification
+             object:nil];
+    [[NSNotificationCenter defaultCenter]
+        addObserver:dia_custom_developer_menu_controller
+           selector:@selector(windowDidUpdate:)
+               name:NSWindowDidUpdateNotification
+             object:nil];
+    [[NSNotificationCenter defaultCenter]
+        addObserver:dia_custom_developer_menu_controller
+           selector:@selector(nativeMorningBriefSheetDidEnd:)
+               name:NSWindowDidEndSheetNotification
+             object:nil];
+    dia_custom_log_status(@"ui-runtime-observers-installed");
+    dispatch_async(dispatch_get_main_queue(), ^{
+        dia_custom_install_native_apps_action_hooks();
+        [dia_custom_developer_menu_controller windowBecameKey:nil];
+        dia_custom_retry_developer_menu(0);
+        dia_custom_schedule_model_picker_attempts(
+            dia_custom_developer_menu_controller,
+            @selector(selectCustomModel:), 0);
     });
 }
 
@@ -3984,6 +4003,6 @@ static void dia_custom_install_runtime_overrides(void) {
         dia_custom_mod_enabled("native-memory") ||
         dia_custom_mod_enabled("native-apps") ||
         dia_custom_mod_enabled("morning-brief")) {
-        dia_custom_install_developer_menu();
+        dia_custom_install_ui_runtime();
     }
 }

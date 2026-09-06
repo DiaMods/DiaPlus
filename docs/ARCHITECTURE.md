@@ -166,3 +166,5 @@ Finder launch equivalent to the development launcher without placing mutable
 state inside `/Applications`.
 
 The bootstrap resolves the sealed Mod set synchronously before Dia renders its first window. The bridge publishes the last valid model catalog—or the built-in Codex/Apple catalog on a fresh install—before background provider discovery. Memory state is refreshed on launch, pane activation, profile changes, and mutations, with a five-second reconciliation ceiling rather than a frame-driven polling loop.
+
+UI Mod observers are registered before AppKit launches. Launch and window-activation notifications immediately apply available native controls and New Tab state; subsequent window updates reconcile views constructed asynchronously. Developer-menu setup retries briefly while the native View menu is unavailable and is independent of the other UI Mods. There is no fixed startup delay for these surfaces. The separate eight-second guard for enabling native New Window commands remains necessary while Dia initializes its anonymous browser context.
