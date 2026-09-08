@@ -5,7 +5,7 @@ script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
-app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
+app="${DIA_CUSTOM_APP:-$("$script_dir/default-app.sh")}"
 action="${1:-open}"
 
 if [[ "$action" == "status" ]]; then

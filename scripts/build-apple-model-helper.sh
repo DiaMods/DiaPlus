@@ -7,9 +7,15 @@ source_file="$project_dir/src/apple-model-helper/main.swift"
 output_dir="$project_dir/.build/apple-model-helper"
 output_file="$output_dir/DiaCustomAppleModel"
 
-developer_dir="${DIA_CUSTOM_XCODE_DEVELOPER_DIR:-}"
+prebuilt="$(node "$script_dir/prebuilt.js" apple-model)"
+if [[ -n "$prebuilt" ]]; then
+  print "$prebuilt"
+  exit 0
+fi
+
+developer_dir="${DIA_CUSTOM_XCODE_DEVELOPER_DIR:-${DEVELOPER_DIR:-}}"
 if [[ -z "$developer_dir" ]]; then
-  for candidate in /Applications/Xcode-27*.app/Contents/Developer(N); do
+  for candidate in /Applications/Xcode*27*.app/Contents/Developer(N); do
     if [[ -d "$candidate" ]]; then
       developer_dir="$candidate"
       break

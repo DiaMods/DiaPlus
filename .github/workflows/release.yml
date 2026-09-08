@@ -1,0 +1,99 @@
+name: Build Dia+ modifier release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag (for example v0.1.0)
+        required: true
+        type: string
+      publish:
+        description: Publish immediately (otherwise create a draft)
+        default: false
+        type: boolean
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate version and checkout
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.20.0
+      - name: Install locked JavaScript dependencies
+        run: npm ci --omit=dev --omit=optional --prefix bridge
+      - name: Obtain official build for private validation only
+        run: |
+          node scripts/download-official.js "$RUNNER_TEMP/official" > "$RUNNER_TEMP/dia-source"
+          echo "DIA_CUSTOM_SOURCE_APP=$(cat "$RUNNER_TEMP/dia-source")" >> "$GITHUB_ENV"
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+      - name: Test mods and release safeguards
+        run: ./dia-custom test
+      - name: Package modifier only
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: node scripts/package-release.js "$RELEASE_TAG" "$DIA_CUSTOM_SOURCE_APP"
+      - name: Verify packaged installer in isolation
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: node scripts/verify-release.js ".build/releases/$RELEASE_TAG" --install
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: modifier-release
+          path: |
+            .build/releases/${{ steps.version.outputs.tag }}/DiaPlus-*.zip
+            .build/releases/${{ steps.version.outputs.tag }}/SHA256SUMS.txt
+            .build/releases/${{ steps.version.outputs.tag }}/release-manifest.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download verified build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run download "$RUN_ID" --name modifier-release --dir release
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        run: |
+          args=(--draft)
+          if [[ "$PUBLISH" == true ]]; then args=(); fi
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          Dia+ modifier installer for Apple Silicon Macs. Extract the ZIP and open Install Dia+.command.
+
+          This release contains only the installer, mod sources, Node runtime, JavaScript dependencies, and our precompiled helpers. It downloads official Dia directly on the recipient Mac when needed; no Dia browser or Codex executable is redistributed. Use your locally installed Codex and your own provider accounts.
+
+          macOS 14+; optional Apple model/media helper requires macOS 27. Ad-hoc signed, not notarized. See the included README for installation, verification, and update limitations.
+          NOTES
+          gh release create "$RELEASE_TAG" release/* --verify-tag --title "Dia+ $RELEASE_TAG" --notes-file "$RUNNER_TEMP/notes.md" "${args[@]}"

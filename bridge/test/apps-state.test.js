@@ -33,7 +33,7 @@ test("Morning Brief is locally entitled, profile-exclusive, and once daily", asy
   assert.equal((await store.publicState("Default")).morningBrief.available, true);
   assert.equal((await store.publicState("Default")).morningBrief.due, false);
   now = new Date(now.getTime() + 30 * 60_000 + 1);
-  assert.equal((await store.publicState("Default")).morningBrief.due, true);
+  assert.equal((await store.publicState("Default")).morningBrief.due, false, "failed briefs do not automatically retry every 30 minutes");
   await store.recordMorningBrief({ profileID: "Default", status: "succeeded", runID: "run-1", stage: "ingested", reportID: "report-1" });
   assert.equal((await store.publicState("Default")).morningBrief.due, false);
   assert.equal((await store.publicState("Default")).morningBrief.lastSuccess.reportID, "report-1");
@@ -64,10 +64,35 @@ test("Morning Brief is locally entitled, profile-exclusive, and once daily", asy
 
   now = new Date(2026, 7, 29, 12, 0);
   await store.setMorningBrief({ enabled: true, profileID: "Default" });
-  assert.equal((await store.publicState("Default")).morningBrief.due, true, "launch catch-up remains due after 11 AM");
+  assert.equal((await store.publicState("Default")).morningBrief.due, false, "launching after the morning window does not generate a brief");
   const stat = await import("node:fs/promises").then(({ stat }) => stat(path));
   assert.equal(stat.mode & 0o077, 0);
   assert.equal(JSON.parse(await readFile(path, "utf8")).morningBrief.enabledProfileID, "Default");
+});
+
+test("Morning Brief stays inside the morning window and survives restart without duplicate attempts", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-brief-schedule-"));
+  const path = resolve(directory, "apps.json");
+  let now = new Date(2026, 8, 7, 4, 59);
+  let store = new AppsStateStore(path, { now: () => now });
+  await store.setMorningBrief({ enabled: true });
+  assert.equal((await store.publicState()).morningBrief.due, false);
+  now = new Date(2026, 8, 7, 5, 0);
+  assert.equal((await store.publicState()).morningBrief.due, true);
+  await store.recordMorningBrief({ status: 'running', stage: 'native-action-dispatched' });
+  for (const hour of [6, 10, 11, 18, 23]) {
+    now = new Date(2026, 8, 7, hour, 30);
+    store = new AppsStateStore(path, { now: () => now });
+    assert.equal((await store.publicState()).morningBrief.due, false, `no duplicate at ${hour}:30 after restart`);
+  }
+  now = new Date(2026, 8, 8, 4, 59);
+  assert.equal((await store.publicState()).morningBrief.due, false);
+  now = new Date(2026, 8, 8, 5, 0);
+  assert.equal((await store.publicState()).morningBrief.due, true, 'eligible again the next morning');
+  now = new Date(2026, 8, 8, 10, 59);
+  assert.equal((await store.publicState()).morningBrief.due, true);
+  now = new Date(2026, 8, 8, 11, 0);
+  assert.equal((await store.publicState()).morningBrief.due, false, 'morning window ends at 11 AM');
 });
 
 test("native observations preserve only connection metadata", async () => {

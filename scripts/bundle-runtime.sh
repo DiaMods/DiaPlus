@@ -40,19 +40,9 @@ mkdir -p "${node_target:h}" "$bridge_target"
 /usr/bin/rsync -a --delete \
   --exclude .state \
   --exclude test \
+  --exclude bin \
   --exclude '*.log' \
   "$project_dir/bridge/" "$bridge_target/"
-
-# Keep a compatible Codex CLI in the app even when the desktop SDK and npm
-# release cadences differ. Updater jobs reuse this signed bundled copy.
-codex_source="$project_dir/bridge/bin/codex"
-if [[ -x "/Applications/Codex.app/Contents/Resources/codex" ]]; then
-  codex_source="/Applications/Codex.app/Contents/Resources/codex"
-fi
-if [[ -x "$codex_source" ]]; then
-  mkdir -p "$bridge_target/bin"
-  /usr/bin/ditto "$codex_source" "$bridge_target/bin/codex"
-fi
 
 # Carry the exact mod sources and pinned build runtime with the installed app.
 # The bridge itself is materialized from DiaCustomBridge when preparing an update.
@@ -62,6 +52,9 @@ for source_dir in scripts src research/tools; do
   mkdir -p "$updater_target/$source_dir"
   /usr/bin/rsync -a --delete "$project_dir/$source_dir/" "$updater_target/$source_dir/"
 done
+if [[ -d "$project_dir/prebuilt" ]]; then
+  /usr/bin/rsync -a --delete "$project_dir/prebuilt/" "$updater_target/prebuilt/"
+fi
 /usr/bin/ditto "$project_dir/dia-custom" "$updater_target/dia-custom"
 /usr/bin/ditto "$archive_path" "$updater_target/runtime/$node_archive"
 

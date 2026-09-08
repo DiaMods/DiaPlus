@@ -14,7 +14,7 @@ fi
 script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
-app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
+app="${DIA_CUSTOM_APP:-$("$script_dir/default-app.sh")}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 debug_port="${DIA_CUSTOM_DEBUG_PORT:-9223}"
 embedded_bootstrap="$app/Contents/Frameworks/DiaCustomBootstrap.dylib"

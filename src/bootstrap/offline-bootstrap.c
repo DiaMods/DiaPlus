@@ -257,7 +257,8 @@ static void dia_custom_start_bundled_bridge(NSString *nodePath,
             ? [NSString stringWithUTF8String:executablePath] : nil;
         BOOL isRecordedCloneNode = hasPath &&
             [runningPath.lastPathComponent isEqualToString:@"DiaCustomNode"] &&
-            ([runningPath containsString:@"/Dia Custom RTTM.app/"] ||
+            ([runningPath containsString:@"/Dia+.app/"] ||
+             [runningPath containsString:@"/Dia Custom RTTM.app/"] ||
              [runningPath containsString:@"/Dia Custom RTTM.pre-rebuild."] ||
              [runningPath containsString:@"/Dia Custom RTTM.failed."]);
         if (strcmp(executablePath, nodePath.UTF8String) == 0 ||
@@ -1938,7 +1939,7 @@ static void dia_custom_configure_native_memory_descendants(
         popup.target = target;
         popup.action = NSSelectorFromString(@"setLocalMemoryRetention:");
         popup.toolTip =
-            @"Choose how long Dia Custom keeps local browsing activity";
+            @"Choose how long Dia+ keeps local browsing activity";
         dia_custom_populate_retention_popup(popup);
     } else if ([view isKindOfClass:[NSButton class]]) {
         NSButton *button = (NSButton *)view;
@@ -2669,7 +2670,7 @@ static void dia_custom_set_model_popup_display_title(NSPopUpButton *popup,
         return;
     }
     if ([popup respondsToSelector:@selector(setUsesItemFromMenu:)]) {
-        [popup setUsesItemFromMenu:NO];
+        if (@available(macOS 15.0, *)) [popup setUsesItemFromMenu:NO];
     }
     NSPopUpButtonCell *cell = [popup cell];
     if ([cell isKindOfClass:[NSPopUpButtonCell class]]) {
@@ -2979,11 +2980,11 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
             [popup setControlSize:NSControlSizeSmall];
             [popup setAutoenablesItems:NO];
             if ([popup respondsToSelector:@selector(setUsesItemFromMenu:)]) {
-                [popup setUsesItemFromMenu:NO];
+                if (@available(macOS 15.0, *)) [popup setUsesItemFromMenu:NO];
             }
             [popup setTarget:target];
             [popup setAction:action];
-            [popup setToolTip:@"Choose the model for Dia Custom chat"];
+            [popup setToolTip:@"Choose the model for Dia+ chat"];
             [popup setContentHuggingPriority:NSLayoutPriorityRequired
                               forOrientation:NSLayoutConstraintOrientationHorizontal];
             [popup setContentCompressionResistancePriority:NSLayoutPriorityRequired
@@ -3145,7 +3146,7 @@ static void dia_custom_install_updater_controls(id target);
                             ? value[@"error"] : nil;
                     }
                     NSAlert *alert = [[NSAlert alloc] init];
-                    alert.messageText = @"Could not change Dia Custom model";
+                    alert.messageText = @"Could not change Dia+ model";
                     alert.informativeText = message ?: @"The local bridge rejected the selection.";
                     [alert runModal];
                     dia_custom_rebuild_model_menu(strongSelf,
@@ -3427,19 +3428,15 @@ static void dia_custom_install_updater_controls(id target);
     // then invoke the same WindowPresenter action it uses as a catch-up path.
     // The bridge rechecks `due` after the delay, so a native start always wins.
     static NSString *lastScheduledKey;
-    static NSDate *lastScheduledAt;
     NSString *day = [brief[@"localDay"] isKindOfClass:[NSString class]]
         ? brief[@"localDay"] : nil;
     NSString *profileID = [brief[@"profileID"] isKindOfClass:[NSString class]]
         ? brief[@"profileID"] : dia_custom_selected_apps_profile_id();
     if (day.length == 0 || profileID.length == 0) return;
     NSString *key = [NSString stringWithFormat:@"%@:%@", profileID, day];
-    if ([lastScheduledKey isEqualToString:key] && lastScheduledAt != nil &&
-        [lastScheduledAt timeIntervalSinceNow] > -(30.0 * 60.0)) return;
+    if ([lastScheduledKey isEqualToString:key]) return;
     [lastScheduledKey release];
     lastScheduledKey = [key copy];
-    [lastScheduledAt release];
-    lastScheduledAt = [[NSDate date] retain];
     dia_custom_log_status(@"morning-brief-native-scheduler-due");
 
     NSString *scheduledProfileID = [profileID copy];
@@ -3551,7 +3548,7 @@ static void dia_custom_install_updater_controls(id target);
         confirmation.alertStyle = NSAlertStyleWarning;
         confirmation.messageText = @"Disable Memory?";
         confirmation.informativeText =
-            @"Dia Custom will stop saving and using new browsing and chat activity. Existing local memory is retained until you reset it.";
+            @"Dia+ will stop saving and using new browsing and chat activity. Existing local memory is retained until you reset it.";
         [confirmation addButtonWithTitle:@"Disable Memory"];
         [confirmation addButtonWithTitle:@"Cancel"];
         if ([confirmation runModal] != NSAlertFirstButtonReturn) {
@@ -3632,7 +3629,7 @@ static void dia_custom_install_updater_controls(id target);
         confirmation.alertStyle = NSAlertStyleWarning;
         confirmation.messageText = @"Shorten local memory retention?";
         confirmation.informativeText = [NSString stringWithFormat:
-            @"Dia Custom will permanently remove local memory older than %@. This does not contact Dia.",
+            @"Dia+ will permanently remove local memory older than %@. This does not contact Dia.",
             dia_custom_memory_retention_title(requestedDays)];
         [confirmation addButtonWithTitle:@"Apply Retention"];
         [confirmation addButtonWithTitle:@"Cancel"];
@@ -3717,7 +3714,7 @@ static void dia_custom_install_updater_controls(id target);
     confirmation.alertStyle = NSAlertStyleWarning;
     confirmation.messageText = @"Reset local Memory?";
     confirmation.informativeText =
-        @"This permanently deletes Dia Custom browsing, chat, and derived Memories on this Mac. Imported connector records are kept. Nothing is sent to Dia.";
+        @"This permanently deletes Dia+ browsing, chat, and derived Memories on this Mac. Imported connector records are kept. Nothing is sent to Dia.";
     [confirmation addButtonWithTitle:@"Reset Memory"];
     [confirmation addButtonWithTitle:@"Cancel"];
     if ([confirmation runModal] != NSAlertFirstButtonReturn) {

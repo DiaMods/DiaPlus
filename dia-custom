@@ -23,7 +23,7 @@ case "$command" in
       http://127.0.0.1:8765/api/models
     ;;
   settings)
-    custom_app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
+    custom_app="${DIA_CUSTOM_APP:-$("$project_dir/scripts/default-app.sh")}"
     if [[ ! -d "$custom_app" ]]; then
       print -u2 "Dia Custom is not installed at $custom_app"
       exit 1
@@ -33,7 +33,7 @@ case "$command" in
   openai-key) exec "$project_dir/scripts/openai-key.sh" "$@" ;;
   status) exec /usr/bin/sed -n '1,240p' "$project_dir/docs/STATUS.md" ;;
   help|-h|--help)
-    print 'Dia Custom'
+    print 'Dia+'
     print ''
     print '  ./dia-custom setup [/path/Dia.app]  Install, configure, and launch everything'
     print '  ./dia-custom launch             Start the local bridge and browser'

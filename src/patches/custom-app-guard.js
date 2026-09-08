@@ -3,9 +3,13 @@ import { basename, resolve } from "node:path";
 
 const CUSTOM_BUNDLE_ID = "local.rttm.dia";
 
+export function isCustomAppName(name) {
+  return name.endsWith(".app") && (name.startsWith("Dia Custom") || name.startsWith("Dia+."));
+}
+
 export function assertPatchableCustomApp(appPath) {
   const app = appPath ? resolve(appPath) : "";
-  if (!app || !basename(app).startsWith("Dia Custom") || !basename(app).endsWith(".app")) {
+  if (!app || !isCustomAppName(basename(app))) {
     throw new Error(`refusing to patch a non-clone app: ${app}`);
   }
 

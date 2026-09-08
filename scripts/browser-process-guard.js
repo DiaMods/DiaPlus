@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { prebuiltHelper } from './prebuilt.js';
 
 function normalizedPath(value) {
   try { return realpathSync(value); } catch { return resolve(value); }
@@ -35,13 +36,16 @@ export function matchingBrowserProcesses(processes, app, profile) {
 
 export function createProcessProbe() {
   if (process.platform !== 'darwin') throw new Error('Exact browser process inspection requires macOS.');
-  const directory = mkdtempSync(join(tmpdir(), 'dia-custom-process-guard-'));
-  const executable = join(directory, 'process-info');
-  const dispose = () => rmSync(directory, { recursive: true, force: true });
+  const prebuilt = prebuiltHelper('process-info');
+  const directory = prebuilt ? null : mkdtempSync(join(tmpdir(), 'dia-custom-process-guard-'));
+  const executable = prebuilt ?? join(directory, 'process-info');
+  const dispose = () => { if (directory) rmSync(directory, { recursive: true, force: true }); };
   try {
-    execFileSync('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-O2',
-      join(dirname(fileURLToPath(import.meta.url)), 'browser-process-info.c'), '-o', executable],
-    { stdio: ['ignore', 'pipe', 'pipe'] });
+    if (!prebuilt) {
+      execFileSync('/usr/bin/clang', ['-Wall', '-Wextra', '-Werror', '-O2',
+        join(dirname(fileURLToPath(import.meta.url)), 'browser-process-info.c'), '-o', executable],
+      { stdio: ['ignore', 'pipe', 'pipe'] });
+    }
   } catch (error) {
     dispose();
     throw new Error(`Cannot build exact browser process probe: ${error.stderr?.toString().trim() || error.message}`);

@@ -6,7 +6,7 @@ project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
 source_app="${1:-/Applications/Dia.app}"
 source_app="${source_app:A}"
-target_app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
+target_app="${DIA_CUSTOM_APP:-$("$script_dir/default-app.sh")}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 legacy_profile="${DIA_CUSTOM_LEGACY_PROFILE:-$work_dir/dia-custom-profile}"
 
@@ -22,15 +22,15 @@ if [[ "$source_id" != "company.thebrowser.dia" ]]; then
   exit 1
 fi
 
-if /usr/bin/pgrep -f '/Dia Custom[^/]*/Contents/MacOS/Dia' >/dev/null; then
+if /usr/bin/pgrep -f '/Dia( Custom[^/]*|\+[^/]*)/Contents/MacOS/Dia' >/dev/null; then
   /usr/bin/osascript -e 'tell application id "local.rttm.dia" to quit' \
     >/dev/null 2>&1 || true
   for _ in {1..100}; do
-    /usr/bin/pgrep -f '/Dia Custom[^/]*/Contents/MacOS/Dia' >/dev/null || break
+    /usr/bin/pgrep -f '/Dia( Custom[^/]*|\+[^/]*)/Contents/MacOS/Dia' >/dev/null || break
     sleep 0.1
   done
 fi
-if /usr/bin/pgrep -f '/Dia Custom[^/]*/Contents/MacOS/Dia' >/dev/null; then
+if /usr/bin/pgrep -f '/Dia( Custom[^/]*|\+[^/]*)/Contents/MacOS/Dia' >/dev/null; then
   print -u2 "Please quit Dia Custom, then run setup again."
   exit 1
 fi

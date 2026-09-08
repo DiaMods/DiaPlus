@@ -5,7 +5,7 @@ script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${DIA_CUSTOM_WORK_DIR:-${project_dir:h}}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
-clone_app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
+clone_app="${DIA_CUSTOM_APP:-/Applications/Dia+.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 bundle_id="local.rttm.dia"
 replace=false
@@ -77,9 +77,9 @@ mkdir -p "$work_dir" "${profile:h}" "${clone_app:h}"
 
 info="$temporary_app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_id" "$info"
-/usr/libexec/PlistBuddy -c "Set :CFBundleName 'Dia Custom RTTM'" "$info"
-/usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Dia Custom RTTM'" "$info" 2>/dev/null || \
-  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Dia Custom RTTM'" "$info"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName 'Dia+'" "$info"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Dia+'" "$info" 2>/dev/null || \
+  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Dia+'" "$info"
 # Keep the standard web URL declarations under the clone's distinct bundle ID.
 # Removing these made Launch Services and external automation unable to route a
 # requested background tab to Dia Custom, even though its AppleScript tab API

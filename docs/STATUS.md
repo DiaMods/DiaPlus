@@ -15,7 +15,7 @@ The full `./dia-custom test` run against official build 86584 passed: **218 brid
 | Connectors | Streamable HTTP, legacy HTTP+SSE and stdio MCP; OAuth discovery/registration where supported; generic CLI adapters; profile-specific incremental indexing |
 | Spark | Version-aware 26-tool catalog for Spark 1.3.1, including attachments and authorized write actions; 11-tool read catalog on older versions |
 | Knowledge and workflows | Profile-specific document library, provenance, manual research and explicitly enabled interval schedules using read-only tools |
-| Morning Brief | Guarded native WindowController dispatch, once-daily profile state, catch-up/retry handling and ingestion-only success |
+| Morning Brief | Guarded native WindowController dispatch, one automatic attempt per profile/day within 5–11 AM local time, no automatic retries, and ingestion-only success |
 | Updates | Default-on optional custom updater alongside required stock-update blocker; verified preparation, staged installation and linked app/profile rollback |
 | Launch and compatibility | Runtime/profile/Mod-aware bridge health; candidate content validation even under audited metadata; official-app and path-overlap guards |
 

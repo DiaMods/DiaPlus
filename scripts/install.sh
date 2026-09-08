@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
-app="${1:-${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}}"
+app="${1:-${DIA_CUSTOM_APP:-$("$script_dir/default-app.sh")}}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 
 if [[ ! -d "$app" ]]; then
@@ -46,6 +46,9 @@ fi
 [[ -n "$sign_identity" ]] || sign_identity="-"
 
 info="$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName 'Dia+'" "$info"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Dia+'" "$info" 2>/dev/null || \
+  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Dia+'" "$info"
 previous_mods="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomEnabledMods' "$info" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c 'Print :DiaCustomEnabledModules' "$info" 2>/dev/null || true)"
 for irreversible_mod in account-bypass dia-import reports apple-models; do

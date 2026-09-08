@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertPatchableCustomApp } from "../src/patches/custom-app-guard.js";
+import { assertPatchableCustomApp, isCustomAppName } from "../src/patches/custom-app-guard.js";
 
 // Resolve existing ancestors too, so a not-yet-created target cannot bypass
 // the source boundary by going through a symlinked directory.
@@ -31,7 +31,7 @@ export function assertBuildTarget(sourcePath, targetPath) {
   if (containsPath(source, target) || containsPath(target, source)) {
     throw new Error("refusing to build over or inside the source Dia app");
   }
-  if (!basename(target).startsWith("Dia Custom") || !basename(target).endsWith(".app")) {
+  if (!isCustomAppName(basename(target))) {
     throw new Error(`refusing to build a non-clone app target: ${target}`);
   }
   const sourceID = execFileSync("/usr/libexec/PlistBuddy", [

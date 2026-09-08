@@ -1,12 +1,23 @@
-# Dia Custom
+# Dia+
 
-Dia Custom keeps Dia's native browser, New Chat, tools, Memory settings and Reports while routing AI through providers you control. It runs as **Dia Custom RTTM.app**, with bundle ID **local.rttm.dia**, its own profile and Keychain label. Official Dia and its account remain separate.
+Dia+ keeps Dia's native browser, New Chat, tools, Memory settings and Reports while routing AI through providers you control. It runs as **Dia+.app**, with bundle ID **local.rttm.dia**, its own profile and Keychain label. The existing bundle ID and `Dia Custom RTTM` profile directory are retained for upgrade compatibility. Official Dia and its account remain separate.
 
 The installed and supported release is **Dia 1.48.0, build 86584, on Apple silicon**. The signed custom app passes `doctor`, Finder launch and structural checks for all **20 default Mods**, with **49 available models** and all **17 existing user extensions** retained. Native chat, browser-tool execution and the custom update menu passed live checks. The full suite passed with 198 bridge tests passing, one explicit Apple native-image runtime skip and no failures; native/script checks and signed update preparation also passed. See [Status](docs/STATUS.md) for completed live checks and remaining verification.
 
 ## Start here
 
-For a first install or rebuild from the official application:
+For another Mac, use the **Dia+ modifier ZIP**: extract it and open **Install Dia+.command**. It includes Node and precompiled helpers and obtains official Dia on that Mac when needed. Codex uses the recipient's local installation. See [installer instructions](docs/RELEASE-INSTALL.md).
+
+To build a modifier release locally (requires Node, Xcode 27, and the supported official Dia source):
+
+```sh
+node scripts/package-release.js v0.1.0 /Applications/Dia.app
+node scripts/verify-release.js .build/releases/v0.1.0 --install
+```
+
+The ZIP, checksums and inventory are written under `.build/releases/v0.1.0`. Only these three files are release assets; no official or modified Dia browser is uploaded. The [release workflow](.github/workflows/release.yml) runs on version tags or manual dispatch using an existing tag, validates the packaged installer, and creates a **draft** by default. Select the manual **publish** option to publish immediately. CI needs the GitHub `xcode-27` Apple Silicon runner with Xcode 27; availability depends on the repository's runner access. The workflow itself has not yet run for this checkout.
+
+For development, a first install or rebuild from the official application:
 
 ```sh
 ./dia-custom setup /Applications/Dia.app
@@ -64,7 +75,7 @@ Saving configuration does not connect it. Connections, credentials, sessions, sc
 
 Spark 1.3.1 exposes 26 tools spanning mail/calendar/contact reads, attachments, drafts, triage, assignment, sending/scheduling, comments and event changes. Older versions retain the 11-tool read catalog. Spark's own **Settings → AI Agents** permissions apply, and all Dia profiles share the same signed-in Spark Desktop accounts. Sending and other external communication require explicit user authorization. Real write operations were not used in tests. See [Connectors](docs/CONNECTORS.md) and [manifest examples](examples/connectors/).
 
-Native Apps, live connectors and Morning Brief are separate Mods. Morning Brief uses Dia's bundled `clia-brief` agent and Report template with the selected model, one designated profile and once-daily scheduling from 5 AM. It catches up after launch, retains partial-source diagnostics, retries recoverable failures and records success only after native artifact ingestion. The guarded native WindowController action executes on build 86584; a complete scheduled brief with connected sources remains a separate live QA check.
+Native Apps, live connectors and Morning Brief are separate Mods. Morning Brief uses Dia's bundled `clia-brief` agent and Report template with the selected model, one designated profile and one automatic attempt per local day between 5 AM and 11 AM while the browser is open. It retains partial-source diagnostics and records success only after native artifact ingestion. Unfinished or failed runs do not trigger automatic retries, and launching later in the day waits until the next morning. The guarded native WindowController action executes on build 86584; a complete scheduled brief with connected sources remains a separate live QA check.
 
 ## Knowledge and research
 
@@ -109,6 +120,6 @@ The **dia-import** Mod reuses Dia's native importer with sanitized local staging
 | `src/config/supported-dia-builds.json` | Audited build metadata; structural checks still run |
 | `scripts/`, `research/` | Build/test workflows and native analysis tools |
 
-The app lives at `/Applications/Dia Custom RTTM.app`; the profile is `~/Library/Application Support/Dia Custom RTTM`. Its `Bridge/.state` contains provider configuration, separate credentials, model/tool catalogs, Memory, knowledge, connector manifests and workflow state. `Diagnostics` holds runtime logs. Bridge code and required runtime executables are bundled inside the app.
+The app lives at `/Applications/Dia+.app`; the profile is `~/Library/Application Support/Dia Custom RTTM`. Its `Bridge/.state` contains provider configuration, separate credentials, model/tool catalogs, Memory, knowledge, connector manifests and workflow state. `Diagnostics` holds runtime logs. Bridge code and required runtime executables are bundled inside the app.
 
 See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), [Status](docs/STATUS.md) and the [September audit](docs/AUDIT-2026-09-07.md).

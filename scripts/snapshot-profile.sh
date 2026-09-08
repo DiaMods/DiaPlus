@@ -7,7 +7,7 @@ work_dir="${project_dir:h}"
 profile="${1:-${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}}"
 backup_root="${2:-$work_dir/backups/profiles}"
 label="${3:-pre-install.$(/bin/date +%Y%m%d-%H%M%S)}"
-app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
+app="${DIA_CUSTOM_APP:-$("$script_dir/default-app.sh")}"
 
 if (( $# > 3 )); then
   print -u2 "usage: snapshot-profile.sh [PROFILE [BACKUP_ROOT [LABEL]]]"

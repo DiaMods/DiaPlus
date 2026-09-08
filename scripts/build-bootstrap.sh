@@ -6,7 +6,6 @@ project_dir="${script_dir:h}"
 source_dir="$project_dir/src/bootstrap"
 output_dir="$project_dir/.build/bootstrap"
 source_app="${1:-${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}}"
-sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
 
 if [[ ! -d "$source_app" ]]; then
   print -u2 "Dia is not installed at $source_app"
@@ -32,18 +31,27 @@ static const uint32_t dia_custom_morning_brief_signature[] = {0};
 HEADER
 fi
 
-xcrun clang -c -Os -x objective-c -fblocks \
+prebuilt="$(node "$script_dir/prebuilt.js" bootstrap \
+  "$source_dir/offline-bootstrap.c" "$source_dir/offline-bootstrap-arm64.S" \
+  "$source_dir/offline-bootstrap-introspection.swift" \
+  "$output_dir/prompt-tools-offsets.h" "$output_dir/native-actions-offsets.h")"
+if [[ -n "$prebuilt" ]]; then
+  print "$prebuilt"
+  exit 0
+fi
+sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
+xcrun clang -target arm64-apple-macos14.0 -c -Os -x objective-c -fblocks \
   -isysroot "$sdk_path" \
   -I "$output_dir" \
   "$source_dir/offline-bootstrap.c" \
   -o "$output_dir/offline-bootstrap.o"
 
-xcrun clang -c -Os \
+xcrun clang -target arm64-apple-macos14.0 -c -Os \
   -isysroot "$sdk_path" \
   "$source_dir/offline-bootstrap-arm64.S" \
   -o "$output_dir/offline-bootstrap-arm64.o"
 
-xcrun swiftc -emit-library -O \
+xcrun swiftc -target arm64-apple-macos14.0 -emit-library -O \
   -sdk "$sdk_path" \
   "$source_dir/offline-bootstrap-introspection.swift" \
   "$output_dir/offline-bootstrap.o" \

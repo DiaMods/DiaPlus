@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
 import test from "node:test";
+import { execFileSync } from "node:child_process";
 import { runAppleHelper } from "../src/media-helper.js";
 import { runAppleProvider } from "../src/providers/apple.js";
 
@@ -12,6 +13,9 @@ const directory = dirname(fileURLToPath(import.meta.url));
 const helperPath = resolve(directory, "../../.build/apple-model-helper/DiaCustomAppleModel");
 const invoke = (request, onEvent) => runAppleHelper(request, { helperPath, onEvent });
 async function built(context) {
+  if (process.platform !== 'darwin' || Number(execFileSync('/usr/bin/sw_vers', ['-productVersion'], { encoding: 'utf8' }).split('.')[0]) < 27) {
+    context.skip('Apple helper requires macOS 27'); return false;
+  }
   try { await access(helperPath); return true; }
   catch { context.skip("Apple helper has not been built"); return false; }
 }

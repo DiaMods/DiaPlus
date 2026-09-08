@@ -120,9 +120,8 @@ export class CustomUpdater {
         await plist(official, 'CFBundleIdentifier') !== source.bundleID || await plist(official, 'CFBundleVersion') !== release.build ||
         await plist(official, 'CFBundleShortVersionString') !== release.version) throw new Error('The signed app does not match the pinned Dia publisher and release');
     const { toolkit, node, env } = await this.materialize(job);
-    await run('/usr/bin/xcrun', ['--find', 'clang'], { env });
     await mkdir(join(job, 'work'), { recursive: true, mode: 0o700 });
-    const candidate = join(job, 'Dia Custom RTTM.app');
+    const candidate = join(job, 'Dia+.app');
     const buildEnv = { ...env, DIA_CUSTOM_MODS: mods.join(','), DIA_CUSTOM_EFFECTIVE_MODS: mods.join(','), DIA_CUSTOM_PROFILE: join(job, 'validation-profile'), DIA_CUSTOM_APP: candidate, DIA_CUSTOM_SOURCE_APP: official };
     await this.setState({ phase: 'validating' });
     const compatibility = JSON.parse(await run(node, [join(toolkit, 'scripts/compatibility.js'), official, '--mods', mods.join(','), '--json'], { env, timeout: 300000 }));
@@ -132,7 +131,9 @@ export class CustomUpdater {
     const log = createWriteStream(join(job, 'build.log'), { mode: 0o600 });
     try { await run('/bin/zsh', [join(toolkit, 'scripts/build.sh')], { env: buildEnv, timeout: 30 * 60_000, log }); }
     finally { log.end(); }
-    await run('/usr/bin/xcrun', ['swiftc', join(toolkit, 'src/updater/quit-app.swift'), '-o', join(job, 'quit-app')], { env, timeout: 120000 });
+    const quitHelper = await run(node, [join(toolkit, 'scripts/prebuilt.js'), 'quit-app'], { env });
+    if (quitHelper) await copyFile(quitHelper, join(job, 'quit-app'));
+    else await run('/usr/bin/xcrun', ['swiftc', '-target', 'arm64-apple-macos14.0', join(toolkit, 'src/updater/quit-app.swift'), '-o', join(job, 'quit-app')], { env, timeout: 120000 });
     if (JSON.stringify(await this.configuredMods()) !== JSON.stringify(mods)) throw new Error('Mods changed during preparation; check and prepare the update again');
     const runtimeID = await plist(candidate, 'DiaCustomBridgeRuntimeID');
     const transaction = { job, toolkit, node, env, app: await realpath(this.app), profile: await realpath(this.profileDirectory), candidate, mods, runtimeID, release, statePath: this.statePath };

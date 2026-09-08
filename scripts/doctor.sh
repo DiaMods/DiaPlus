@@ -5,7 +5,7 @@ script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 work_dir="${project_dir:h}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
-app="${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}"
+app="${DIA_CUSTOM_APP:-$("$script_dir/default-app.sh")}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
 enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build)"
@@ -23,7 +23,9 @@ mod_enabled() {
 
 pass "Dia Mods manifest resolved ($(print -r -- "$enabled_mods" | /usr/bin/awk -F, '{print NF}') mods enabled)"
 
-for dependency in node npm xcrun codesign; do
+dependencies=(node codesign)
+[[ -f "$project_dir/prebuilt/manifest.json" ]] || dependencies+=(npm xcrun)
+for dependency in "${dependencies[@]}"; do
   if command -v "$dependency" >/dev/null; then pass "$dependency is available"; else fail "$dependency is missing"; fi
 done
 if command -v node >/dev/null && node -e 'import("node:sqlite")' >/dev/null 2>&1; then
@@ -42,7 +44,7 @@ if [[ -d "$source_app" ]]; then
     warn "installed Dia build $source_build cannot be used until its enabled mods are audited"
   fi
 else
-  fail "original Dia is missing at $source_app"
+  warn "original Dia is not installed at $source_app; the installer and updater can obtain a verified official source"
 fi
 
 if [[ -d "$app" ]]; then

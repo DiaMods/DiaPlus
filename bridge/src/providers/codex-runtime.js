@@ -3,11 +3,8 @@ import { access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { bridgeDirectory } from '../paths.js';
+import { join } from 'node:path';
 const exec = promisify(execFile);
-const require = createRequire(import.meta.url);
 const environment = Object.fromEntries([
   'HOME','LANG','LC_ALL','LOGNAME','PATH','SHELL','TERM','TMPDIR','USER',
 ].flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]));
@@ -32,15 +29,15 @@ export function decisionConfigOverrides(servers) {
   ];
 }
 export async function codexExecutable() {
-  // Prefer the current signed app CLI when installed. npm SDK releases can lag
-  // the desktop config schema. Installed Dia also carries a compatible copy.
-  for (const candidate of [process.env.DIA_CUSTOM_CODEX_BINARY, '/Applications/Codex.app/Contents/Resources/codex', join(bridgeDirectory,'bin/codex')].filter(Boolean)) {
-    try { await access(candidate, constants.X_OK); return candidate; } catch { /* next supported runtime */ }
+  const candidates = [process.env.DIA_CUSTOM_CODEX_BINARY,
+    '/Applications/Codex.app/Contents/Resources/codex',
+    process.env.HOME && join(process.env.HOME, 'Applications/Codex.app/Contents/Resources/codex'),
+    ...[...(process.env.PATH ?? '').split(':'), '/opt/homebrew/bin', '/usr/local/bin']
+      .filter(path => path.startsWith('/')).map(path => join(path, 'codex'))];
+  for (const candidate of candidates.filter(Boolean)) {
+    try { await access(candidate, constants.X_OK); return candidate; } catch { /* next local installation */ }
   }
-  if (process.platform !== 'darwin') throw new Error('The bundled Dia Codex adapter requires macOS');
-  const packageName = process.arch === 'arm64' ? '@openai/codex-darwin-arm64' : '@openai/codex-darwin-x64';
-  const triple = process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';
-  return join(dirname(require.resolve(`${packageName}/package.json`)), 'vendor', triple, 'bin/codex');
+  throw new Error('Install and sign in to Codex on this Mac to use the Codex provider. Dia+ uses your local Codex installation.');
 }
 export async function createDecisionCodex({ executable = codexExecutable, execute = exec, CodexClient = Codex } = {}) {
   const binary = await executable();
@@ -52,7 +49,7 @@ export async function createDecisionCodex({ executable = codexExecutable, execut
     const { stdout } = await execute(binary, [...base.flatMap(value => ['--config',value]), 'mcp','list','--json'], { env: environment, timeout: 15000, maxBuffer: 4 * 1024 * 1024 });
     inventory = JSON.parse(stdout);
   } catch(error) {
-    throw new Error('Codex could not load its login/configuration. Update the Codex app or rebuild Dia Custom with a compatible Codex CLI. ' + String(error.message).slice(0,800));
+    throw new Error('Codex could not load its login/configuration. Update your local Codex installation. ' + String(error.message).slice(0,800));
   }
   if (!Array.isArray(inventory)) throw new Error('Codex returned an invalid MCP inventory');
   return new CodexClient({ codexPathOverride: binary, config: { model_reasoning_summary: 'detailed' }, configOverrides: decisionConfigOverrides(inventory), env: environment });

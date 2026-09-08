@@ -240,7 +240,7 @@ export function renderSettingsPage(adminToken) {
       <label><span>Schedule</span><span><input id="workflowEnabled" type="checkbox"> Enable recurring runs</span></label>
       <div class="wide actions"><button id="researchNow" type="submit">Research now</button><button id="saveWorkflow" type="button" class="secondary">Save automation</button></div>
     </form>
-    <div class="muted" style="margin-top:10px">Automations run while Dia Custom is open. Missed intervals are skipped. New schedules stay disabled until you enable them.</div>
+    <div class="muted" style="margin-top:10px">Automations run while Dia+ is open. Missed intervals are skipped. New schedules stay disabled until you enable them.</div>
     <div id="workflowList"></div>
     <div id="researchRuns"></div>
   </div>
@@ -264,7 +264,7 @@ export function renderSettingsPage(adminToken) {
   </section>
   <section class="settings-panel" id="panel-updates" role="tabpanel" aria-labelledby="tab-updates" tabindex="0" hidden>
   <h2 id="custom-updater">Custom updater</h2>
-  <div class="muted">Official releases are downloaded and rebuilt with every enabled mod. Installation restarts Dia Custom and preserves an app and profile rollback point.</div>
+  <div class="muted">Official releases are downloaded and rebuilt with every enabled mod. Installation restarts Dia+ and preserves an app and profile rollback point.</div>
   <div class="card">
     <div id="updaterStatus" role="status">Loading updater…</div>
     <div id="updaterDetail" class="muted" style="margin:10px 0"></div>
@@ -378,9 +378,9 @@ export function renderSettingsPage(adminToken) {
         }
         memoryStatus.textContent = memory.semanticError || '';
         modNotice.textContent = modData.rebuildRequired
-          ? 'A clean Dia Custom rebuild is required to apply pending changes.'
+          ? 'A clean Dia+ rebuild is required to apply pending changes.'
           : modData.restartRequired
-            ? 'Restart Dia Custom to apply pending changes.'
+            ? 'Restart Dia+ to apply pending changes.'
             : modData.unavailableMods?.length
               ? modData.unavailableMods.length + ' configured mod(s) are temporarily unavailable for this Dia build.'
               : 'All configured mods are active.';
@@ -424,8 +424,8 @@ export function renderSettingsPage(adminToken) {
                 method: 'PUT', body: JSON.stringify({ enabled: wanted }),
               });
               modStatus.textContent = mod.rebuildOnChange
-                ? 'Saved. Rebuild Dia Custom to apply this change.'
-                : 'Saved. Restart Dia Custom to apply this change.';
+                ? 'Saved. Rebuild Dia+ to apply this change.'
+                : 'Saved. Restart Dia+ to apply this change.';
               await load();
             } catch (error) {
               toggle.checked = !wanted;
@@ -1012,7 +1012,7 @@ export function initializeConnectorSettings({ document, request, confirm = globa
       field('liveFields').disabled = !enabled;
       list.replaceChildren();
       nativeList.replaceChildren();
-      message(notice, enabled ? 'Connections for ' + (profile.selectedOptions?.[0]?.textContent || profileID) : 'Enable the Live connectors mod in Dia Mods and restart Dia Custom to use live connections.');
+      message(notice, enabled ? 'Connections for ' + (profile.selectedOptions?.[0]?.textContent || profileID) : 'Enable the Live connectors mod in Dia Mods and restart Dia+ to use live connections.');
       const connectors = value.connectors || [];
       if (connectors.some(connector => connector.desiredConnected && !connector.executionReady && connector.connectionState !== 'auth-required')) scheduleRefresh();
       const custom = enabled ? connectors.filter(item => item.execution === 'bridge') : [];
@@ -1123,7 +1123,7 @@ export function renderModsPage(adminToken) {
 </head>
 <body>
   <h1>Dia Mods</h1>
-  <div class="intro">Configure the independent changes that make Dia Custom work. Required isolation and routing protections stay locked on.</div>
+  <div class="intro">Configure the independent changes that make Dia+ work. Required isolation and routing protections stay locked on.</div>
   <div id="notice"></div>
   <div id="list" class="list"></div>
   <div id="status" class="intro"></div>
@@ -1144,9 +1144,9 @@ export function renderModsPage(adminToken) {
     async function load() {
       const value = await request('/api/mods');
       notice.textContent = value.rebuildRequired
-        ? 'Rebuild Dia Custom to apply pending build changes.'
+        ? 'Rebuild Dia+ to apply pending build changes.'
         : value.restartRequired
-          ? 'Restart Dia Custom to apply pending changes.'
+          ? 'Restart Dia+ to apply pending changes.'
           : value.unavailableMods.length
             ? value.unavailableMods.length + ' configured mod(s) are temporarily unavailable for this Dia build.'
             : 'All configured mods are active.';
@@ -1180,8 +1180,8 @@ export function renderModsPage(adminToken) {
               method: 'PUT', body: JSON.stringify({ enabled }),
             });
             status.textContent = mod.rebuildOnChange
-              ? 'Saved. Rebuild Dia Custom to apply it.'
-              : 'Saved. Restart Dia Custom to apply it.';
+              ? 'Saved. Rebuild Dia+ to apply it.'
+              : 'Saved. Restart Dia+ to apply it.';
             await load();
           } catch (error) {
             toggle.checked = !enabled; toggle.disabled = mod.required;
@@ -1215,7 +1215,7 @@ export function initializeUpdaterSettings({ document, request }) {
   for (const [id, action] of [['checkUpdate','check'],['prepareUpdate','prepare'],['installUpdate','install']]) {
     field(id).addEventListener('click', async () => {
       field(id).disabled = true;
-      field('updaterStatus').textContent = action === 'install' ? 'Restarting Dia Custom. This page will close during installation.' : 'Working…';
+      field('updaterStatus').textContent = action === 'install' ? 'Restarting Dia+. This page will close during installation.' : 'Working…';
       try { await request('/api/updater/' + action, { method: 'POST', body: '{}' }); await refresh(); }
       catch (error) { field('updaterStatus').textContent = error.message; field(id).disabled = false; }
     });

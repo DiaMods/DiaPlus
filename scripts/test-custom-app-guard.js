@@ -20,6 +20,14 @@ try {
   await mkdir(join(customApp, "Contents"), { recursive: true });
   await writeFile(join(customApp, "Contents/Info.plist"), plist("local.rttm.dia"));
   assert.equal(assertPatchableCustomApp(customApp), customApp);
+  const plus = join(directory, 'Dia+.app');
+  await mkdir(join(plus, 'Contents'), { recursive: true });
+  await writeFile(join(plus, 'Contents/Info.plist'), plist('local.rttm.dia'));
+  assert.equal(assertPatchableCustomApp(plus), plus);
+  const plusOfficial = join(directory, 'Dia+.official.app');
+  await mkdir(join(plusOfficial, 'Contents'), { recursive: true });
+  await writeFile(join(plusOfficial, 'Contents/Info.plist'), plist('company.thebrowser.dia'));
+  assert.throws(() => assertPatchableCustomApp(plusOfficial), /non-clone app/);
 
   const renamedOfficial = join(directory, "Dia Custom Renamed Official.app");
   await mkdir(join(renamedOfficial, "Contents"), { recursive: true });

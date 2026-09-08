@@ -5,7 +5,6 @@ import { appsStatePath } from "./paths.js";
 
 const profilePattern = /^[^/\\\0]{1,120}$/;
 const connectorPattern = /^[a-z0-9][a-z0-9._-]{0,119}$/i;
-const morningBriefRetryMilliseconds = 30 * 60_000;
 
 function cleanProfileID(value) {
   const profileID = typeof value === "string" && profilePattern.test(value.trim())
@@ -244,12 +243,11 @@ export class AppsStateStore {
     const profileRuns = this.value.morningBrief.runs[selectedProfile] ?? {};
     const run = profileRuns[day] ?? null;
     const enabled = this.value.morningBrief.enabledProfileID === selectedProfile;
-    const afterWindowStart = now.getHours() >= this.value.morningBrief.windowStartHour;
-    const finished = run?.status === "succeeded";
-    const pending = run?.status === "running" &&
-      Date.parse(run.updatedAt ?? 0) > now.getTime() - morningBriefRetryMilliseconds;
-    const coolingDown = run?.status === "failed" &&
-      Date.parse(run.updatedAt ?? 0) > now.getTime() - morningBriefRetryMilliseconds;
+    const withinMorningWindow = now.getHours() >= this.value.morningBrief.windowStartHour &&
+      now.getHours() < this.value.morningBrief.windowEndHour;
+    // A native report can remain "running" when no ingestion callback arrives.
+    // Any recorded attempt consumes today's automatic run; elapsed time must
+    // never turn an unfinished or failed report into another scheduled brief.
     const controllerAvailable = run?.stage !== "native-controller-incompatible";
     return {
       enabled,
@@ -263,7 +261,7 @@ export class AppsStateStore {
       localDay: day,
       windowStartHour: this.value.morningBrief.windowStartHour,
       windowEndHour: this.value.morningBrief.windowEndHour,
-      due: enabled && afterWindowStart && !finished && !pending && !coolingDown,
+      due: enabled && withinMorningWindow && run === null,
       run,
       lastSuccess: Object.entries(profileRuns)
         .filter(([, value]) => value?.status === "succeeded")

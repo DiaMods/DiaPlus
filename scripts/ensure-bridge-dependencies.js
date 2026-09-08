@@ -7,14 +7,14 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export function ensureBridgeDependencies(directory, {
-  install = () => execFileSync("npm", ["ci", "--omit=dev"], { cwd: directory, stdio: "inherit" }),
+  install = () => execFileSync("npm", ["ci", "--omit=dev", "--omit=optional"], { cwd: directory, stdio: "inherit" }),
 } = {}) {
   const packageText = readFileSync(join(directory, "package.json"), "utf8");
   const lockText = readFileSync(join(directory, "package-lock.json"), "utf8");
   const manifest = JSON.parse(packageText);
   const lock = JSON.parse(lockText);
   const fingerprint = createHash("sha256").update(JSON.stringify([
-    1, process.platform, process.arch, process.versions.modules, packageText, lockText,
+    2, process.platform, process.arch, process.versions.modules, packageText, lockText,
   ])).digest("hex");
   const marker = join(directory, "node_modules/.dia-custom-dependencies.sha256");
   const packagesMatch = () => Object.keys(manifest.dependencies ?? {}).every((name) => {
@@ -33,6 +33,13 @@ export function ensureBridgeDependencies(directory, {
   rmSync(marker, { force: true });
   install();
   if (!packagesMatch()) throw new Error("installed bridge dependencies do not match package-lock.json");
+  // The SDK accepts an explicit locally installed executable. Its transitive
+  // npm CLI launcher and native optional packages are unnecessary to ship.
+  for (const name of ['codex', 'codex-darwin-arm64', 'codex-darwin-x64',
+    'codex-linux-arm64', 'codex-linux-x64', 'codex-win32-arm64', 'codex-win32-x64']) {
+    rmSync(join(directory, 'node_modules/@openai', name), { recursive: true, force: true });
+  }
+  rmSync(join(directory, 'node_modules/.bin/codex'), { force: true });
   const temporary = `${marker}.${process.pid}.tmp`;
   try {
     writeFileSync(temporary, `${fingerprint}\n`, { mode: 0o600 });
