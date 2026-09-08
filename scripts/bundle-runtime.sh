@@ -30,9 +30,7 @@ fi
 if [[ ! -x "$extracted_dir/bin/node" ]]; then
   /usr/bin/tar -xzf "$archive_path" -C "$runtime_dir"
 fi
-if [[ ! -d "$project_dir/bridge/node_modules/@openai/codex-sdk" ]]; then
-  (cd "$project_dir/bridge" && npm ci --omit=dev)
-fi
+node "$script_dir/ensure-bridge-dependencies.js" "$project_dir/bridge"
 
 node_target="$app/Contents/Helpers/DiaCustomNode"
 bridge_target="$app/Contents/Resources/DiaCustomBridge"
@@ -44,6 +42,28 @@ mkdir -p "${node_target:h}" "$bridge_target"
   --exclude test \
   --exclude '*.log' \
   "$project_dir/bridge/" "$bridge_target/"
+
+# Keep a compatible Codex CLI in the app even when the desktop SDK and npm
+# release cadences differ. Updater jobs reuse this signed bundled copy.
+codex_source="$project_dir/bridge/bin/codex"
+if [[ -x "/Applications/Codex.app/Contents/Resources/codex" ]]; then
+  codex_source="/Applications/Codex.app/Contents/Resources/codex"
+fi
+if [[ -x "$codex_source" ]]; then
+  mkdir -p "$bridge_target/bin"
+  /usr/bin/ditto "$codex_source" "$bridge_target/bin/codex"
+fi
+
+# Carry the exact mod sources and pinned build runtime with the installed app.
+# The bridge itself is materialized from DiaCustomBridge when preparing an update.
+updater_target="$app/Contents/Resources/DiaCustomUpdater"
+mkdir -p "$updater_target/runtime"
+for source_dir in scripts src research/tools; do
+  mkdir -p "$updater_target/$source_dir"
+  /usr/bin/rsync -a --delete "$project_dir/$source_dir/" "$updater_target/$source_dir/"
+done
+/usr/bin/ditto "$project_dir/dia-custom" "$updater_target/dia-custom"
+/usr/bin/ditto "$archive_path" "$updater_target/runtime/$node_archive"
 
 runtime_id="$(
   find "$project_dir/bridge/src" "$project_dir/bridge/config" \

@@ -31,7 +31,6 @@ model_catalog="$mutable_bridge_state_dir/models.json"
 tool_coverage="$mutable_bridge_state_dir/tool-coverage.json"
 provider_config="$mutable_bridge_state_dir/config.json"
 memory_database="$mutable_bridge_state_dir/memory.sqlite3"
-enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
 mod_enabled() {
   case ",${enabled_mods}," in
     *",${1},"*) return 0 ;;
@@ -45,9 +44,11 @@ if [[ ! -d "$app" ]]; then
 fi
 fresh_profile=false
 [[ -f "$profile/User Data/Local State" ]] || fresh_profile=true
-node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" >/dev/null
+node "$script_dir/check-app-target.js" install "$app"
+enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --app "$app")"
+node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" --allow-structural --require-patched >/dev/null
 if [[ ! -f "$embedded_bootstrap" ]]; then
-  "$script_dir/install.sh" "$app"
+  DIA_CUSTOM_EFFECTIVE_MODS="$enabled_mods" "$script_dir/install.sh" "$app"
 fi
 
 mkdir -p "$diagnostics_dir" "$mutable_bridge_state_dir"
@@ -79,7 +80,7 @@ fi
 [[ -e "$network_log" ]] || : > "$network_log"
 /bin/chmod 600 "$network_log"
 
-DIA_CUSTOM_PROFILE="$profile" "$script_dir/configure-profile.sh"
+DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" "$script_dir/configure-profile.sh"
 
 node_bin="$app/Contents/Helpers/DiaCustomNode"
 if ! "$node_bin" -e 'import("node:sqlite")' >/dev/null 2>&1; then
@@ -90,9 +91,10 @@ fi
 # Restart on every explicit launch so source and environment changes cannot
 # leave an older bridge process serving the newly patched browser.
 /bin/launchctl remove "$bridge_label" >/dev/null 2>&1 || true
-sleep 0.1
+node "$script_dir/bridge-runtime.js" stop "$app"
 : > "$bridge_log"
 /bin/chmod 600 "$bridge_log"
+runtime_id="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBridgeRuntimeID' "$app/Contents/Info.plist")"
 bridge_environment=(
   "DIA_CUSTOM_CAPTURE_DIR=$diagnostics_dir/Captures"
   "DIA_CUSTOM_DEBUG_PORT=$debug_port"
@@ -104,7 +106,7 @@ bridge_environment=(
   "DIA_CUSTOM_TOOL_COVERAGE_PATH=$tool_coverage"
   "DIA_CUSTOM_MEMORY_PATH=$memory_database"
   "DIA_CUSTOM_MODS=$enabled_mods"
-  "DIA_CUSTOM_RUNTIME_ID=$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBridgeRuntimeID' "$app/Contents/Info.plist")"
+  "DIA_CUSTOM_RUNTIME_ID=$runtime_id"
 )
 if mod_enabled apple-models && [[ -x "$apple_model_helper" ]]; then
   bridge_environment+=("DIA_CUSTOM_APPLE_MODEL_HELPER=$apple_model_helper")
@@ -123,7 +125,10 @@ bridge_ready=false
 # bridge begins listening. Keep launch fail-closed, but do not misreport that
 # expected one-time/local indexing work as a startup failure.
 for _ in {1..300}; do
-  if /usr/bin/curl --silent --fail --max-time 1 http://127.0.0.1:8765/health >/dev/null 2>&1; then
+  health="$(/usr/bin/curl --silent --fail --max-time 1 http://127.0.0.1:8765/health 2>/dev/null || true)"
+  if [[ -n "$health" ]]; then
+    print -r -- "$health" | node "$script_dir/bridge-runtime.js" check-health \
+      "$runtime_id" "$profile" "$enabled_mods"
     bridge_ready=true
     break
   fi
@@ -150,7 +155,6 @@ launch_args=(
   --user-data-dir="$profile/User Data"
   --disable-component-update
   --remote-debugging-port="$debug_port"
-  --use-mock-keychain
   --no-first-run
   --disable-sync
 )

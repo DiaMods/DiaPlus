@@ -1,0 +1,8 @@
+{
+  "id": "spark",
+  "displayName": "Spark Mail",
+  "execution": "bridge",
+  "transport": "spark-cli",
+  "authentication": "none",
+  "command": "/usr/local/bin/spark"
+}

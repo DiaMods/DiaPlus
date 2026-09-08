@@ -23,12 +23,20 @@ for patcher in "$project_dir"/src/patches/*.js; do
   node --check "$patcher"
 done
 node "$project_dir/scripts/test-custom-app-guard.js"
+node "$project_dir/scripts/test-runtime-scripts.js"
+node "$project_dir/scripts/test-install-transaction.js"
+node "$project_dir/scripts/test-browser-process-guard.js"
+node "$project_dir/scripts/test-bridge-dependencies.js"
+node --check "$project_dir/scripts/check-app-target.js"
+node --check "$project_dir/scripts/bridge-runtime.js"
+node --check "$project_dir/scripts/ensure-bridge-dependencies.js"
 node --check "$project_dir/scripts/mods.js"
 node --check "$project_dir/scripts/modules.js"
 node --check "$project_dir/scripts/check-dia-build.js"
 node --check "$project_dir/scripts/compatibility.js"
 node --check "$project_dir/scripts/update-policy.js"
 node "$project_dir/scripts/test-compatibility.js" "$source_app"
+node "$project_dir/scripts/test-agent-handler.js" "$source_app"
 mod_test_profile="$(/usr/bin/mktemp -d -t dia-custom-mods)"
 trap '/bin/rm -rf "$mod_test_profile"' EXIT
 /usr/bin/env -u DIA_CUSTOM_MODS -u DIA_CUSTOM_MODULES node "$project_dir/scripts/mods.js" \
@@ -78,7 +86,7 @@ node "$project_dir/scripts/test-dia-import.js"
 node "$project_dir/scripts/test-profile-integrity.js"
 if ! /usr/bin/grep -q 'snapshot-profile.sh' "$project_dir/scripts/build.sh" || \
    ! /usr/bin/grep -q 'preflight-profile.sh' "$project_dir/scripts/build.sh" || \
-   ! /usr/bin/grep -q 'snapshot-profile.sh' "$project_dir/scripts/install.sh" || \
+   ! /usr/bin/grep -q 'snapshot-profile.sh' "$project_dir/scripts/refresh-install.sh" || \
    ! /usr/bin/grep -q 'latest-install-transaction.json' "$project_dir/scripts/build.sh"; then
   print -u2 "install/update profile transaction guard is incomplete"
   exit 1
@@ -97,6 +105,7 @@ xcrun swiftc -parse-as-library -O "$project_dir/src/bootstrap/offline-bootstrap-
   -framework Foundation -framework AppKit -framework WebKit \
   -o "$startup_test_dir/test-ui-startup"
 "$startup_test_dir/test-ui-startup"
+/bin/zsh "$script_dir/test-advanced-chat.sh"
 if ! /usr/bin/grep -q 'dia_custom_prepare_self_contained_runtime' \
     "$project_dir/src/bootstrap/offline-bootstrap.c" || \
    ! /usr/bin/grep -q 'dia_custom_schedule_window_menu_repair' \

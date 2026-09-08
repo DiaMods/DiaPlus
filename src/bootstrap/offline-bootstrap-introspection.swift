@@ -128,6 +128,66 @@ private func directReflectedValue(in value: Any, named name: String) -> Any? {
     })?.value
 }
 
+@_silgen_name("dia_custom_call_swift_void_method")
+private func callSwiftVoidMethod(_ implementation: UnsafeRawPointer, _ object: UnsafeRawPointer)
+
+private func unwrappedValue(_ value: Any) -> Any? {
+    let mirror = Mirror(reflecting: value)
+    if mirror.displayStyle == .optional {
+        return mirror.children.first.flatMap { unwrappedValue($0.value) }
+    }
+    return value
+}
+
+private func nativeWindowControllers(in value: Any, depth: Int = 0) -> [AnyObject] {
+    guard depth < 6, let value = unwrappedValue(value) else { return [] }
+    if String(reflecting: Swift.type(of: value)) == "Window.WindowController" {
+        return [value as AnyObject]
+    }
+    let mirror = Mirror(reflecting: value)
+    if mirror.displayStyle == .dictionary || mirror.displayStyle == .collection ||
+        mirror.displayStyle == .tuple {
+        return mirror.children.flatMap { nativeWindowControllers(in: $0.value, depth: depth + 1) }
+    }
+    let allowed = Set(["controller", "windowController", "windowsController",
+        "windowCoordinationController", "windowControllers"])
+    return mirror.children.filter { allowed.contains($0.label ?? "") }
+        .flatMap { nativeWindowControllers(in: $0.value, depth: depth + 1) }
+}
+
+@_cdecl("dia_custom_swift_invoke_morning_brief")
+@MainActor
+public func diaCustomSwiftInvokeMorningBrief(
+    _ rawApplicationController: UnsafeRawPointer?,
+    _ rawPlatformWindow: UnsafeRawPointer?,
+    _ implementation: UnsafeRawPointer?
+) -> Bool {
+    guard let rawApplicationController, let rawPlatformWindow, let implementation else { return false }
+    let application = Unmanaged<AnyObject>.fromOpaque(rawApplicationController).takeUnretainedValue()
+    let window = Unmanaged<AnyObject>.fromOpaque(rawPlatformWindow).takeUnretainedValue()
+    guard String(reflecting: Swift.type(of: window)) == "Window.PlatformWindow",
+          let viewModel = directReflectedValue(in: window, named: "viewModel").flatMap(unwrappedValue),
+          Mirror(reflecting: viewModel).displayStyle == .class else {
+        appendActionProbe("morning-brief: native PlatformWindow view model unavailable")
+        return false
+    }
+    let candidates = nativeWindowControllers(in: application).filter { controller in
+        guard let model = directReflectedValue(in: controller, named: "viewModel").flatMap(unwrappedValue),
+              Mirror(reflecting: model).displayStyle == .class else { return false }
+        return (model as AnyObject) === (viewModel as AnyObject)
+    }
+    guard candidates.count == 1, let controller = candidates.first else {
+        appendActionProbe("morning-brief: matching WindowController count=\(candidates.count)")
+        return false
+    }
+    // Both the containing function and the self-only ABI were checked by the
+    // build generator; C rechecks the exact prologue in the running image.
+    // Dia retains ownership of its connected sources, session, Report and UI.
+    callSwiftVoidMethod(implementation, Unmanaged.passUnretained(controller).toOpaque())
+    appendActionProbe("morning-brief: invoked native WindowController method")
+    return true
+}
+
 private func reflectedMenuItem(in value: Any, depth: Int = 0) -> NSMenuItem? {
     guard depth <= 4 else { return nil }
     if let menuItem = value as? NSMenuItem { return menuItem }
@@ -335,7 +395,7 @@ private func sendAdvancedNewTabStateCopy<T>(
     implementation: UnsafeRawPointer
 ) -> Bool {
     let fields = Array(Mirror(reflecting: value).children)
-    let expectedLabels = [
+    let sharedLabels = [
         "windowID",
         "displayDefaultBrowserUpsell",
         "displayReleaseNotesPostcard",
@@ -353,17 +413,28 @@ private func sendAdvancedNewTabStateCopy<T>(
         "diaProBackgroundButtonState",
         "lightConfiguration",
         "areAnimationsEnabled",
+    ]
+    // Build 86584 inserted a native rebrand flag and renamed the advanced
+    // logo field. Keep both audited shapes, without overwriting the rebrand
+    // choice or guessing offsets in an unfamiliar state value.
+    let isRebrandLayout = fields.count == 21
+    let expectedLabels = sharedLabels + (isRebrandLayout ? [
+        "isRebrandEnabled",
+        "isPersonalizeButtonEnabled",
+        "showDiaIcon",
+        "isPresentingCliaOnboardingView",
+    ] : [
         "isPersonalizeButtonEnabled",
         "showParticlesLogo",
         "isPresentingCliaOnboardingView",
-    ]
+    ])
+    let personalizeIndex = isRebrandLayout ? 18 : 17
+    let logoIndex = isRebrandLayout ? 19 : 18
     guard String(reflecting: T.self) == "NewTabPage.NewTabPageViewModel.State",
           fields.count == expectedLabels.count,
           fields.count == recursiveFieldCount(T.self),
           zip(fields, expectedLabels).allSatisfy({ $0.label == $1 }),
-          fields[17].value is Bool,
-          fields[18].value is Bool,
-          fields[19].value is Bool else {
+          (16..<expectedLabels.count).allSatisfy({ fields[$0].value is Bool }) else {
         if !didLogUnexpectedAdvancedNewTabState {
             didLogUnexpectedAdvancedNewTabState = true
             let fieldLayout = fields.enumerated().map { index, field in
@@ -378,31 +449,31 @@ private func sendAdvancedNewTabStateCopy<T>(
         }
         return false
     }
-    let personalizeEnabled = fields[17].value as! Bool
-    let particlesVisible = fields[18].value as! Bool
-    if !personalizeEnabled && particlesVisible {
+    let personalizeEnabled = fields[personalizeIndex].value as! Bool
+    let logoVisible = fields[logoIndex].value as! Bool
+    if !personalizeEnabled && logoVisible {
         return true
     }
 
     var copy = value
     return withUnsafeMutableBytes(of: &copy) { bytes -> Bool in
-        let personalizeOffset = recursiveFieldOffset(T.self, index: 17)
-        let particlesOffset = recursiveFieldOffset(T.self, index: 18)
+        let personalizeOffset = recursiveFieldOffset(T.self, index: personalizeIndex)
+        let logoOffset = recursiveFieldOffset(T.self, index: logoIndex)
         guard let base = bytes.baseAddress,
               personalizeOffset >= 0,
-              particlesOffset >= 0,
+              logoOffset >= 0,
               personalizeOffset + MemoryLayout<Bool>.size <= bytes.count,
-              particlesOffset + MemoryLayout<Bool>.size <= bytes.count else {
+              logoOffset + MemoryLayout<Bool>.size <= bytes.count else {
             return false
         }
         base.advanced(by: personalizeOffset).storeBytes(of: false, as: Bool.self)
-        base.advanced(by: particlesOffset).storeBytes(of: true, as: Bool.self)
+        base.advanced(by: logoOffset).storeBytes(of: true, as: Bool.self)
         callCurrentValueSubjectSend(
             implementation,
             Unmanaged.passUnretained(subject).toOpaque(),
             UnsafeRawPointer(base))
         appendActionProbe(
-            "advanced-new-tab-state: enabled particles and disabled legacy personalization")
+            "advanced-new-tab-state: enabled \(expectedLabels[logoIndex]) and disabled legacy personalization")
         return true
     }
 }

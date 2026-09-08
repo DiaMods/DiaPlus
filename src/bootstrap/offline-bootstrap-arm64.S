@@ -1,6 +1,16 @@
 .text
 .p2align 2
 
+// A discovered synchronous zero-argument Swift class method uses x20 for self.
+.globl _dia_custom_call_swift_void_method
+_dia_custom_call_swift_void_method:
+    stp x20, x30, [sp, #-16]!
+    mov x16, x0
+    mov x20, x1
+    blr x16
+    ldp x20, x30, [sp], #16
+    ret
+
 // Swift class allocating initializers keep the metatype in x20.  C cannot
 // express that convention, so these two tiny adapters bridge from the normal
 // arm64 C ABI without changing Dia's executable code.

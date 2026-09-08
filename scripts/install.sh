@@ -3,7 +3,6 @@ set -euo pipefail
 
 script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
-work_dir="${project_dir:h}"
 app="${1:-${DIA_CUSTOM_APP:-/Applications/Dia Custom RTTM.app}}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 
@@ -11,31 +10,24 @@ if [[ ! -d "$app" ]]; then
   print -u2 "Dia Custom is not installed at $app. Run './dia-custom build' first."
   exit 1
 fi
-if /usr/bin/pgrep -f "$app/Contents/MacOS/Dia" >/dev/null; then
-  print -u2 "Quit Dia Custom before updating its patched executables."
-  exit 1
+# Reject official/foreign bundles before snapshots, launchd changes, or any
+# Info.plist edits. Individual binary patch guards run too late for this.
+node "$script_dir/check-app-target.js" install "$app"
+node "$script_dir/browser-process-guard.js" assert-stopped "$app"
+
+# Direct refreshes stage a complete app and roll back automatically on failure.
+# build.sh calls the inner installer only on its already disposable copy.
+if [[ "${DIA_CUSTOM_SKIP_PROFILE_SNAPSHOT:-0}" != "1" ]]; then
+  exec "$script_dir/refresh-install.sh" "$app"
 fi
 
-profile_snapshot=""
-backup_app=""
-if [[ "${DIA_CUSTOM_SKIP_PROFILE_SNAPSHOT:-0}" != "1" &&
-      -f "$profile/User Data/Local State" ]]; then
-  install_stamp="$(/bin/date +%Y%m%d-%H%M%S)"
-  profile_snapshot="$(DIA_CUSTOM_APP="$app" \
-    "$script_dir/snapshot-profile.sh" "$profile" "$work_dir/backups/profiles" \
-      "pre-install.$install_stamp")"
-  print "Browser profile preserved at $profile_snapshot"
-  backup_app="$work_dir/backups/apps/Dia Custom RTTM.pre-install.$install_stamp.app"
-  mkdir -p "${backup_app:h}"
-  /bin/cp -cR "$app" "$backup_app"
-  print "Current app preserved at $backup_app"
+# Stop the runtime before snapshotting its profile databases or replacing code.
+if [[ "${DIA_CUSTOM_STAGING:-0}" != "1" ]]; then
+  /bin/launchctl remove local.rttm.dia.bridge >/dev/null 2>&1 || true
 fi
+node "$script_dir/bridge-runtime.js" stop "$app"
 
-# Retire the development launchd bridge. Installed builds carry their runtime
-# and start it directly from the signed app bundle.
-/bin/launchctl remove local.rttm.dia.bridge >/dev/null 2>&1 || true
-
-enabled_mods="${DIA_CUSTOM_EFFECTIVE_MODS:-$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)}"
+enabled_mods="${DIA_CUSTOM_EFFECTIVE_MODS:-$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --app "$app")}"
 enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" \
   node "$script_dir/mods.js" resolved --scope build)"
 node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" --allow-structural
@@ -115,7 +107,7 @@ fi
   /usr/libexec/PlistBuddy -c "Set :DiaCustomBuildMods '$enabled_build_mods'" "$info"
 
 # Configure Finder launches as well as explicit command-line launches.
-DIA_CUSTOM_PROFILE="$profile" "$script_dir/configure-profile.sh"
+DIA_CUSTOM_PROFILE="$profile" DIA_CUSTOM_MODS="$enabled_mods" "$script_dir/configure-profile.sh"
 
 # A certificate-backed designated requirement stays stable across rebuilds, so
 # macOS can retain the user's TCC and Keychain decisions.
@@ -132,17 +124,6 @@ codesign --verify --strict \
   "$app/Contents/Resources/agent-server-resources/dist/handler"
 codesign --verify --deep --strict "$app"
 "$app/Contents/Helpers/DiaCustomNode" -e 'import("node:sqlite")' >/dev/null
-
-if [[ -n "$profile_snapshot" ]]; then
-  transaction_file="$work_dir/backups/transactions/Dia Custom RTTM.pre-install.$install_stamp.json"
-  node "$script_dir/record-install-transaction.js" "$transaction_file" \
-    "$app" "$backup_app" "$profile" "$profile_snapshot"
-  mkdir -p "$profile/Bridge/.state"
-  /bin/chmod 700 "$profile/Bridge/.state"
-  /bin/cp "$transaction_file" "$profile/Bridge/.state/latest-install-transaction.json"
-  /bin/chmod 600 "$profile/Bridge/.state/latest-install-transaction.json"
-  print "Install rollback record: $transaction_file"
-fi
 
 if [[ "$sign_identity" == "-" ]]; then
   print "Installed Dia Custom with an ad-hoc signature in $app"

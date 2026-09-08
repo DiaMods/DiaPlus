@@ -4,7 +4,10 @@
     {
       "id": "identity-isolation",
       "label": "App & Keychain isolation",
-      "scope": ["build", "launch"],
+      "scope": [
+        "build",
+        "launch"
+      ],
       "defaultEnabled": true,
       "required": true,
       "criticality": "critical",
@@ -15,7 +18,12 @@
     {
       "id": "network-isolation",
       "label": "Dia service isolation",
-      "scope": ["build", "runtime", "bridge", "launch"],
+      "scope": [
+        "build",
+        "runtime",
+        "bridge",
+        "launch"
+      ],
       "defaultEnabled": true,
       "required": true,
       "criticality": "critical",
@@ -25,19 +33,44 @@
     },
     {
       "id": "update-blocker",
-      "label": "Controlled updates",
-      "scope": ["build", "launch"],
+      "label": "Disable stock updates",
+      "scope": [
+        "build",
+        "launch"
+      ],
       "defaultEnabled": true,
       "required": true,
       "criticality": "critical",
       "compatibilityValidator": "updater-plist",
       "rebuildOnChange": true,
-      "description": "Disables the clone's native updater and permits rebuilds only from audited Dia builds."
+      "description": "Disables Sparkle app replacement so an official update cannot overwrite the custom browser."
+    },
+    {
+      "id": "custom-updater",
+      "label": "Custom updater",
+      "scope": [
+        "build",
+        "runtime",
+        "bridge",
+        "launch"
+      ],
+      "defaultEnabled": true,
+      "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "custom-updater",
+      "rebuildOnChange": false,
+      "requires": [
+        "update-blocker"
+      ],
+      "description": "Checks official releases in the app, verifies every enabled mod, and installs a staged custom build with app and profile rollback."
     },
     {
       "id": "local-ai-routing",
       "label": "Local AI routing",
-      "scope": ["build", "bridge"],
+      "scope": [
+        "build",
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": true,
       "criticality": "critical",
@@ -48,7 +81,11 @@
     {
       "id": "account-bypass",
       "label": "Anonymous local profile",
-      "scope": ["build", "runtime", "launch"],
+      "scope": [
+        "build",
+        "runtime",
+        "launch"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -59,7 +96,11 @@
     {
       "id": "dia-import",
       "label": "Import from official Dia",
-      "scope": ["build", "runtime", "launch"],
+      "scope": [
+        "build",
+        "runtime",
+        "launch"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -70,7 +111,9 @@
     {
       "id": "model-picker",
       "label": "Native model picker",
-      "scope": ["runtime"],
+      "scope": [
+        "runtime"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -81,7 +124,9 @@
     {
       "id": "developer-tools",
       "label": "Developer surfaces",
-      "scope": ["runtime"],
+      "scope": [
+        "runtime"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -92,7 +137,10 @@
     {
       "id": "mod-manager",
       "label": "Native Mod Manager",
-      "scope": ["runtime", "bridge"],
+      "scope": [
+        "runtime",
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -103,7 +151,10 @@
     {
       "id": "native-memory",
       "label": "Local native Memory",
-      "scope": ["runtime", "bridge"],
+      "scope": [
+        "runtime",
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -114,7 +165,10 @@
     {
       "id": "reports",
       "label": "Native Reports",
-      "scope": ["build", "bridge"],
+      "scope": [
+        "build",
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -125,7 +179,9 @@
     {
       "id": "local-web",
       "label": "Local public-web tools",
-      "scope": ["bridge"],
+      "scope": [
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -136,7 +192,9 @@
     {
       "id": "connectors",
       "label": "Local connectors",
-      "scope": ["bridge"],
+      "scope": [
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -147,7 +205,11 @@
     {
       "id": "native-apps",
       "label": "Native Apps state",
-      "scope": ["runtime", "bridge", "launch"],
+      "scope": [
+        "runtime",
+        "bridge",
+        "launch"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -158,7 +220,10 @@
     {
       "id": "live-connectors",
       "label": "Live connector adapters",
-      "scope": ["runtime", "bridge"],
+      "scope": [
+        "runtime",
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -169,7 +234,11 @@
     {
       "id": "morning-brief",
       "label": "Native Morning Brief",
-      "scope": ["runtime", "bridge", "launch"],
+      "scope": [
+        "runtime",
+        "bridge",
+        "launch"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
@@ -180,13 +249,45 @@
     {
       "id": "apple-models",
       "label": "Apple Foundation Models",
-      "scope": ["build", "bridge"],
+      "scope": [
+        "build",
+        "bridge"
+      ],
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
       "compatibilityValidator": "apple-helper",
       "rebuildOnChange": true,
       "description": "Builds and exposes the optional Apple on-device model helper."
+    },
+    {
+      "id": "local-knowledge",
+      "label": "Local knowledge base",
+      "description": "Indexes imported documents and saved research with source provenance, separately for each Dia profile.",
+      "scope": [
+        "bridge"
+      ],
+      "defaultEnabled": true,
+      "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "bridge-owned",
+      "rebuildOnChange": false
+    },
+    {
+      "id": "local-workflows",
+      "label": "Local research and automations",
+      "description": "Runs local research and explicitly enabled schedules with read-only tools and stores their results in the local knowledge base.",
+      "scope": [
+        "bridge"
+      ],
+      "defaultEnabled": true,
+      "required": false,
+      "criticality": "optional",
+      "compatibilityValidator": "bridge-owned",
+      "rebuildOnChange": false,
+      "requires": [
+        "local-knowledge"
+      ]
     }
   ]
 }

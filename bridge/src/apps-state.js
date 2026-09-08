@@ -30,7 +30,7 @@ async function atomicWriteJSON(path, value) {
 
 function defaultState() {
   return {
-    version: 3,
+    version: 4,
     advancedChat: { enabled: true, entitledLocally: true },
     morningBrief: {
       enabledProfileID: null,
@@ -66,6 +66,19 @@ function normalizeState(raw) {
   const enabledProfileID = typeof rawEnabledProfileID === "string"
     ? cleanProfileID(rawEnabledProfileID)
     : null;
+  const rawConnections = raw?.bridgeConnections && typeof raw.bridgeConnections === "object" && !Array.isArray(raw.bridgeConnections)
+    ? raw.bridgeConnections : {};
+  const profiles = Object.values(rawConnections).some((value) => value?.connected !== undefined)
+    ? { Default: rawConnections } : rawConnections;
+  const bridgeConnections = Object.fromEntries(Object.entries(profiles).filter(([, rows]) =>
+    rows && typeof rows === "object" && !Array.isArray(rows)).map(([profileID, rows]) => [profileID,
+    Object.fromEntries(Object.entries(rows).filter(([, row]) => row && typeof row === "object").map(([id, row]) => [id, {
+      ...row,
+      // Older releases used connected for both intent and runtime health. Only
+      // a previously connected row opts into restoration during migration.
+      desiredConnected: typeof row.desiredConnected === "boolean" ? row.desiredConnected : row.connected === true,
+    }])),
+  ]));
   return {
     ...initial,
     advancedChat: { enabled: true, entitledLocally: true },
@@ -77,11 +90,7 @@ function normalizeState(raw) {
     nativeConnections: raw?.nativeConnections && typeof raw.nativeConnections === "object"
       ? raw.nativeConnections
       : {},
-    bridgeConnections: raw?.bridgeConnections && typeof raw.bridgeConnections === "object"
-      ? (Object.values(raw.bridgeConnections).some((value) => value?.connected !== undefined)
-        ? { Default: raw.bridgeConnections }
-        : raw.bridgeConnections)
-      : {},
+    bridgeConnections,
   };
 }
 
@@ -97,10 +106,18 @@ export class AppsStateStore {
     this.path = path;
     this.now = now;
     this.value = null;
+    this.loading = null;
+    this.pendingSave = Promise.resolve();
   }
 
   async load() {
+    if (this.loading) return this.loading;
     if (this.value) return this.value;
+    this.loading = this.loadFile().finally(() => { this.loading = null; });
+    return this.loading;
+  }
+
+  async loadFile() {
     try {
       this.value = normalizeState(JSON.parse(await readFile(this.path, "utf8")));
     } catch (error) {
@@ -112,7 +129,10 @@ export class AppsStateStore {
   }
 
   async save() {
-    await atomicWriteJSON(this.path, this.value);
+    const snapshot = structuredClone(this.value);
+    const pending = this.pendingSave.then(() => atomicWriteJSON(this.path, snapshot));
+    this.pendingSave = pending.catch(() => {});
+    await pending;
     return this.value;
   }
 
@@ -192,7 +212,9 @@ export class AppsStateStore {
       ...(profiles[selectedProfile] ?? {}),
       [id]: {
         ...current,
+        desiredConnected: patch.desiredConnected ?? current.desiredConnected ?? patch.connected ?? false,
         connected: patch.connected ?? current.connected ?? false,
+        connectionState: patch.connectionState ?? current.connectionState ?? "disconnected",
         authenticated: patch.authenticated ?? current.authenticated ?? false,
         executionReady: patch.executionReady ?? current.executionReady ?? false,
         accountLabel: typeof patch.accountLabel === "string"
@@ -204,6 +226,10 @@ export class AppsStateStore {
         lastError: typeof patch.lastError === "string"
           ? patch.lastError.slice(0, 500)
           : patch.lastError === null ? null : current.lastError ?? null,
+        sparkVersion: typeof patch.sparkVersion === "string" ? patch.sparkVersion.slice(0, 100) : current.sparkVersion ?? null,
+        syncCursor: typeof patch.syncCursor === "string" ? patch.syncCursor.slice(0, 16000) : patch.syncCursor === null ? null : current.syncCursor ?? null,
+        lastSync: typeof patch.lastSync === "string" ? patch.lastSync : patch.lastSync === null ? null : current.lastSync ?? null,
+        lastSyncError: typeof patch.lastSyncError === "string" ? patch.lastSyncError.slice(0, 500) : patch.lastSyncError === null ? null : current.lastSyncError ?? null,
         observedAt: this.now().toISOString(),
       },
     };

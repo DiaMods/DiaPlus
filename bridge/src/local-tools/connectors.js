@@ -57,7 +57,7 @@ const connectorToolDefinitions = [
 ];
 
 export function localConnectorTools() {
-  return connectorToolDefinitions.map((tool) => structuredClone(tool));
+  return connectorToolDefinitions.map((tool) => ({ ...structuredClone(tool), annotations: { readOnlyHint: true } }));
 }
 
 export function isLocalConnectorTool(name) {
@@ -73,9 +73,11 @@ export function isLocalConnectorTool(name) {
   ].includes(name);
 }
 
-export async function executeLocalConnectorTool(store, name, input = {}) {
+export async function executeLocalConnectorTool(store, name, input = {}, context = {}) {
+  const profileID = context.profileID ?? "Default";
   if (name.endsWith("connector_search")) {
     return store.search({
+      profileID,
       query: input.query,
       connectorIDs: input.connectorIDs,
       entryTypes: ["connector"],
@@ -84,6 +86,7 @@ export async function executeLocalConnectorTool(store, name, input = {}) {
   }
   if (name.endsWith("connector_query")) {
     return store.query({
+      profileID,
       uris: input.uris,
       entryTypes: ["connector"],
       mode: input.mode ?? "fullContent",
@@ -91,14 +94,14 @@ export async function executeLocalConnectorTool(store, name, input = {}) {
     });
   }
   if (name.endsWith("list_recent_people")) {
-    return store.recentPeople(input.limit);
+    return store.recentPeople(input.limit, { profileID });
   }
   if (name.endsWith("lookup_person")) {
     const query = [input.query, input.name, input.email]
       .filter((value) => typeof value === "string" && value.trim())
       .join(" ");
     if (!query) throw new Error("lookup_person requires query, name, or email");
-    return store.lookupPerson(query, input.limit);
+    return store.lookupPerson(query, input.limit, { profileID });
   }
   throw new Error(`unknown local connector tool: ${name}`);
 }

@@ -1,44 +1,11 @@
-import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
 import {
   buildDecisionPrompt,
   parseStructuredDecision,
   reportWorkflowRequiresTool,
 } from "../chat-shape.js";
-import { appleModelHelperPath } from "../paths.js";
-
-async function runHelper(request) {
-  await access(appleModelHelperPath);
-  const child = spawn(appleModelHelperPath, [], {
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  child.stdin.end(`${JSON.stringify(request)}\n`);
-  let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk) => { stdout += chunk; });
-  child.stderr.on("data", (chunk) => { stderr += chunk; });
-  const exitCode = await new Promise((resolve, reject) => {
-    child.on("error", reject);
-    child.on("close", resolve);
-  });
-  const lines = [];
-  for (const line of stdout.split("\n").filter(Boolean)) {
-    try {
-      lines.push(JSON.parse(line));
-    } catch {
-      // Preserve the helper's stderr/exit diagnostic below if a process was
-      // terminated before it could finish a JSON line.
-    }
-  }
-  const error = lines.find((line) => line.type === "error");
-  if (error) throw new Error(error.message);
-  if (exitCode !== 0) {
-    throw new Error(stderr.trim() || `Apple model helper exited with ${exitCode}`);
-  }
-  return lines.findLast((line) => line.type === "result")?.value;
-}
+import { runAppleHelper as runHelper } from "../media-helper.js";
+import { prepareMediaPayload } from "../media-inputs.js";
+import { FinalTextStream } from "./decision-stream.js";
 
 let cachedAppleStatus = null;
 let cachedAppleStatusAt = 0;
@@ -89,24 +56,60 @@ export async function appleSentenceEmbeddings(texts) {
   return runHelper({ action: "embed", texts });
 }
 
-export async function runAppleProvider({ provider, payload, tools, model, onReasoning }) {
+export async function prepareAppleSpeech() {
+  const value = await runHelper({ action: "prepare-speech" }, { timeoutMs: 600_000 });
+  cachedAppleStatus = null;
+  cachedAppleStatusAt = 0;
+  return value;
+}
+
+export async function runAppleProvider({ provider, payload, tools, model, onReasoning, onTextDelta, helper = runHelper }) {
+  const media = await prepareMediaPayload(payload, { target: provider.imageMode === "native" ? "apple" : "apple-vision", helper });
+  try {
+    return await runAppleTurn({ provider, payload: media.payload, images: media.images, tools, model, onReasoning, onTextDelta, helper });
+  } finally { await media.cleanup(); }
+}
+
+async function runAppleTurn({ provider, payload, images, tools, model, onReasoning, onTextDelta, helper }) {
   if (onReasoning) {
     await onReasoning(provider.mode === "on-device"
       ? "Using Apple Intelligence on this Mac..."
       : "Using Apple Private Cloud Compute...");
   }
   const structured = tools.length > 0;
-  const value = await runHelper({
+  const textStream = new FinalTextStream(onTextDelta);
+  const value = await helper({
     action: "generate",
+    stream: true,
+    images,
     mode: provider.mode,
-    prompt: structured ? buildDecisionPrompt(payload, tools) : buildDecisionPrompt(payload, []),
+    prompt: structured ? buildDecisionPrompt(payload, tools) : buildDecisionPrompt(payload, []) +
+      "\nNo tools are enabled in this turn. Return the answer directly as Markdown, without a JSON decision envelope.",
     structured,
     requireTool: structured && reportWorkflowRequiresTool(payload, tools),
     toolsJSON: structured ? JSON.stringify(tools) : null,
     maximumResponseTokens: payload?.max_tokens ?? null,
-  });
+  }, { onEvent: async (event) => {
+    if (event.type === "text_snapshot" && !structured) await textStream.push(event.text);
+    if (event.type === "decision_snapshot" && structured) {
+      // GeneratedContent emits valid partial objects with arbitrary key order.
+      const snapshot = JSON.parse(event.json);
+      if (snapshot.kind === "final" && typeof snapshot.text === "string" && snapshot.text) {
+        await textStream.push(snapshot.text);
+      }
+    }
+  } });
   if (!structured) {
+    await textStream.push(value.text ?? "");
     return { kind: "final", toolCalls: [], text: value.text ?? "", usage: value.usage ?? null, model };
   }
-  return parseStructuredDecision(value, tools, model, value.usage ?? null);
+  if (!["final", "tool_use"].includes(value?.kind) || !Array.isArray(value.tool_calls) ||
+      (value.kind === "final" && value.tool_calls.length !== 0)) {
+    throw new Error("Apple returned an invalid structured decision");
+  }
+  const result = parseStructuredDecision(value, tools, model, value.usage ?? null);
+  if (value.kind === "tool_use" && result.kind !== "tool_use") throw new Error("Apple returned no valid tool calls");
+  if (result.kind === "final") await textStream.push(result.text);
+  else if (textStream.text) throw new Error("Apple changed a streamed answer into a tool call");
+  return result;
 }

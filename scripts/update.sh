@@ -28,17 +28,17 @@ if [[ ! -d "$source_app" ]]; then
 fi
 
 requested_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
-report_file="$(/usr/bin/mktemp -t dia-custom-compatibility).json"
+report_file="$(/usr/bin/mktemp -t dia-custom-compatibility)"
 trap '/bin/rm -f "$report_file"' EXIT
 node "$script_dir/compatibility.js" "$source_app" \
   --mods "$requested_mods" --json > "$report_file"
 
 required_failures="$(node -e '
-  const v=require(process.argv[1]);
+  const v=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
   process.stdout.write(v.requiredFailures.map(x=>`${x.id}: ${x.reason}`).join("\n"));
 ' "$report_file")"
 optional_failures="$(node -e '
-  const v=require(process.argv[1]);
+  const v=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
   process.stdout.write(v.optionalFailures.map(x=>`${x.id}: ${x.reason}`).join("\n"));
 ' "$report_file")"
 
@@ -67,10 +67,10 @@ if [[ -n "$optional_failures" && "$allow_disable" != true ]]; then
 fi
 
 effective_mods="$(node -e '
-  const v=require(process.argv[1]);process.stdout.write(v.effectiveMods.join(","));
+  const v=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));process.stdout.write(v.effectiveMods.join(","));
 ' "$report_file")"
 print "Building a staged Dia Custom clone from Dia $(node -e '
-  const v=require(process.argv[1]);process.stdout.write(`${v.version} (${v.build})`);
+  const v=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));process.stdout.write(`${v.version} (${v.build})`);
 ' "$report_file")"
 
 DIA_CUSTOM_SOURCE_APP="$source_app" \

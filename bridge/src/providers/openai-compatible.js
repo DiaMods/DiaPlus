@@ -5,6 +5,7 @@ import {
   systemAsText,
 } from "../chat-shape.js";
 import { joinProviderURL } from "../network-policy.js";
+import { imageSourceURL, prepareMediaPayload } from "../media-inputs.js";
 import { parseServerSentEvents } from "./sse.js";
 
 function providerHeaders(provider, apiKey) {
@@ -31,6 +32,63 @@ function toolDefinitions(tools, style) {
         parameters: tool.input_schema,
       },
     });
+}
+
+function userContent(blocks, style) {
+  const parts = blocks.flatMap((block) => {
+    if (block?.type === "image") {
+      const url = imageSourceURL(block);
+      return [style === "responses"
+        ? { type: "input_image", image_url: url, detail: "auto" }
+        : { type: "image_url", image_url: { url } }];
+    }
+    if (["document", "audio", "video"].includes(block?.type)) {
+      if (block.type === "document" && block.source?.media_type === "application/pdf" && block.source.type === "base64") {
+        const filename = String(block.title || "attachment.pdf").replace(/[\\/\x00-\x1f]/g, "_").slice(0, 180);
+        const data = `data:application/pdf;base64,${block.source.data}`;
+        return [style === "responses"
+          ? { type: "input_file", filename: filename.endsWith(".pdf") ? filename : `${filename}.pdf`, file_data: data }
+          : { type: "file", file: { filename: filename.endsWith(".pdf") ? filename : `${filename}.pdf`, file_data: data } }];
+      }
+      if (block.type === "audio" && style === "chat" && block.source?.type === "base64") {
+        return [{ type: "input_audio", input_audio: {
+          data: block.source.data,
+          format: ["audio/wav", "audio/x-wav"].includes(block.source.media_type) ? "wav" : "mp3",
+        } }];
+      }
+      if (block.type === "document" && block.source?.type === "text") {
+        const text = [block.title, block.source.data].filter(Boolean).join("\n\n");
+        return [{ type: style === "responses" ? "input_text" : "text", text }];
+      }
+      throw new Error(`The ${style === "responses" ? "Responses" : "Chat Completions"} adapter cannot translate this ${block.type} attachment; provide extracted text or images`);
+    }
+    const text = contentAsText([block]);
+    return text ? [{ type: style === "responses" ? "input_text" : "text", text }] : [];
+  });
+  return parts.every((part) => ["text", "input_text"].includes(part.type))
+    ? parts.map((part) => part.text).join("\n")
+    : parts;
+}
+
+function toolResultText(block) {
+  const content = Array.isArray(block.content)
+    ? block.content.map((part) => ["image", "document", "audio", "video"].includes(part?.type)
+      ? { type: "text", text: "[Tool media is attached to the following user message.]" }
+      : part)
+    : block.content;
+  const text = contentAsText(content);
+  return block.is_error === true ? `[Tool execution failed]\n${text}` : text;
+}
+
+function toolResultImages(blocks) {
+  return blocks.flatMap((block) => {
+    const images = Array.isArray(block.content)
+      ? block.content.filter((part) => ["image", "document", "audio", "video"].includes(part?.type))
+      : [];
+    return images.length > 0
+      ? [{ type: "text", text: `Media from completed tool call ${block.tool_use_id}:` }, ...images]
+      : [];
+  });
 }
 
 function anthropicMessagesToChat(payload) {
@@ -61,35 +119,33 @@ function anthropicMessagesToChat(payload) {
       continue;
     }
 
-    const text = blocks.filter((block) => block?.type === "text")
-      .map((block) => block.text ?? "").join("\n");
-    if (text) output.push({ role: "user", content: text });
     const toolResults = blocks.filter((candidate) => candidate?.type === "tool_result");
     for (const block of toolResults) {
       output.push({
         role: "tool",
         tool_call_id: block.tool_use_id,
-        content: contentAsText(block.content),
+        content: toolResultText(block),
       });
     }
     if (toolResults.length > 0) {
       const completedResults = toolResults
-        .map((block) => contentAsText(block.content))
+        .map(toolResultText)
         .join("\n\n")
         .slice(0, 100_000);
       output.push({
         role: "user",
-        content: [
+        content: userContent([{ type: "text", text: [
           "The preceding tool call completed. Use its exact result below now.",
           "Do not claim it is pending or unavailable, and do not repeat the same call; request another tool only if this completed result is genuinely insufficient.",
           "<completed-tool-result>",
           completedResults,
           "</completed-tool-result>",
-        ].join("\n"),
+        ].join("\n") }, ...toolResultImages(toolResults)], "chat"),
       });
     }
-    const remaining = blocks.filter((block) => !["text", "tool_result"].includes(block?.type));
-    if (remaining.length > 0) output.push({ role: "user", content: contentAsText(remaining) });
+    // OpenAI requires every pending tool result before the next user message.
+    const remaining = blocks.filter((block) => block?.type !== "tool_result");
+    if (remaining.length > 0) output.push({ role: "user", content: userContent(remaining, "chat") });
   }
   return output;
 }
@@ -105,9 +161,11 @@ function anthropicMessagesToResponses(payload) {
       });
       continue;
     }
-    const text = blocks.filter((block) => block?.type === "text")
-      .map((block) => block.text ?? "").join("\n");
-    if (text) output.push({ role: message.role === "assistant" ? "assistant" : "user", content: text });
+    const remaining = blocks.filter((block) => !["tool_use", "tool_result"].includes(block?.type));
+    const assistantText = remaining.filter((block) => block?.type === "text");
+    if (message.role === "assistant" && assistantText.length > 0) {
+      output.push({ role: "assistant", content: contentAsText(assistantText) });
+    }
     for (const block of blocks) {
       if (block?.type === "tool_use") {
         output.push({
@@ -121,8 +179,14 @@ function anthropicMessagesToResponses(payload) {
         output.push({
           type: "function_call_output",
           call_id: block.tool_use_id,
-          output: contentAsText(block.content),
+          output: toolResultText(block),
         });
+      }
+    }
+    if (message.role !== "assistant") {
+      const images = toolResultImages(blocks.filter((block) => block?.type === "tool_result"));
+      if (remaining.length > 0 || images.length > 0) {
+        output.push({ role: "user", content: userContent([...images, ...remaining], "responses") });
       }
     }
   }
@@ -175,6 +239,9 @@ async function runChatCompletions({
     if (event.data === "[DONE]") break;
     let chunk;
     try { chunk = JSON.parse(event.data); } catch { continue; }
+    if (chunk.error) {
+      throw new Error(chunk.error.message ?? "Chat Completions stream failed");
+    }
     if (chunk.usage) usage = chunk.usage;
     const delta = chunk.choices?.[0]?.delta ?? {};
     if (typeof delta.content === "string") {
@@ -269,6 +336,9 @@ async function runResponses({
     let item;
     try { item = JSON.parse(event.data); } catch { continue; }
     const type = item.type ?? event.event;
+    if (type === "error" || item.error) {
+      throw new Error(item.error?.message ?? item.message ?? "OpenAI Responses stream failed");
+    }
     if (type === "response.output_text.delta" && typeof item.delta === "string") {
       text += item.delta;
       if (onTextDelta) await onTextDelta(item.delta);
@@ -313,6 +383,9 @@ async function runResponses({
     if (type === "response.failed") {
       throw new Error(item.response?.error?.message ?? "OpenAI Responses request failed");
     }
+    if (type === "response.incomplete") {
+      throw new Error(`OpenAI Responses request was incomplete: ${item.response?.incomplete_details?.reason ?? "unknown reason"}`);
+    }
   }
 
   const toolCalls = [...calls.values()].flatMap((call) => {
@@ -332,7 +405,11 @@ async function runResponses({
 }
 
 export async function runOpenAICompatibleProvider(options) {
-  return options.provider.api === "responses"
-    ? runResponses(options)
-    : runChatCompletions(options);
+  const responses = options.provider.api === "responses";
+  const media = await prepareMediaPayload(options.payload, { target: responses ? "responses" : "chat" });
+  try {
+    return responses
+      ? await runResponses({ ...options, payload: media.payload })
+      : await runChatCompletions({ ...options, payload: media.payload });
+  } finally { await media.cleanup(); }
 }

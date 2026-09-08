@@ -2,6 +2,7 @@
 set -euo pipefail
 
 app="${1:?usage: verify-staged.sh /path/to/DiaCustom.app comma,separated,mods}"
+script_dir="${0:A:h}"
 enabled_mods="${2:-}"
 info="$app/Contents/Info.plist"
 
@@ -19,6 +20,10 @@ mod_enabled() {
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUAutomaticallyUpdate' "$info")" == "false" ]]
 /usr/bin/codesign --verify --deep --strict "$app"
 "$app/Contents/Helpers/DiaCustomNode" -e 'import("node:sqlite")' >/dev/null
+# Validate the actual patched candidate with the same guard used at launch.
+# Do this before starting its bridge or allowing an installation transaction.
+node "$script_dir/check-dia-build.js" "$app" \
+  --mods "$enabled_mods" --allow-structural --require-patched >/dev/null
 
 if mod_enabled local-ai-routing; then
   /usr/bin/grep -a -q 'http://localhost:8765/ai-service-local-v1' "$app/Contents/MacOS/Dia"
@@ -40,7 +45,9 @@ fi
 temporary_profile="$(/usr/bin/mktemp -d -t dia-custom-staged-health)"
 port="$(node -e 'const n=require("node:net").createServer();n.listen(0,"127.0.0.1",()=>{process.stdout.write(String(n.address().port));n.close()})')"
 bridge_log="$temporary_profile/bridge.log"
+runtime_id="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBridgeRuntimeID' "$info")"
 DIA_CUSTOM_BRIDGE_PORT="$port" \
+DIA_CUSTOM_RUNTIME_ID="$runtime_id" \
 DIA_CUSTOM_PROFILE="$temporary_profile" \
 DIA_CUSTOM_STATE_DIR="$temporary_profile/state" \
 DIA_CUSTOM_MODS="$enabled_mods" \
@@ -64,8 +71,5 @@ if [[ -z "${health:-}" ]]; then
   /usr/bin/tail -40 "$bridge_log" >&2
   exit 1
 fi
-print -r -- "$health" | node -e '
-  let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{
-    const v=JSON.parse(s);
-    if(!v.ok||!v.coreReady||!v.catalog||v.catalog.modelCount<1) process.exit(1);
-  })'
+print -r -- "$health" | node "$script_dir/bridge-runtime.js" check-health \
+  "$runtime_id" "$temporary_profile" "$enabled_mods"

@@ -1,0 +1,9 @@
+{
+  "id": "oauth-service",
+  "displayName": "OAuth service",
+  "transport": "streamable-http",
+  "authentication": "oauth",
+  "endpoint": "https://mcp.example.com/mcp",
+  "allowedDomains": ["mcp.example.com", "auth.example.com"],
+  "oauth": {}
+}

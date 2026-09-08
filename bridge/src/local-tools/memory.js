@@ -13,6 +13,7 @@ const semanticCandidateLimit = 400;
 const semanticTextLimit = 4_000;
 const semanticModel = "apple-natural-language-en-v1";
 const defaultProfileID = "Default";
+const connectorIDPattern = /^[a-z0-9][a-z0-9._-]{0,119}$/i;
 const memoryEntryTypes = new Set(["memory", "navigation", "conversation", "connector"]);
 const derivedMemoryKinds = new Set([
   "fact", "interest", "plan", "preference", "project", "relationship", "routine",
@@ -106,6 +107,16 @@ function normalizedProfileID(value) {
   return profile && profile.length <= 120 && !profile.includes("/") && !profile.includes("\\")
     ? profile
     : defaultProfileID;
+}
+
+function connectorProfileID(value = defaultProfileID) {
+  if (typeof value !== "string" || !/^[^/\\\0]{1,120}$/.test(value.trim()) || value.trim() === "*") throw new Error("A valid connector profileID is required");
+  return value.trim();
+}
+
+function connectorRecordURI(id, profileID, recordID) {
+  const digest = createHash("sha256").update(recordID).digest("hex");
+  return `dia-custom-connector:${encodeURIComponent(profileID)}:${id}:${digest}`;
 }
 
 function payloadText(payload) {
@@ -399,10 +410,12 @@ export class MemoryStore {
         updated_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS connectors (
-        id TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
+        profile_id TEXT NOT NULL DEFAULT 'Default',
         label TEXT NOT NULL,
         imported_at INTEGER NOT NULL,
-        item_count INTEGER NOT NULL DEFAULT 0
+        item_count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(id, profile_id)
       );
       CREATE TABLE IF NOT EXISTS memory_sources (
         memory_entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
@@ -454,8 +467,22 @@ export class MemoryStore {
       CREATE INDEX IF NOT EXISTS entries_profile_type_url
         ON entries(profile_id, entry_type, url);
     `);
+    const connectorColumns = new Set(this.database.prepare("PRAGMA table_info(connectors)").all().map((column) => column.name));
+    if (!connectorColumns.has("profile_id")) this.database.exec(`
+      BEGIN IMMEDIATE;
+      ALTER TABLE connectors RENAME TO connectors_legacy;
+      CREATE TABLE connectors (
+        id TEXT NOT NULL, profile_id TEXT NOT NULL DEFAULT 'Default', label TEXT NOT NULL,
+        imported_at INTEGER NOT NULL, item_count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(id, profile_id)
+      );
+      INSERT INTO connectors(id, profile_id, label, imported_at, item_count)
+        SELECT id, 'Default', label, imported_at, item_count FROM connectors_legacy;
+      DROP TABLE connectors_legacy;
+      COMMIT;
+    `);
     const needsProfileMigration = [
-      "SELECT 1 FROM entries WHERE entry_type = 'connector' AND profile_id != '*' LIMIT 1",
+      "SELECT 1 FROM entries WHERE entry_type = 'connector' AND (profile_id = '*' OR uri NOT LIKE 'dia-custom-connector:%:%:%') LIMIT 1",
       `SELECT 1 FROM entries
        WHERE profile_id = 'Default' AND entry_type = 'navigation'
          AND uri != 'navigation:Default:' || url
@@ -468,8 +495,11 @@ export class MemoryStore {
     ].some((query) => this.database.prepare(query).get() !== undefined);
     if (needsProfileMigration) this.database.exec(`
       BEGIN IMMEDIATE;
-      UPDATE entries SET profile_id = '*'
-        WHERE entry_type = 'connector' AND profile_id != '*';
+      UPDATE entries SET profile_id = 'Default',
+        uri = CASE WHEN uri LIKE 'dia-custom-connector:%' AND uri NOT LIKE 'dia-custom-connector:%:%:%'
+          THEN 'dia-custom-connector:Default:' || substr(uri, length('dia-custom-connector:') + 1)
+          ELSE uri END
+        WHERE entry_type = 'connector' AND (profile_id = '*' OR uri NOT LIKE 'dia-custom-connector:%:%:%');
       INSERT OR IGNORE INTO memory_sources(memory_entry_id, source_entry_id)
         SELECT links.memory_entry_id, scoped.id
         FROM entries legacy
@@ -861,14 +891,16 @@ export class MemoryStore {
     return { query: text, profileID: profile, memories };
   }
 
-  async importConnector({ id, label, records, replace = true } = {}) {
+  async importConnector({ id, label, records, replace = true, profileID = defaultProfileID, deletedIDs = [] } = {}) {
     await this.open();
-    if (typeof id !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) {
-      throw new Error("connector id must use 1-64 lowercase letters, numbers, underscores, or hyphens");
+    if (typeof id !== "string" || !connectorIDPattern.test(id)) {
+      throw new Error("connector id must use 1-120 letters, numbers, dots, underscores, or hyphens");
     }
-    if (!Array.isArray(records) || records.length === 0 || records.length > 5_000) {
-      throw new Error("connector import requires 1-5,000 records");
+    if (!Array.isArray(records) || records.length > 5_000 || records.some((record) => !record || typeof record !== "object" || Array.isArray(record))) {
+      throw new Error("connector import requires up to 5,000 records");
     }
+    if (!Array.isArray(deletedIDs) || deletedIDs.length > 5000 || deletedIDs.some((id) => typeof id !== "string" || !id || id.length > 4000)) throw new Error("Invalid connector deletedIDs");
+    const profile = connectorProfileID(profileID);
     const connectorLabel = typeof label === "string" && label.trim()
       ? label.trim().slice(0, 120)
       : id;
@@ -877,9 +909,11 @@ export class MemoryStore {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       if (replace) {
-        this.database.prepare("DELETE FROM entries WHERE source IN (?, ?)")
-          .run(`connector:${id}:document`, `connector:${id}:person`);
+        this.database.prepare("DELETE FROM entries WHERE source IN (?, ?) AND profile_id = ?")
+          .run(`connector:${id}:document`, `connector:${id}:person`, profile);
       }
+      for (const deletedID of deletedIDs) this.database.prepare("DELETE FROM entries WHERE uri = ? AND profile_id = ?")
+        .run(connectorRecordURI(id, profile, deletedID), profile);
       for (const record of records) {
         if (!record || typeof record !== "object" || Array.isArray(record)) continue;
         const title = [record.title, record.name, record.subject]
@@ -903,93 +937,98 @@ export class MemoryStore {
         const stableID = typeof record.id === "string" && record.id
           ? record.id
           : createHash("sha256").update(`${title}\0${url}\0${content}`).digest("hex");
-        const digest = createHash("sha256").update(stableID).digest("hex");
         const updatedAt = Number.isFinite(Date.parse(record.updatedAt ?? ""))
           ? Date.parse(record.updatedAt)
           : now;
         this.upsert({
-          uri: `dia-custom-connector:${id}:${digest}`,
+          uri: connectorRecordURI(id, profile, stableID),
           entryType: "connector",
           title,
           url,
           content,
           source: `connector:${id}:${kind}`,
-          profileID: "*",
+          profileID: profile,
           createdAt: updatedAt,
           updatedAt,
         });
         imported += 1;
       }
       this.database.prepare(`
-        INSERT INTO connectors(id, label, imported_at, item_count)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
+        INSERT INTO connectors(id, profile_id, label, imported_at, item_count)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id, profile_id) DO UPDATE SET
           label=excluded.label,
           imported_at=excluded.imported_at,
           item_count=excluded.item_count
-      `).run(id, connectorLabel, now, imported);
+      `).run(id, profile, connectorLabel, now, Number(this.database.prepare("SELECT COUNT(*) AS count FROM entries WHERE source IN (?, ?) AND profile_id = ?").get(`connector:${id}:document`, `connector:${id}:person`, profile).count));
       this.database.exec("COMMIT");
     } catch (error) {
       this.database.exec("ROLLBACK");
       throw error;
     }
-    return { id, label: connectorLabel, imported, replace };
+    return { id, profileID: profile, label: connectorLabel, imported, deleted: deletedIDs.length, replace };
   }
 
-  async connectors() {
+  async connectors({ profileID = defaultProfileID, allProfiles = false } = {}) {
     await this.open();
+    const profile = connectorProfileID(profileID);
     return this.database.prepare(`
-      SELECT c.id, c.label, c.imported_at, COUNT(e.id) AS item_count
+      SELECT c.id, c.profile_id, c.label, c.imported_at, COUNT(e.id) AS item_count
       FROM connectors c
       LEFT JOIN entries e ON e.source IN (
         'connector:' || c.id || ':document',
         'connector:' || c.id || ':person'
-      )
-      GROUP BY c.id, c.label, c.imported_at
+      ) AND e.profile_id = c.profile_id
+      ${allProfiles ? "" : "WHERE c.profile_id = ?"}
+      GROUP BY c.id, c.profile_id, c.label, c.imported_at
       ORDER BY c.label COLLATE NOCASE
-    `).all().map((row) => ({
+    `).all(...(allProfiles ? [] : [profile])).map((row) => ({
       id: row.id,
+      profileID: row.profile_id,
       label: row.label,
       importedAt: new Date(row.imported_at).toISOString(),
       itemCount: Number(row.item_count),
     }));
   }
 
-  async deleteConnector(id) {
+  async deleteConnector(id, { profileID = defaultProfileID } = {}) {
     await this.open();
-    if (typeof id !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) {
+    const profile = connectorProfileID(profileID);
+    if (typeof id !== "string" || !connectorIDPattern.test(id)) {
       throw new Error("invalid connector id");
     }
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      const deleted = Number(this.database.prepare("DELETE FROM entries WHERE source IN (?, ?)")
-        .run(`connector:${id}:document`, `connector:${id}:person`).changes);
-      this.database.prepare("DELETE FROM connectors WHERE id = ?").run(id);
+      const deleted = Number(this.database.prepare("DELETE FROM entries WHERE source IN (?, ?) AND profile_id = ?")
+        .run(`connector:${id}:document`, `connector:${id}:person`, profile).changes);
+      this.database.prepare("DELETE FROM connectors WHERE id = ? AND profile_id = ?").run(id, profile);
       this.database.exec("COMMIT");
-      return { id, deleted };
+      return { id, profileID: profile, deleted };
     } catch (error) {
       this.database.exec("ROLLBACK");
       throw error;
     }
   }
 
-  async recentPeople(limit = 20) {
+  async recentPeople(limit = 20, { profileID = defaultProfileID } = {}) {
     await this.open();
+    const profile = connectorProfileID(profileID);
     const bounded = boundedLimit(limit, 20);
     const rows = this.database.prepare(`
       SELECT * FROM entries
-      WHERE entry_type = 'connector' AND source LIKE 'connector:%:person'
+      WHERE entry_type = 'connector' AND source LIKE 'connector:%:person' AND profile_id = ?
       ORDER BY updated_at DESC
       LIMIT ?
-    `).all(bounded);
+    `).all(profile, bounded);
     return { people: this.formatRows(rows, "summary") };
   }
 
-  async lookupPerson(query, limit = 10) {
+  async lookupPerson(query, limit = 10, { profileID = defaultProfileID } = {}) {
     const result = await this.search({
       query,
       entryTypes: ["connector"],
       sourceSuffix: ":person",
+      profileID: connectorProfileID(profileID),
       limit,
     });
     return { query, people: result.results };
@@ -1014,7 +1053,7 @@ export class MemoryStore {
     }
     if (Array.isArray(input.connectorIDs) && input.connectorIDs.length > 0) {
       const ids = input.connectorIDs.filter((id) =>
-        typeof id === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(id));
+        typeof id === "string" && connectorIDPattern.test(id));
       if (ids.length > 0) {
         clauses.push(`(${ids.map(() => "e.source IN (?, ?)").join(" OR ")})`);
         values.push(...ids.flatMap((id) => [
@@ -1325,7 +1364,7 @@ export class MemoryStore {
 }
 
 export function localMemoryTools() {
-  return memoryToolDefinitions.map((tool) => ({ ...tool }));
+  return memoryToolDefinitions.map((tool) => ({ ...tool, annotations: { readOnlyHint: true } }));
 }
 
 export function isLocalMemoryTool(name) {
@@ -1340,7 +1379,8 @@ export function isLocalMemoryTool(name) {
 export async function executeLocalMemoryTool(store, name, input, context = {}) {
   const scopedInput = {
     ...(input ?? {}),
-    profileID: normalizedProfileID(context.profileID ?? input?.profileID),
+    profileID: normalizedProfileID(context.profileID),
+    allProfiles: false,
   };
   if (name.endsWith("memory_search")) return store.search(scopedInput);
   if (name.endsWith("memory_query")) return store.query(scopedInput);

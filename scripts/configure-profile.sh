@@ -1,6 +1,10 @@
 #!/bin/zsh
 set -euo pipefail
 
+# Validation builds supply their profile through process arguments and must not
+# redirect Finder launches or alter the running app's preference domain.
+[[ "${DIA_CUSTOM_STAGING:-0}" != "1" ]] || exit 0
+
 script_dir="${0:A:h}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
 enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"

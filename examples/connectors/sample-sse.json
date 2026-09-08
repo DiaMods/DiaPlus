@@ -1,0 +1,8 @@
+{
+  "id": "legacy-sse",
+  "displayName": "Legacy SSE server",
+  "transport": "http-sse",
+  "authentication": "none",
+  "endpoint": "http://127.0.0.1:9000/sse",
+  "allowedDomains": ["127.0.0.1"]
+}

@@ -44,6 +44,40 @@ test("bundled clia-brief requests retain their identity after native header loss
   }), true);
 });
 
+test("Morning Brief reaches the selected provider with its native prompt and resilience policy", async () => {
+  const config = {
+    selectedModel: "codex:test",
+    providers: [{ id: "codex", enabled: true, type: "codex" }],
+    localMemory: { enabled: false }, localWeb: { enabled: false }, localConnectors: { enabled: false },
+  };
+  const manager = new ProviderManager({
+    configStore: { load: async () => config },
+    memoryStore: {},
+    toolCoverageStore: { record: async () => {} },
+    appsStateStore: { recordMorningBrief: async () => {} },
+    connectorRegistry: {
+      observeNativeToolResults: async () => {},
+      observeNativeTools: async () => {},
+    },
+  });
+  let called = false;
+  manager.runProvider = async (_provider, { payload }) => {
+    called = true;
+    assert.match(payload.system, /Native Morning Brief instructions/);
+    assert.match(payload.system, /dia-custom-morning-brief-policy/);
+    assert.match(payload.system, /continue with the remaining live sources/);
+    return { kind: "final", text: '{"title":"Morning Brief"}', toolCalls: [], model: "test" };
+  };
+  const { result } = await manager.run({
+    metadata: { subFeature: "clia-brief" },
+    system: [{ type: "text", text: "Native Morning Brief instructions" }],
+    messages: [{ role: "user", content: "Summarize my day" }],
+    tools: [],
+  });
+  assert.equal(called, true);
+  assert.equal(result.text, '{"title":"Morning Brief"}');
+});
+
 test("Morning Brief ingestion accepts only a newly ingested native Report", async () => {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-custom-brief-ingestion-"));
   const contextID = "DEF70F35-BB3C-416F-B3D2-379495D6CE09";
@@ -136,7 +170,7 @@ test("provider catalog discovers Ollama and routes local memory before native to
   assert.equal(result.text, "The codeword was marigold.");
   assert.equal(calls, 2);
   assert.equal(nativeToolCount, 1);
-  assert.equal(totalToolCount, 9);
+  assert.equal(totalToolCount, 11);
   assert.ok(reasoning.some((value) => /Recalled .* local Memor/i.test(value)));
   assert.deepEqual(activities.map((activity) => activity.phase), ["start", "finish"]);
   assert.equal(activities[0].calls[0].name, "mcp__dia-tools__memory_search");
@@ -682,7 +716,7 @@ test("Report requests reject premature uploads, normalize Write paths, and uploa
   }) => {
     providerCalls += 1;
     assert.match(JSON.stringify(providerPayload), /dia-custom-report-policy/);
-    assert.deepEqual(tools.map((tool) => tool.name), ["Write"]);
+    assert.deepEqual(tools.map((tool) => tool.name).filter((name) => !name.startsWith("mcp__dia-tools__knowledge_")), ["Write"]);
     if (providerCalls === 1) {
       return {
         kind: "tool_use",

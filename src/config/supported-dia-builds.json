@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-03",
+  "updatedAt": "2026-09-07",
   "builds": {
     "85660": {
       "status": "audited",
@@ -9,6 +9,7 @@
         "identity-isolation",
         "network-isolation",
         "update-blocker",
+        "custom-updater",
         "local-ai-routing",
         "account-bypass",
         "dia-import",
@@ -33,6 +34,7 @@
         "identity-isolation",
         "network-isolation",
         "update-blocker",
+        "custom-updater",
         "local-ai-routing",
         "account-bypass",
         "dia-import",
@@ -57,6 +59,7 @@
         "identity-isolation",
         "network-isolation",
         "update-blocker",
+        "custom-updater",
         "local-ai-routing",
         "account-bypass",
         "dia-import",
@@ -81,6 +84,7 @@
         "identity-isolation",
         "network-isolation",
         "update-blocker",
+        "custom-updater",
         "local-ai-routing",
         "account-bypass",
         "dia-import",
@@ -96,6 +100,34 @@
         "morning-brief",
         "apple-models"
       ]
+    },
+    "86584": {
+      "status": "audited",
+      "version": "1.48.0",
+      "notes": "Dia 1.48.0: account/capability ARM64 sites relocated with unique instruction-context matching and disassembly. Native Reports, importer, endpoint and schema structural checks pass. Candidate contents are always revalidated. Profile-scoped local knowledge and read-only research/workflow modules are bridge-owned and do not depend on private native offsets.",
+      "mods": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "custom-updater",
+        "local-ai-routing",
+        "account-bypass",
+        "dia-import",
+        "model-picker",
+        "developer-tools",
+        "mod-manager",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
+        "apple-models",
+        "local-knowledge",
+        "local-workflows"
+      ],
+      "mainExecutableSHA256": "d5a9b944ef132d60bba8645ee6028d512b5df737ae4a0547409f1d60e0e1eccf"
     }
   }
 }

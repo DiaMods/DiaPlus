@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { randomBytes } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -17,20 +18,30 @@ function parseArguments(argv) {
     resolve(homedir(), "Library/Application Support/Dia Custom RTTM");
   let json = false;
   let scope = null;
+  let app = null;
   const positional = [];
+  const optionValue = (name) => {
+    const value = values.shift();
+    if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+    return value;
+  };
   while (values.length > 0) {
     const value = values.shift();
     if (value === "--profile") {
-      profile = resolve(values.shift() ?? "");
+      profile = resolve(optionValue(value));
     } else if (value === "--json") {
       json = true;
     } else if (value === "--scope") {
-      scope = values.shift() ?? null;
+      scope = optionValue(value);
+    } else if (value === "--app") {
+      app = resolve(optionValue(value));
+    } else if (value.startsWith("--")) {
+      throw new Error(`unknown Dia Mods option: ${value}`);
     } else {
       positional.push(value);
     }
   }
-  return { command, profile, json, scope, positional };
+  return { command, profile, json, scope, app, positional };
 }
 
 async function loadJSON(path, fallback) {
@@ -131,9 +142,16 @@ function printTable(mods, statePath) {
   }
 }
 
-const { command, profile, json, scope, positional } = parseArguments(process.argv.slice(2));
+const { command, profile, json, scope, app, positional } = parseArguments(process.argv.slice(2));
 const manifest = await loadJSON(manifestPath, null);
 if (!manifest || !Array.isArray(manifest.mods)) throw new Error("invalid Dia Mods manifest");
+if (scope !== null && !manifest.mods.some((mod) => mod.scope.includes(scope))) {
+  throw new Error(`unknown Dia Mods scope: ${scope}`);
+}
+if (app && command !== "resolved") throw new Error("--app is supported only for resolved mods");
+if (positional.length > (["enable", "disable"].includes(command) ? 1 : 0)) {
+  throw new Error(`unexpected Dia Mods argument: ${positional.at(-1)}`);
+}
 const statePath = resolve(profile, "Bridge/.state/mods.json");
 const legacyStatePath = resolve(profile, "Bridge/.state/modules.json");
 const state = await loadJSON(statePath,
@@ -165,7 +183,22 @@ if (["enable", "disable"].includes(command)) {
   process.exit(0);
 }
 
-const resolved = validateResolvedMods(resolveMods(manifest.mods, state))
+let activeMods = resolveMods(manifest.mods, state);
+if (app) {
+  const report = await loadJSON(resolve(profile, "Bridge/.state/compatibility.json"), null);
+  const build = execFileSync("/usr/libexec/PlistBuddy", [
+    "-c", "Print :CFBundleVersion", resolve(app, "Contents/Info.plist"),
+  ], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  if (report?.build === build && Array.isArray(report.perMod)) {
+    const unavailable = new Set(report.perMod.filter((mod) => mod.compatible === false).map((mod) => mod.id));
+    activeMods = activeMods.map((mod) => {
+      if (!mod.enabled || !unavailable.has(mod.id)) return mod;
+      if (mod.required) throw new Error(`${mod.id} is a required mod unavailable for Dia build ${build}`);
+      return { ...mod, enabled: false, source: "compatibility" };
+    });
+  }
+}
+const resolved = validateResolvedMods(activeMods)
   .filter((mod) => scope === null || mod.scope.includes(scope));
 if (command === "resolved") {
   process.stdout.write(`${resolved.filter((mod) => mod.enabled).map((mod) => mod.id).join(",")}\n`);

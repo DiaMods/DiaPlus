@@ -1,0 +1,21 @@
+{
+  "id": "notes-cli",
+  "displayName": "Notes CLI",
+  "transport": "cli",
+  "authentication": "none",
+  "command": "/absolute/path/to/notes",
+  "args": [],
+  "envKeys": ["NOTES_API_TOKEN"],
+  "tools": [{
+    "name": "search",
+    "description": "Search notes by text",
+    "inputSchema": {
+      "type": "object",
+      "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 4000}},
+      "required": ["query"]
+    },
+    "args": ["search", {"input": "query", "flag": "--query"}],
+    "output": "json",
+    "annotations": {"readOnlyHint": true}
+  }]
+}

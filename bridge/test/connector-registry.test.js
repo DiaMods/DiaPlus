@@ -31,7 +31,17 @@ async function fixture(fetchImplementation, { authentication = "none" } = {}) {
     stateStore,
     credentialStore,
     manifestDirectory: manifests,
-    fetchImplementation,
+    fetchImplementation: async (url, init) => {
+      if (new URL(url).pathname === "/mcp") {
+        const request = JSON.parse(init.body);
+        if (request.method === "notifications/initialized") return new Response(null, { status: 202 });
+        if (request.method === "initialize") return new Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "fixture", version: "1" } } }), { headers: { "content-type": "application/json" } });
+        const response = await fetchImplementation(url, init);
+        const payload = await response.json();
+        return new Response(JSON.stringify({ ...payload, jsonrpc: "2.0", id: request.id }), { status: response.status, headers: response.headers });
+      }
+      return fetchImplementation(url, init);
+    },
     callbackBaseURL: "http://127.0.0.1:8765/api/apps/oauth/callback",
   });
   await stateStore.load();
@@ -50,6 +60,7 @@ test("custom MCP discovery and calls are namespaced", async () => {
         : { content: [{ type: "text", text: "done" }] },
     }), { status: 200, headers: { "content-type": "application/json" } });
   });
+  await registry.connect("sample");
   const definitions = await registry.discoverTools("sample");
   assert.equal(definitions[0].name, "mcp__custom_sample__lookup");
   const result = await registry.execute(definitions[0].name, { id: 1 });

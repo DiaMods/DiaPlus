@@ -45,11 +45,12 @@ export function assertAllowedProviderURL(rawURL) {
 
 function isLoopbackHostname(hostname) {
   const normalized = hostname.toLowerCase().replace(/\.$/, "");
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
 }
 
 export function assertAllowedConnectorURL(rawURL, allowedDomains = []) {
   const url = assertAllowedProviderURL(rawURL);
+  if (url.username || url.password || url.hash) throw new Error("Connector URLs cannot contain credentials or fragments");
   if (url.protocol !== "https:" && !isLoopbackHostname(url.hostname)) {
     throw new Error("remote connector URLs must use HTTPS");
   }

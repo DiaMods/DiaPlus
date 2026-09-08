@@ -17,6 +17,7 @@ import {
 } from "./artifact-safety.js";
 import { isMorningBriefPayload, ProviderManager } from "./provider-manager.js";
 import {
+  bridgeDirectory,
   captureDirectory,
   sessionPath,
   stateDirectory,
@@ -29,13 +30,19 @@ import { enabledModIDs, modEnabled } from "./mods.js";
 import { ModConfigStore } from "./mod-config.js";
 import { AnthropicStreamWriter } from "./anthropic-stream.js";
 import { isToolContinuation } from "./chat-shape.js";
+import { appleProviderStatus, prepareAppleSpeech } from "./providers/apple.js";
+import { handleWorkflowAPI } from "./workflows.js";
+import { CustomUpdater, handleUpdaterAPI } from "./custom-updater.js";
+import { handleConnectorAPI } from "./connector-api.js";
+import { handleMediaTranscription } from "./media-transcription.js";
+import { handleProfilesAPI } from "./profiles.js";
 
 const host = "127.0.0.1";
 const port = Number.parseInt(process.env.DIA_CUSTOM_BRIDGE_PORT ?? "8765", 10);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("DIA_CUSTOM_BRIDGE_PORT must be a valid TCP port");
 }
-const maxBodyBytes = 16 * 1024 * 1024;
+const maxBodyBytes = 64 * 1024 * 1024;
 const captureEnabled = process.env.DIA_CUSTOM_CAPTURE === "1";
 const runtimeID = process.env.DIA_CUSTOM_RUNTIME_ID ?? "development";
 const stateDir = stateDirectory;
@@ -51,7 +58,10 @@ const toolCacheFiles = new Set([
   "zoom.json",
 ]);
 const providerManager = new ProviderManager();
+providerManager.connectorRegistry.callbackBaseURL = `http://${host}:${port}/api/apps/oauth/callback`;
 const modConfigStore = new ModConfigStore();
+const updater = new CustomUpdater({ bridgeDirectory, profileDirectory, stateDirectory, modConfigStore, isEnabled: () => modEnabled("custom-updater") });
+let speechPreparation = null;
 const sessions = new Map();
 const { privateKey: signaturePrivateKey } = generateKeyPairSync("ec", {
   namedCurve: "prime256v1",
@@ -535,6 +545,22 @@ async function handleRequest(request, response) {
     return;
   }
   const requestURL = new URL(request.url ?? "/", `http://${host}:${port}`);
+  if (await handleProfilesAPI(request, response, requestURL, { hasAdminToken, jsonResponse })) return;
+  if (await handleMediaTranscription(request, response, requestURL, { readBody, jsonResponse })) return;
+  if (requestURL.pathname === "/api/media" || requestURL.pathname === "/api/media/prepare-speech") {
+    if (!await hasAdminToken(request)) { jsonResponse(response, 403, { error: "invalid local administration token" }); return; }
+    if (!modEnabled("apple-models")) { jsonResponse(response, 400, { error: "Enable Apple Foundation Models to prepare local speech" }); return; }
+    try {
+      if (request.method === "GET" && requestURL.pathname === "/api/media") jsonResponse(response, 200, await appleProviderStatus());
+      else if (request.method === "POST" && requestURL.pathname === "/api/media/prepare-speech") {
+        speechPreparation ??= prepareAppleSpeech().finally(() => { speechPreparation = null; });
+        jsonResponse(response, 200, await speechPreparation);
+      } else jsonResponse(response, 405, { error: "method_not_allowed" });
+    } catch (error) { jsonResponse(response, 400, { error: error.message }); }
+    return;
+  }
+  if (await handleWorkflowAPI(request, response, requestURL, { manager: providerManager, hasAdminToken, readBody, jsonResponse })) return;
+  if (await handleUpdaterAPI(request, response, requestURL, { updater, hasAdminToken, jsonResponse })) return;
   if (request.method === "GET" && request.url === "/health") {
     const { key: selectedModel } = await providerManager.selectedProvider();
     response.writeHead(200, { "content-type": "application/json" });
@@ -613,7 +639,7 @@ async function handleRequest(request, response) {
       const connectors = modEnabled("live-connectors")
         ? await providerManager.connectorRegistry.status(profileID)
         : [];
-      jsonResponse(response, 200, { ...state, connectors });
+      jsonResponse(response, 200, { ...state, connectors, liveConnectorsEnabled: modEnabled("live-connectors") });
     } catch (error) {
       jsonResponse(response, 500, { error: String(error?.message ?? error) });
     }
@@ -671,31 +697,13 @@ async function handleRequest(request, response) {
     return;
   }
 
-  const connectorAction = requestURL.pathname.match(
-    /^\/api\/apps\/connectors\/([^/]+)\/(connect|reconnect|disconnect)$/,
-  );
-  if (request.method === "POST" && connectorAction) {
-    try {
-      if (!await hasAdminToken(request)) {
-        jsonResponse(response, 403, { error: "invalid local administration token" });
-        return;
-      }
-      if (!modEnabled("live-connectors")) throw new Error("live-connectors mod is disabled");
-      const connectorID = decodeURIComponent(connectorAction[1]);
-      const action = connectorAction[2];
-      const payload = JSON.parse((await readBody(request)).toString("utf8") || "{}");
-      if (typeof payload.profileID !== "string" || !payload.profileID.trim()) {
-        throw new Error("profileID is required");
-      }
-      const value = action === "disconnect"
-        ? await providerManager.connectorRegistry.disconnect(connectorID, payload)
-        : await providerManager.connectorRegistry.connect(connectorID, payload);
-      jsonResponse(response, 200, value);
-    } catch (error) {
-      jsonResponse(response, 400, { error: String(error?.message ?? error) });
-    }
-    return;
-  }
+  if (await handleConnectorAPI(request, response, requestURL, {
+    registry: providerManager.connectorRegistry,
+    hasAdminToken,
+    isEnabled: () => modEnabled("live-connectors"),
+    readBody,
+    jsonResponse,
+  })) return;
 
   if (request.method === "GET" && requestURL.pathname === "/api/apps/oauth/callback") {
     try {
@@ -874,7 +882,7 @@ async function handleRequest(request, response) {
         jsonResponse(response, 403, { error: "invalid local administration token" });
         return;
       }
-      jsonResponse(response, 200, { connectors: await providerManager.memoryStore.connectors() });
+      jsonResponse(response, 200, { connectors: await providerManager.memoryStore.connectors({ profileID: requestURL.searchParams.get("profileID") ?? "Default" }) });
     } catch (error) {
       jsonResponse(response, 500, { error: String(error?.message ?? error) });
     }
@@ -915,7 +923,7 @@ async function handleRequest(request, response) {
         return;
       }
       const id = decodeURIComponent(requestURL.pathname.slice("/api/connectors/".length));
-      jsonResponse(response, 200, await providerManager.memoryStore.deleteConnector(id));
+      jsonResponse(response, 200, await providerManager.memoryStore.deleteConnector(id, { profileID: requestURL.searchParams.get("profileID") ?? "Default" }));
     } catch (error) {
       jsonResponse(response, 400, { error: String(error?.message ?? error) });
     }
@@ -1080,6 +1088,22 @@ const server = createServer((request, response) => {
 await loadLocalSessions();
 await providerManager.initialize();
 
+updater.start();
+if (process.env.DIA_CUSTOM_STAGING !== "1") providerManager.workflows.start();
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close();
+  providerManager.workflows.stop();
+  clearInterval(updater.timer);
+  const deadline = setTimeout(() => process.exit(0), 2000);
+  await Promise.allSettled([providerManager.connectorRegistry.close(), providerManager.knowledgeStore.close()]);
+  clearTimeout(deadline);
+  process.exit(0);
+}
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
 server.listen(port, host, () => {
   process.stdout.write(`Dia Custom bridge listening on http://${host}:${port}\n`);
   process.stdout.write(`Mode: ${captureEnabled ? "capture" : "bridge"}\n`);

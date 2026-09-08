@@ -62,8 +62,8 @@ if [[ -d "$app" ]]; then
     fail "custom bundle is not registered for http/https URLs"
   fi
   [[ -z "${source_build:-}" || "$custom_build" == "$source_build" ]] && pass "custom build matches installed Dia ($custom_build)" || warn "custom build $custom_build differs from installed Dia ${source_build:-unknown}"
-  if node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" >/dev/null 2>&1; then
-    pass "custom build uses an audited compatibility manifest"
+  if node "$script_dir/check-dia-build.js" "$app" --mods "$enabled_mods" --require-patched >/dev/null 2>&1; then
+    pass "custom build has audited compatibility and complete native routing patches"
   else
     fail "custom build $custom_build is not audited for every enabled mod"
   fi

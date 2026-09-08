@@ -285,7 +285,7 @@ export class LocalWebTools {
   }
 
   definitions() {
-    return webToolDefinitions.map((tool) => structuredClone(tool));
+    return webToolDefinitions.map((tool) => ({ ...structuredClone(tool), annotations: { readOnlyHint: true } }));
   }
 
   async search(input) {

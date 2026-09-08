@@ -3,6 +3,7 @@
   "displayName": "Sample Local MCP",
   "icon": "external-tool",
   "execution": "bridge",
+  "transport": "streamable-http",
   "authentication": "none",
   "endpoint": "http://127.0.0.1:9000/mcp",
   "allowedDomains": ["127.0.0.1"],

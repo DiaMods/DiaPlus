@@ -1,4 +1,4 @@
-import { Codex } from "@openai/codex-sdk";
+import { createDecisionCodex } from "./codex-runtime.js";
 import { mkdir } from "node:fs/promises";
 import {
   buildDecisionPrompt,
@@ -7,15 +7,9 @@ import {
   toolDecisionSchemaForPayload,
 } from "../chat-shape.js";
 import { decisionWorkspacePath } from "../paths.js";
+import { prepareMediaPayload } from "../media-inputs.js";
+import { FinalTextStream, partialFinalText } from "./decision-stream.js";
 
-const codex = new Codex({
-  config: { model_reasoning_summary: "detailed" },
-  // Do not expose provider keys or bridge state paths to the subprocess. Codex
-  // uses the user's normal ~/.codex login through HOME.
-  env: Object.fromEntries([
-    "HOME", "LANG", "LC_ALL", "LOGNAME", "PATH", "SHELL", "TERM", "TMPDIR", "USER",
-  ].flatMap((name) => process.env[name] === undefined ? [] : [[name, process.env[name]]])),
-});
 
 function reasoningEffort(payload, model, tools) {
   const requested = payload?.reasoning_effort;
@@ -31,9 +25,17 @@ function reasoningEffort(payload, model, tools) {
   return "medium";
 }
 
-export async function runCodexProvider({ payload, tools, model, onReasoning }) {
+export async function runCodexProvider({ payload, tools, model, onReasoning, onTextDelta, codexClient = null }) {
+  codexClient ??= await createDecisionCodex();
+  const media = await prepareMediaPayload(payload, { target: "codex" });
+  try {
+    return await runCodexTurn({ payload: media.payload, images: media.images, tools, model, onReasoning, onTextDelta, codexClient });
+  } finally { await media.cleanup(); }
+}
+
+async function runCodexTurn({ payload, images, tools, model, onReasoning, onTextDelta, codexClient }) {
   await mkdir(decisionWorkspacePath, { recursive: true, mode: 0o700 });
-  const thread = codex.startThread({
+  const thread = codexClient.startThread({
     model,
     sandboxMode: "read-only",
     workingDirectory: decisionWorkspacePath,
@@ -44,8 +46,13 @@ export async function runCodexProvider({ payload, tools, model, onReasoning }) {
     approvalPolicy: "never",
   });
   const abort = new AbortController();
+  const prompt = buildDecisionPrompt(payload, tools) + (tools.length ? "" :
+    "\nNo tools are enabled in this turn. Return the answer directly as Markdown, without a JSON decision envelope.");
   const { events } = await thread.runStreamed(
-    buildDecisionPrompt(payload, tools),
+    images.length ? [
+      { type: "text", text: prompt + "\nImage attachments below correspond to attachment-1, attachment-2, etc. in transcript order." },
+      ...images.map(({ path }) => ({ type: "local_image", path })),
+    ] : prompt,
     {
       ...(tools.length > 0 ? { outputSchema: toolDecisionSchemaForPayload(payload, tools) } : {}),
       signal: abort.signal,
@@ -53,6 +60,9 @@ export async function runCodexProvider({ payload, tools, model, onReasoning }) {
   );
 
   const reasoningByID = new Map();
+  const textStream = new FinalTextStream(onTextDelta);
+  let messageID = null;
+  let completed = false;
   let finalResponse = "";
   let usage = null;
   let failure = null;
@@ -75,9 +85,16 @@ export async function runCodexProvider({ payload, tools, model, onReasoning }) {
         const delta = current.startsWith(previous) ? current.slice(previous.length) : current;
         reasoningByID.set(event.item.id, current);
         if (delta && onReasoning) await onReasoning(delta);
-      } else if (event.type === "item.completed" && event.item?.type === "agent_message") {
+      } else if (["item.started", "item.updated", "item.completed"].includes(event.type) && event.item?.type === "agent_message") {
+        if (messageID && messageID !== event.item.id && textStream.text) {
+          throw new Error("Codex emitted multiple final messages after streaming");
+        }
+        messageID = event.item.id;
         finalResponse = event.item.text ?? "";
+        const text = tools.length ? partialFinalText(finalResponse) : finalResponse;
+        if (text) await textStream.push(text);
       } else if (event.type === "turn.completed") {
+        completed = true;
         usage = event.usage ?? null;
       } else if (event.type === "turn.failed") {
         failure = event.error;
@@ -91,8 +108,10 @@ export async function runCodexProvider({ payload, tools, model, onReasoning }) {
     if (!failure) throw error;
   }
   if (failure) throw new Error(failure.message ?? "Codex turn failed");
+  if (!completed) throw new Error("Codex stream ended before turn completion");
 
   if (tools.length === 0) {
+    await textStream.push(finalResponse || "Codex completed without a text response.");
     return {
       kind: "final",
       toolCalls: [],
@@ -101,16 +120,16 @@ export async function runCodexProvider({ payload, tools, model, onReasoning }) {
       model,
     };
   }
-  try {
-    return parseStructuredDecision(finalResponse, tools, model, usage);
-  } catch (error) {
-    process.stderr.write(`Codex decision parse error: ${String(error?.message ?? error)}\n`);
-    return {
-      kind: "final",
-      toolCalls: [],
-      text: finalResponse || "Codex completed without a text response.",
-      usage,
-      model,
-    };
+  // Invalid structured output is a provider error. Never leak the decision JSON
+  // as an answer or reinterpret malformed tool calls as successful completion.
+  const raw = JSON.parse(finalResponse);
+  if (!["final", "tool_use"].includes(raw?.kind) || !Array.isArray(raw.tool_calls) ||
+      (raw.kind === "final" && raw.tool_calls.length !== 0)) {
+    throw new Error("Codex returned an invalid structured decision");
   }
+  const result = parseStructuredDecision(raw, tools, model, usage);
+  if (raw.kind === "tool_use" && result.kind !== "tool_use") throw new Error("Codex returned no valid tool calls");
+  if (result.kind === "final") await textStream.push(result.text);
+  else if (textStream.text) throw new Error("Codex changed a streamed answer into a tool call");
+  return result;
 }

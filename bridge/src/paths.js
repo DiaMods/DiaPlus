@@ -14,7 +14,7 @@ export const compatibilityStatePath = process.env.DIA_CUSTOM_COMPATIBILITY_PATH 
   resolve(stateDirectory, "compatibility.json");
 export const legacyModulesStatePath = resolve(stateDirectory, "modules.json");
 export const toolCacheDirectory = process.env.DIA_CUSTOM_TOOL_CACHE_DIR ??
-  resolve(stateDirectory, "tool-cache");
+  resolve(bridgeDirectory, "tool-cache");
 export const configPath = process.env.DIA_CUSTOM_CONFIG_PATH ??
   resolve(stateDirectory, "config.json");
 export const modelCatalogPath = process.env.DIA_CUSTOM_MODEL_CATALOG_PATH ??

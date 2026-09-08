@@ -1,0 +1,10 @@
+{
+  "id": "local-mcp",
+  "displayName": "Local MCP server",
+  "transport": "stdio",
+  "authentication": "none",
+  "command": "/opt/homebrew/bin/node",
+  "args": ["/absolute/path/to/server.js"],
+  "envKeys": ["SERVICE_API_KEY"],
+  "timeoutMs": 30000
+}

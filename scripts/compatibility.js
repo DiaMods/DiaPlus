@@ -15,12 +15,15 @@ function parseArguments(values) {
   let app = null;
   let selected = null;
   let json = false;
+  let requirePatched = false;
   for (let index = 0; index < values.length; index += 1) {
     const value = values[index];
     if (value === "--mods" || value === "--modules") {
       selected = new Set((values[++index] ?? "").split(",").filter(Boolean));
     } else if (value === "--json") {
       json = true;
+    } else if (value === "--require-patched") {
+      requirePatched = true;
     } else if (!value.startsWith("--") && app === null) {
       app = resolve(value);
     } else {
@@ -28,7 +31,7 @@ function parseArguments(values) {
     }
   }
   if (!app) throw new Error("usage: ./dia-custom compatibility [/path/to/Dia.app] [--json]");
-  return { app, selected, json };
+  return { app, selected, json, requirePatched };
 }
 
 function plist(app, field) {
@@ -73,25 +76,16 @@ async function validate(name, app, context) {
         ? { compatible: true }
         : { compatible: false, reason: "unexpected Dia executable layout" };
     case "updater-plist":
+    case "custom-updater":
       return context.hasSparkle
         ? { compatible: true }
         : { compatible: false, reason: "Dia's bundled updater surface was not found" };
     case "local-ai-routing": {
-      const endpoints = [
-        "https://tools-cache.diabrowser.engineering",
-        "https://aiproxy.diabrowser.engineering/api/dia-claude-stream",
-        "https://webresultproxy.diabrowser.engineering/api/claude-stream",
-        "https://webresultproxy.diabrowser.engineering/api/open-ai-chat-stream",
-        "https://ai-service.diabrowser.engineering/aiproxy",
-        "https://ai-service.diabrowser.engineering",
-        "https://model-server.browserinternalstaging.com",
-      ];
-      const endpointsReady = endpoints.every((value) =>
-        executable.includes(Buffer.from(value)) ||
-        executable.includes(Buffer.from(value.replace(/^https:\/\/[^/]+/, "http://localhost:8765"))));
-      if (!endpointsReady || !handler.includes(Buffer.from("GATEWAY_PORT="))) {
-        return { compatible: false, reason: "native AI endpoint or agent gateway layout changed" };
-      }
+      const checkArgs = ["--check", ...(context.requirePatched ? ["--require-patched"] : []), app];
+      const endpoints = runNodeCheck("src/patches/patch-endpoint.js", checkArgs);
+      if (!endpoints.compatible) return endpoints;
+      const agent = runNodeCheck("src/patches/patch-agent-handler.js", checkArgs);
+      if (!agent.compatible) return agent;
       return runNodeCheck("src/patches/patch-no-account.js", [
         "--check", "--capabilities-only", app,
       ]);
@@ -126,7 +120,7 @@ async function validate(name, app, context) {
         : { compatible: false, reason: "native Memory pane layout changed" };
     case "native-apps":
       return containsEvery(executable, ["AppsPreferencePaneView", "onEnableMorningBriefTapped"])
-        ? { compatible: true }
+        ? runNodeCheck("src/bootstrap/check-new-tab-state.js", [resolve(app, "Contents/MacOS/Dia")])
         : { compatible: false, reason: "native Apps pane state or callbacks changed" };
     case "live-connectors": {
       let tools = [];
@@ -146,12 +140,14 @@ async function validate(name, app, context) {
         ? { compatible: true }
         : { compatible: false, reason: "native connector/tab schemas changed" };
     }
-    case "morning-brief":
-      return containsEvery(executable, [
+    case "morning-brief": {
+      if (!containsEvery(executable, [
         "MorningBriefScheduleClient", "openOrGenerateCliaReport", "AppsPreferencePaneView",
-      ])
-        ? { compatible: true }
-        : { compatible: false, reason: "native Morning Brief scheduler/controller changed" };
+      ])) return { compatible: false, reason: "native Morning Brief scheduler/controller changed" };
+      return runNodeCheck("src/bootstrap/discover-native-actions.js", [
+        resolve(app, "Contents/MacOS/Dia"), plist(app, "CFBundleVersion"),
+      ]);
+    }
     case "bridge-owned":
     case "apple-helper":
       return { compatible: true };
@@ -160,7 +156,7 @@ async function validate(name, app, context) {
   }
 }
 
-const { app, selected, json } = parseArguments(process.argv.slice(2));
+const { app, selected, json, requirePatched } = parseArguments(process.argv.slice(2));
 const [manifest, builds, executable, handler, schema] = await Promise.all([
   readFile(manifestPath, "utf8").then(JSON.parse),
   readFile(buildsPath, "utf8").then(JSON.parse),
@@ -181,6 +177,7 @@ const context = {
   executable,
   handler,
   schema,
+  requirePatched,
   hasSparkle: await access(resolve(app, "Contents/Frameworks/Sparkle.framework"), constants.R_OK)
     .then(() => true).catch(() => false),
 };
@@ -188,9 +185,12 @@ const perMod = [];
 for (const mod of manifest.mods.filter((candidate) => requested.has(candidate.id))) {
   const audited = record?.status === "audited" &&
     new Set(record.mods ?? record.modules ?? []).has(mod.id);
-  const outcome = audited
-    ? { compatible: true, source: "audited-build" }
-    : { ...(await validate(mod.compatibilityValidator, app, context)), source: "structural-validator" };
+  // A build number is metadata, not proof that this candidate still contains
+  // the audited code. Always validate the actual downloaded/staged content.
+  const outcome = {
+    ...(await validate(mod.compatibilityValidator, app, context)),
+    source: audited ? "audited-build-and-structural-validator" : "structural-validator",
+  };
   perMod.push({
     id: mod.id,
     label: mod.label,

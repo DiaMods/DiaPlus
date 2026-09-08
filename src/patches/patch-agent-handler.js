@@ -4,36 +4,57 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { assertPatchableCustomApp } from "./custom-app-guard.js";
 
-const app = resolve(process.argv[2] ?? "");
-if (!process.argv[2]) {
-  throw new Error("usage: patch-agent-handler.js /path/to/Dia Custom.app");
+const args = process.argv.slice(2);
+const checkOnly = args.includes("--check");
+const requirePatched = args.includes("--require-patched");
+const appArguments = args.filter((arg) => !arg.startsWith("--"));
+if (appArguments.length !== 1 || args.some((arg) => arg.startsWith("--") &&
+    !["--check", "--require-patched"].includes(arg)) || requirePatched && !checkOnly) {
+  throw new Error("usage: patch-agent-handler.js [--check [--require-patched]] /path/to/Dia.app");
 }
-assertPatchableCustomApp(app);
+const app = resolve(appArguments[0]);
+if (!checkOnly) assertPatchableCustomApp(app);
 
 const handler = resolve(
   app,
   "Contents/Resources/agent-server-resources/dist/handler",
 );
 const binary = await readFile(handler);
-const processMonitorSources = [Buffer.from('SL("ps"'), Buffer.from('SL("ls"')];
-const processMonitorReplacement = Buffer.from('SL("sh"');
+const processMonitorVariants = ["SL", "kM"].flatMap((name) => ["ps", "ls"].map((command) => ({
+  before: Buffer.from(`${name}("${command}"`), after: Buffer.from(`${name}("sh"`),
+})));
 const processMonitorOffsets = [];
 
-for (const source of processMonitorSources) {
+for (const { before: source, after } of processMonitorVariants) {
   for (let offset = binary.indexOf(source); offset !== -1; offset = binary.indexOf(source, offset + 1)) {
-    processMonitorOffsets.push(offset);
+    processMonitorOffsets.push({ offset, after });
   }
 }
 
-if (processMonitorOffsets.length !== 0 && processMonitorOffsets.length !== 2) {
-  throw new Error(
-    `expected exactly two process-monitor calls, found ${processMonitorOffsets.length}`,
-  );
+function matchingSites(patterns) {
+  const uniquePatterns = [...new Map(patterns.map((pattern) => [pattern.toString("hex"), pattern])).values()];
+  const sites = [];
+  for (const pattern of uniquePatterns) {
+    for (let offset = binary.indexOf(pattern); offset !== -1; offset = binary.indexOf(pattern, offset + 1)) {
+      sites.push({ offset, end: offset + pattern.length });
+    }
+  }
+  // Some older minified variants include an object prefix around a shared
+  // replacement. They represent the same site, not two independent matches.
+  return sites.filter((site, index) => !sites.some((other, otherIndex) =>
+    otherIndex !== index && other.offset <= site.offset && other.end >= site.end &&
+    (other.offset < site.offset || other.end > site.end || otherIndex < index)));
 }
 
-for (const offset of processMonitorOffsets) {
-  processMonitorReplacement.copy(binary, offset);
+function requireSites(name, variants, expected, patchedOnly) {
+  const patterns = variants.flatMap(({ before, after }) => patchedOnly ? [after] : [before, after]);
+  const count = matchingSites(patterns).length;
+  if (count !== expected) {
+    throw new Error(`native agent ${name} layout changed or ${patchedOnly ? "required patch is missing" : "is unrecognized"}: expected ${expected} site(s), found ${count}`);
+  }
 }
+
+requireSites("process monitors", processMonitorVariants, 2, requirePatched);
 
 // Keep Dia's real per-context sandbox. Native artifact ingestion relies on
 // that boundary when deciding which report directories are trusted. The model
@@ -79,17 +100,20 @@ const handlerPatches = [
   },
   {
     // Dia 1.46 sandbox-exec parameter. This preserves the binary length.
+    critical: "sandbox gateway",
     before: Buffer.from('`GATEWAY_PORT=${Z}`'),
     after: Buffer.from('`GATEWAY_PORT=8765`'),
   },
   {
     // Dia 1.45 uses a different minified gateway variable.
+    critical: "sandbox gateway",
     before: Buffer.from('`GATEWAY_PORT=${z}`'),
     after: Buffer.from('`GATEWAY_PORT=8765`'),
   },
   {
     // Keep Dia's native context builder and Claude-compatible harness, but
     // send the resulting model request straight to the localhost bridge.
+    critical: "model endpoint",
     before: Buffer.from(
       'ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${H.port}`',
     ),
@@ -98,6 +122,7 @@ const handlerPatches = [
     ),
   },
   {
+    critical: "model endpoint",
     before: Buffer.from(
       'u6.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${U.port}`',
     ),
@@ -111,6 +136,7 @@ const handlerPatches = [
     // uses that existing UI for local provider activity summaries.
     const before = 'Z.settings?.env?.ENABLE_THINKING_STREAM === "true"';
     return {
+      critical: "thinking stream",
       before: Buffer.from(before),
       after: Buffer.from("true".padEnd(before.length, " ")),
     };
@@ -118,6 +144,15 @@ const handlerPatches = [
   (() => {
     const before = 'Q.settings?.env?.ENABLE_THINKING_STREAM === "true"';
     return {
+      critical: "thinking stream",
+      before: Buffer.from(before),
+      after: Buffer.from("true".padEnd(before.length, " ")),
+    };
+  })(),
+  (() => {
+    const before = 'J.settings?.env?.ENABLE_THINKING_STREAM === "true"';
+    return {
+      critical: "thinking stream",
       before: Buffer.from(before),
       after: Buffer.from("true".padEnd(before.length, " ")),
     };
@@ -132,6 +167,7 @@ const handlerPatches = [
       'Q.onCheck("permission", { tool: C, tool_use_id: N, ...M && { namespace: M }, input: I }, G(R))';
     const localDecision = 'Promise.resolve(\'{"decision":"allow"}\')';
     return {
+      critical: "permission hook",
       before: Buffer.from(before),
       after: Buffer.from(localDecision.padEnd(before.length, " ")),
     };
@@ -146,6 +182,21 @@ const handlerPatches = [
     const localDecision =
       '(J.onCheck("permission",{tool:N,tool_use_id:M,namespace:I,input:P},K(C)).catch(()=>0),\'{"decision":"allow"}\')';
     return {
+      critical: "permission hook",
+      before: Buffer.from(before),
+      after: Buffer.from(localDecision.padEnd(before.length, " ")),
+    };
+  })(),
+  (() => {
+    // Build 86584 retains the same native notification contract under new
+    // minified identifiers. Keep that association and the separate native
+    // AskUserQuestion flow; only the unavailable hosted verdict is replaced.
+    const before =
+      'X.onCheck("permission", { tool: N, tool_use_id: I, ...M && { namespace: M }, input: P }, K(R)).catch(() => null)';
+    const localDecision =
+      '(X.onCheck("permission",{tool:N,tool_use_id:I,namespace:M,input:P},K(R)).catch(()=>0),\'{"decision":"allow"}\')';
+    return {
+      critical: "permission hook",
       before: Buffer.from(before),
       after: Buffer.from(localDecision.padEnd(before.length, " ")),
     };
@@ -159,6 +210,7 @@ const handlerPatches = [
       'Promise.resolve(`{"decision":"${/^(creat|edit|delet|upload|send)/.test(N)?"deny":"allow"}`)';
     const corrected = 'Promise.resolve(\'{"decision":"allow"}\')';
     return {
+      critical: "permission hook",
       before: Buffer.from(malformed.padEnd(remoteBefore.length, " ")),
       after: Buffer.from(corrected.padEnd(remoteBefore.length, " ")),
     };
@@ -171,6 +223,7 @@ const handlerPatches = [
       'Promise.resolve(`{"decision":"${/^(creat|edit|delet|upload|send)/.test(N)?"deny":"allow"}"}`)';
     const allow = 'Promise.resolve(\'{"decision":"allow"}\')';
     return {
+      critical: "permission hook",
       before: Buffer.from(conditional.padEnd(remoteBefore.length, " ")),
       after: Buffer.from(allow.padEnd(remoteBefore.length, " ")),
     };
@@ -183,6 +236,7 @@ const handlerPatches = [
     const withNativeNotification =
       '(J.onCheck("permission",{tool:N,tool_use_id:M,namespace:I,input:P},K(C)).catch(()=>0),\'{"decision":"allow"}\')';
     return {
+      critical: "permission hook",
       before: Buffer.from(immediate.padEnd(remoteBefore.length, " ")),
       after: Buffer.from(withNativeNotification.padEnd(remoteBefore.length, " ")),
     };
@@ -205,6 +259,27 @@ const handlerPatches = [
         }`;
     const localWeb = `async(i,o)=>{if(!D.has(c))D.add(c),Dv6(J,T);try{let m=W?.(),e=o?._meta?.["claudecode/toolUseId"];if(e&&m)m={...m,toolUseId:e};if(M==="dia"&&/^(search_web|fetch_web_content)$/.test(c)){X.onTool(c,i,M,m).catch(()=>0);let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:c,i})}),t=await r.text();if(!r.ok)throw Error(t);return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await X.onTool(c,i,M,m)}]}}catch(e){return{content:[{type:"text",text:JSON.stringify({error:String(e)})}]}}}`;
     return {
+      critical: "public web callback",
+      before: Buffer.from(before),
+      after: Buffer.from(localWeb.padEnd(Buffer.byteLength(before), " ")),
+    };
+  })(),
+  (() => {
+    const before = `async (l, C$) => {
+          let f = C$?._meta?.["claudecode/toolUseId"], v = typeof f === "string" ? f : undefined;
+          if (!j.has(d))
+            j.add(d), Gx6(X, b);
+          try {
+            let g = W?.();
+            return { content: [{ type: "text", text: await Q.onTool(d, l, I, g && v ? { ...g, toolUseId: v } : g) }] };
+          } catch (g) {
+            let A = g instanceof Error ? g.message : String(g);
+            return { content: [{ type: "text", text: JSON.stringify({ error: A }) }] };
+          }
+        }`;
+    const localWeb = `async(i,o)=>{if(!j.has(d))j.add(d),Gx6(X,b);try{let m=W?.(),e=o?._meta?.["claudecode/toolUseId"];if(e&&m)m={...m,toolUseId:e};if(I==="dia"&&/^(search_web|fetch_web_content)$/.test(d)){Q.onTool(d,i,I,m).catch(()=>0);let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:d,i})}),t=await r.text();if(!r.ok)throw Error(t);return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await Q.onTool(d,i,I,m)}]}}catch(e){return{content:[{type:"text",text:JSON.stringify({error:String(e)})}]}}}`;
+    return {
+      critical: "public web callback",
       before: Buffer.from(before),
       after: Buffer.from(localWeb.padEnd(Buffer.byteLength(before), " ")),
     };
@@ -216,11 +291,17 @@ const handlerPatches = [
     const legacyLocalWeb = `async(j$,C$)=>{let y=C$?._meta?.["claudecode/toolUseId"],E=typeof y==="string"?y:undefined;if(!D.has(c))D.add(c),Dv6(J,T);try{let u=W?.();if(M==="dia"&&/^(search_web|fetch_web_content)$/.test(c)){let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:c,i:j$})}),t=await r.text();if(!r.ok)throw Error(t);return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await X.onTool(c,j$,M,u&&E?{...u,toolUseId:E}:u)}]}}catch(u){return{content:[{type:"text",text:JSON.stringify({error:String(u)})}]}}}`;
     const localWeb = `async(i,o)=>{if(!D.has(c))D.add(c),Dv6(J,T);try{let m=W?.(),e=o?._meta?.["claudecode/toolUseId"];if(e&&m)m={...m,toolUseId:e};if(M==="dia"&&/^(search_web|fetch_web_content)$/.test(c)){X.onTool(c,i,M,m).catch(()=>0);let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:c,i})}),t=await r.text();if(!r.ok)throw Error(t);return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await X.onTool(c,i,M,m)}]}}catch(e){return{content:[{type:"text",text:JSON.stringify({error:String(e)})}]}}}`;
     return {
+      critical: "public web callback",
       before: Buffer.from(legacyLocalWeb.padEnd(beforeLength, " ")),
       after: Buffer.from(localWeb.padEnd(beforeLength, " ")),
     };
   })(),
 ];
+const criticalGroups = ["sandbox gateway", "model endpoint", "thinking stream", "permission hook", "public web callback"];
+for (const group of criticalGroups) {
+  requireSites(group, handlerPatches.filter((patch) => patch.critical === group), 1, requirePatched);
+}
+for (const { offset, after } of processMonitorOffsets) after.copy(binary, offset);
 let handlerPatchCount = 0;
 
 for (const { before, after } of handlerPatches) {
@@ -236,6 +317,27 @@ for (const { before, after } of handlerPatches) {
   }
   after.copy(binary, offset);
   handlerPatchCount += 1;
+}
+
+requireSites("process monitors", processMonitorVariants, 2, true);
+for (const group of criticalGroups) {
+  requireSites(group, handlerPatches.filter((patch) => patch.critical === group), 1, true);
+}
+for (const boundary of [
+  '"/usr/bin/sandbox-exec"',
+  'CLAUDE_CODE_SANDBOX_PROFILE || (() => {',
+  'permissionMode: "default"',
+  '.onCheck("user_question",',
+  'file:// URLs are not allowed in open_tabs',
+]) {
+  if (!binary.includes(Buffer.from(boundary))) {
+    throw new Error(`native agent safety boundary changed: ${boundary}`);
+  }
+}
+
+if (checkOnly) {
+  process.stdout.write(`Validated ${criticalGroups.length} critical handler groups, two process monitors and native safety boundaries${requirePatched ? " (patches required)" : ""}.\n`);
+  process.exit(0);
 }
 
 if (processMonitorOffsets.length === 0 && handlerPatchCount === 0) {

@@ -13,6 +13,8 @@ if (( $# > 3 )); then
   print -u2 "usage: snapshot-profile.sh [PROFILE [BACKUP_ROOT [LABEL]]]"
   exit 2
 fi
+app="${app:A}"
+profile="${profile:A}"
 if [[ -z "$label" || "$label" == *[^A-Za-z0-9._-]* ]]; then
   print -u2 "Unsafe profile snapshot label: $label"
   exit 2
@@ -20,8 +22,7 @@ fi
 if [[ ! -f "$profile/User Data/Local State" ]]; then
   exit 0
 fi
-if /usr/bin/pgrep -f "$app/Contents/MacOS/Dia" >/dev/null ||
-   /usr/bin/pgrep -f -- "--user-data-dir=$profile/User Data" >/dev/null; then
+if ! node "$script_dir/browser-process-guard.js" assert-stopped "$app" "$profile"; then
   print -u2 "Quit Dia Custom before snapshotting its browser profile."
   exit 1
 fi

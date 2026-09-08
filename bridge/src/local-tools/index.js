@@ -10,21 +10,24 @@ import {
   localConnectorTools,
 } from "./connectors.js";
 import { modEnabled } from "../mods.js";
+import { localKnowledgeTools, executeKnowledgeTool, isKnowledgeTool } from "../knowledge.js";
 
 export class LocalToolRegistry {
   constructor(memoryStore, configStore, {
     webTools = new LocalWebTools(),
     connectorRegistry = null,
+    knowledgeStore = null,
   } = {}) {
     this.memoryStore = memoryStore;
     this.configStore = configStore;
     this.webTools = webTools;
     this.connectorRegistry = connectorRegistry;
+    this.knowledgeStore = knowledgeStore;
   }
 
-  async definitions(nativeTools, { profileID = "Default" } = {}) {
+  async definitions(nativeTools, { profileID = "Default", readOnlyLocalOnly = false } = {}) {
     const config = await this.configStore.load();
-    const byName = new Map(nativeTools.map((tool) => [tool.name, tool]));
+    const byName = new Map((readOnlyLocalOnly ? [] : nativeTools).map((tool) => [tool.name, tool]));
     if (modEnabled("native-memory") && config.localMemory.enabled) {
       for (const tool of localMemoryTools()) byName.set(tool.name, tool);
     }
@@ -40,15 +43,26 @@ export class LocalToolRegistry {
         this.connectorRegistry) {
       for (const tool of await this.connectorRegistry.definitions(profileID)) byName.set(tool.name, tool);
     }
-    return [...byName.values()];
+    if (modEnabled("local-knowledge") && this.knowledgeStore) {
+      for (const tool of localKnowledgeTools()) byName.set(tool.name, tool);
+    }
+    return [...byName.values()].filter((tool) => !readOnlyLocalOnly || (tool.source === "local" && tool.annotations?.readOnlyHint === true));
   }
 
   isLocal(name) {
-    return isLocalMemoryTool(name) || isLocalWebTool(name) || isLocalConnectorTool(name) ||
+    return isLocalMemoryTool(name) || isLocalWebTool(name) || isLocalConnectorTool(name) || isKnowledgeTool(name) ||
       Boolean(this.connectorRegistry?.isTool(name));
   }
 
   async execute(call, context = {}) {
+    if (context.readOnlyLocalOnly) {
+      const definitions = await this.definitions([], { profileID: context.profileID, readOnlyLocalOnly: true });
+      if (!definitions.some((tool) => tool.name === call.name)) throw new Error("Research and scheduled workflows only permit local read-only tools");
+    }
+    if (isKnowledgeTool(call.name)) {
+      if (!modEnabled("local-knowledge") || !this.knowledgeStore) throw new Error("local-knowledge mod is disabled");
+      return executeKnowledgeTool(this.knowledgeStore, call.name, call.input, context);
+    }
     if (isLocalMemoryTool(call.name)) {
       if (!modEnabled("native-memory")) throw new Error("native-memory mod is disabled");
       const config = await this.configStore.load();
@@ -65,7 +79,7 @@ export class LocalToolRegistry {
       if (!modEnabled("connectors")) throw new Error("connectors mod is disabled");
       const config = await this.configStore.load();
       if (!config.localConnectors.enabled) throw new Error("local connectors are disabled");
-      return executeLocalConnectorTool(this.memoryStore, call.name, call.input);
+      return executeLocalConnectorTool(this.memoryStore, call.name, call.input, context);
     }
     if (this.connectorRegistry?.isTool(call.name)) {
       if (!modEnabled("live-connectors")) throw new Error("live-connectors mod is disabled");

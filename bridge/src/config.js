@@ -28,6 +28,7 @@ export function defaultConfig() {
         id: "apple-on-device",
         type: "apple-foundation-models",
         mode: "on-device",
+        imageMode: "vision",
         label: "Apple On-Device",
         enabled: true,
         models: [{
@@ -40,6 +41,7 @@ export function defaultConfig() {
         id: "apple-private-cloud",
         type: "apple-foundation-models",
         mode: "private-cloud",
+        imageMode: "vision",
         label: "Apple Private Cloud Compute",
         enabled: true,
         models: [{
@@ -135,6 +137,10 @@ function validateProvider(provider, seenIDs) {
       throw new Error(`${id}.mode must be on-device or private-cloud`);
     }
     output.mode = provider.mode;
+    output.imageMode = provider.imageMode ?? "vision";
+    if (!["vision", "native"].includes(output.imageMode)) {
+      throw new Error(`${id}.imageMode must be vision or native`);
+    }
   }
 
   if (type === "openai-compatible") {

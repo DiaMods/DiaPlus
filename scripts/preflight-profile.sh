@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
-work_dir="${project_dir:h}"
+work_dir="${DIA_CUSTOM_WORK_DIR:-${project_dir:h}}"
 app="${1:-}"
 snapshot="${2:-}"
 
@@ -11,43 +11,37 @@ if (( $# != 2 )) || [[ ! -d "$app" || ! -f "$snapshot/User Data/Local State" ]];
   print -u2 "usage: preflight-profile.sh /path/to/Dia\ Custom.app /path/to/profile.snapshot"
   exit 2
 fi
+app="${app:A}"
+snapshot="${snapshot:A}"
+work_dir="${work_dir:A}"
 
 test_root="$(/usr/bin/mktemp -d "$work_dir/Dia Custom RTTM.profile-preflight.XXXXXX")"
 candidate="$test_root/profile"
 browser_pid=""
 
 stop_candidate() {
-  if [[ -n "$browser_pid" ]] && /bin/kill -0 "$browser_pid" >/dev/null 2>&1; then
-    browser_command="$(/bin/ps -o command= -p "$browser_pid" 2>/dev/null || true)"
-    if [[ "$browser_command" == *"--user-data-dir=$candidate/User Data"* ]]; then
-      /bin/kill -TERM "$browser_pid" >/dev/null 2>&1 || true
-    fi
-  fi
-  for _ in {1..50}; do
-    candidate_running=false
-    while IFS= read -r candidate_pid; do
-      [[ -z "$candidate_pid" ]] && continue
-      candidate_command="$(/bin/ps -o command= -p "$candidate_pid" 2>/dev/null || true)"
-      if [[ "$candidate_command" == *"--user-data-dir=$candidate/User Data"* ]]; then
-        candidate_running=true
-        /bin/kill -TERM "$candidate_pid" >/dev/null 2>&1 || true
-      fi
-    done < <(/usr/bin/pgrep -f -- "--user-data-dir=$candidate/User Data" 2>/dev/null || true)
-    [[ "$candidate_running" == false ]] && break
-    sleep 0.1
-  done
+  node "$script_dir/browser-process-guard.js" stop-profile "$app" "$candidate" || return 1
   browser_pid=""
 }
 
 cleanup() {
-  stop_candidate
+  local exit_status=$?
+  trap - EXIT INT TERM
+  if ! stop_candidate; then
+    print -u2 "Could not verify preflight shutdown; temporary profile preserved at $candidate"
+    exit 1
+  fi
   if [[ "$test_root" == "$work_dir"/Dia\ Custom\ RTTM.profile-preflight.* &&
         -d "$test_root" ]]; then
     /bin/rm -rf "$test_root"
   fi
+  exit "$exit_status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
+node "$script_dir/browser-process-guard.js" assert-stopped "$app" "$candidate"
 /bin/cp -cR "$snapshot" "$candidate"
 /bin/chmod 700 "$candidate"
 mkdir -p "$candidate/Diagnostics"
@@ -61,13 +55,13 @@ start_candidate() {
       process.stdout.write(String(server.address().port));
       server.close();
     });
-  ')"
+  ')" || return $?
+  DIA_CUSTOM_PREFLIGHT=1 \
   DIA_CUSTOM_PROFILE="$candidate" \
   "$app/Contents/MacOS/Dia" \
     -customApplicationDataBaseURLPath "$candidate" \
     --user-data-dir="$candidate/User Data" \
     --remote-debugging-port="$debug_port" \
-    --use-mock-keychain \
     --no-first-run \
     --disable-sync \
     --disable-component-update \
@@ -93,7 +87,7 @@ start_candidate() {
     print -u2 "The staged app could not open the isolated profile preflight."
     return 1
   fi
-  /bin/chmod 600 "$candidate/Diagnostics/profile-preflight-targets.json"
+  /bin/chmod 600 "$candidate/Diagnostics/profile-preflight-targets.json" || return $?
 }
 
 # A protected-preference migration can be stamped on one shutdown and rejected
@@ -101,11 +95,11 @@ start_candidate() {
 # allowed near the live profile. No request can leave the machine because DNS
 # and background network activity are disabled for both processes.
 for launch_number in 1 2; do
-  start_candidate
+  start_candidate || exit $?
   sleep "${DIA_CUSTOM_PREFLIGHT_SETTLE_SECONDS:-5}"
   node "$script_dir/profile-integrity.js" assert-compatible "$snapshot" "$candidate" \
     >/dev/null
-  stop_candidate
+  stop_candidate || exit $?
 done
 
 print "Profile preflight retained extensions, open sessions, and pinned-tab data."

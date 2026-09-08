@@ -2,10 +2,16 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { assertPatchableCustomApp } from "./custom-app-guard.js";
 
-const app = process.argv[2]
-  ? resolve(process.argv[2])
-  : "";
-assertPatchableCustomApp(app);
+const args = process.argv.slice(2);
+const checkOnly = args.includes("--check");
+const requirePatched = args.includes("--require-patched");
+const appArguments = args.filter((arg) => !arg.startsWith("--"));
+if (appArguments.length !== 1 || args.some((arg) => arg.startsWith("--") &&
+    !["--check", "--require-patched"].includes(arg)) || requirePatched && !checkOnly) {
+  throw new Error("usage: patch-endpoint.js [--check [--require-patched]] /path/to/Dia.app");
+}
+const app = resolve(appArguments[0]);
+if (!checkOnly) assertPatchableCustomApp(app);
 const executable = resolve(app, "Contents/MacOS/Dia");
 const mappings = [
   {
@@ -73,6 +79,9 @@ for (const { source, replacement } of mappings) {
   if (sourceCount === 0 && replacementCount === 1) {
     continue;
   }
+  if (requirePatched) {
+    throw new Error(`required native AI endpoint patch is missing: ${source.toString()}`);
+  }
   if (sourceCount !== 1 || replacementCount !== 0) {
     throw new Error(
       `expected one unpatched endpoint '${source.toString()}', found source=${sourceCount}, replacement=${replacementCount}`,
@@ -82,5 +91,13 @@ for (const { source, replacement } of mappings) {
   patchedCount += 1;
 }
 
-await writeFile(executable, data);
-process.stdout.write(`Patched ${patchedCount} native AI endpoint(s) in ${executable}\n`);
+// Checking simulates the same ordered replacements in memory. This matters
+// because the ai-service base URL is also a prefix of its /aiproxy endpoint.
+// Both original and fully patched candidates must satisfy the exact byte/count
+// checks above; inspecting an official or signed app must never modify it.
+if (checkOnly) {
+  process.stdout.write(`Validated ${mappings.length} native AI endpoint(s) in ${executable}\n`);
+} else {
+  await writeFile(executable, data);
+  process.stdout.write(`Patched ${patchedCount} native AI endpoint(s) in ${executable}\n`);
+}

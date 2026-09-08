@@ -175,38 +175,51 @@ function toolCallSignature(name, input) {
 }
 
 function containsUserRequest(content) {
-  const text = contentAsText(content);
-  if (text.includes("<user-message>")) return true;
   if (Array.isArray(content) && content.some((block) => block?.type === "tool_result")) {
     return false;
   }
+  const text = contentAsText(content);
+  if (text.includes("<user-message>")) return true;
   return text.trim().length > 0;
 }
 
-function toolResultFailed(content) {
+export function toolResultFailed(block) {
+  if (block?.is_error === true) return true;
+  const content = block?.content;
   const text = contentAsText(content).trim();
   if (!text) return false;
   try {
     const parsed = JSON.parse(text);
     if (parsed?.is_error === true || parsed?.success === false) return true;
     if (typeof parsed?.error === "string" && parsed.error.trim()) return true;
+    if (parsed?.error && typeof parsed.error === "object") return true;
+    if (parsed?.is_error === false || parsed?.success === true || block?.is_error === false) return false;
+    // Some native tools wrap an unstructured status in { result: "..." }.
+    // Do not scan arbitrary source records for words such as "error": those
+    // can be successful search results, source code, or skill instructions.
+    return typeof parsed?.result === "string" && toolStatusTextFailed(parsed.result);
   } catch {
     // Native results frequently wrap JSON inside Anthropic text blocks.
   }
-  return /(?:\berror\b|\bfailed\b|\bfailure\b|\bdenied\b|\bnot allowed\b|\bnot within an allowed\b|\bunavailable\b|\btimed out\b|\binvalid\b)/i.test(text);
+  return block?.is_error === false ? false : toolStatusTextFailed(text);
+}
+
+function toolStatusTextFailed(text) {
+  return /^(?:error(?:\s*[:!]|$|\s+(?:calling|executing|reading|writing|uploading)\b)|failed\s+to\b|failure\s*:|unable\s+to\b|permission denied\b|access denied\b|not connected\b|unauthorized\b|authentication required\b|login required\b|(?:this\s+|the\s+)?(?:connector|account|session)\s+(?:is\s+)?(?:not connected|unauthorized|unavailable)\b|blocked\s+(?:by|dia|the browser company)\b|file not found\b|enoent\b|(?:tool|request|upload|read|write)\s+(?:failed|timed out|unavailable)\b|(?:the\s+)?path\s+is\s+not\s+within\s+an\s+allowed\b)/i
+    .test(text.trim());
 }
 
 function humanMessageText(message) {
   if (message?.role !== "user") return "";
+  if (Array.isArray(message.content) &&
+      message.content.some((block) => block?.type === "tool_result")) {
+    return "";
+  }
   const text = contentAsText(message.content);
   const tagged = [...text.matchAll(/<user-message>([\s\S]*?)<\/user-message>/gi)]
     .map((match) => match[1].trim())
     .filter(Boolean);
   if (tagged.length > 0) return tagged.join("\n");
-  if (Array.isArray(message.content) &&
-      message.content.some((block) => block?.type === "tool_result")) {
-    return "";
-  }
   if (
     /<dia-custom-report-policy>/i.test(text) ||
     /<agent-context>/i.test(text) ||
@@ -307,18 +320,7 @@ function resolvedNativeReadPath(value, workingDirectory) {
 }
 
 function nativeReadResultFailed(block) {
-  if (block?.is_error === true) return true;
-  const text = contentAsText(block?.content).trim();
-  if (!text) return false;
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed?.is_error === true || parsed?.success === false) return true;
-    if (typeof parsed?.error === "string" && parsed.error.trim()) return true;
-  } catch {
-    // A successful Read result is normally the page's unstructured text.
-  }
-  return /^(?:error|failed to read|unable to read|permission denied|file not found|enoent)\b/i
-    .test(text);
+  return toolResultFailed(block);
 }
 
 /**
@@ -637,7 +639,7 @@ export function reportWorkflowState(payload) {
       } else if (message.role === "user" && block?.type === "tool_result") {
         resultsByID.set(block.tool_use_id, {
           content: block.content,
-          failed: toolResultFailed(block.content),
+          failed: toolResultFailed(block),
           messageIndex: index,
         });
       }
@@ -817,7 +819,7 @@ export function latexFormattingSkillState(payload) {
       } else if (message.role === "user" && block?.type === "tool_result") {
         const call = callsByID.get(block.tool_use_id);
         if (call?.name === "Skill" && typeof call.input?.skill === "string" &&
-            !toolResultFailed(block.content)) {
+            !toolResultFailed(block)) {
           successfulSkills.add(call.input.skill);
         }
       }
@@ -903,7 +905,7 @@ export function failedToolCallsSinceLastUserRequest(payload) {
         callsByID.set(block.id, block);
       } else if (message.role === "user" && block?.type === "tool_result") {
         const call = callsByID.get(block.tool_use_id);
-        if (call && toolResultFailed(block.content)) {
+        if (call && toolResultFailed(block)) {
           failures.set(toolCallSignature(call.name, call.input), {
             name: call.name,
             input: call.input ?? {},

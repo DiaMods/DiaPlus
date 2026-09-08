@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include "prompt-tools-offsets.h"
+#include "native-actions-offsets.h"
 
 extern BOOL dia_custom_swift_invoke_window_presenter_action(
     const void *applicationController,
@@ -34,6 +35,9 @@ extern char *dia_custom_swift_native_apps_selected_profile_id(
 extern int32_t dia_custom_swift_native_apps_morning_brief_state(
     const void *object);
 extern BOOL dia_custom_swift_invoke_native_apps_enable(const void *view);
+extern BOOL dia_custom_swift_invoke_morning_brief(
+    const void *applicationController, const void *platformWindow, const void *implementation);
+extern void dia_custom_call_swift_void_method(const void *implementation, const void *object);
 extern void *dia_custom_call_prompt_tools_allocating_init(
     const void *initializer,
     const void *classMetadata,
@@ -122,12 +126,13 @@ static void dia_custom_install_process_arguments(NSString *profile) {
         [additions addObject:@"-customApplicationDataBaseURLPath"];
         [additions addObject:profile];
     }
+    // Keep Chromium on the custom app's established macOS Keychain key. A
+    // mock key invalidates existing encrypted preference hashes and cookies.
     NSArray<NSString *> *singleArguments = @[
         [@"--user-data-dir=" stringByAppendingString:
             [profile stringByAppendingPathComponent:@"User Data"]],
         @"--disable-component-update",
         @"--remote-debugging-port=9223",
-        @"--use-mock-keychain",
         @"--no-first-run",
         @"--disable-sync",
         @"--host-resolver-rules=MAP diabrowser.engineering ~NOTFOUND, MAP *.diabrowser.engineering ~NOTFOUND, MAP diabrowser.com ~NOTFOUND, MAP *.diabrowser.com ~NOTFOUND, MAP thebrowser.company ~NOTFOUND, MAP *.thebrowser.company ~NOTFOUND, MAP thebrowser.com ~NOTFOUND, MAP *.thebrowser.com ~NOTFOUND, MAP browserinternal.com ~NOTFOUND, MAP *.browserinternal.com ~NOTFOUND, MAP browserinternalstaging.com ~NOTFOUND, MAP *.browserinternalstaging.com ~NOTFOUND, MAP api.segment.io ~NOTFOUND, MAP cdn-settings.segment.com ~NOTFOUND, MAP clientstream.launchdarkly.com ~NOTFOUND, MAP mobile.launchdarkly.com ~NOTFOUND, MAP browser-intake-datadoghq.com ~NOTFOUND, MAP browser-intake-ap1-datadoghq.com ~NOTFOUND, MAP browser-intake-datadoghq.eu ~NOTFOUND, MAP browser-intake-us3-datadoghq.com ~NOTFOUND, MAP browser-intake-us5-datadoghq.com ~NOTFOUND, MAP o298668.ingest.us.sentry.io ~NOTFOUND, EXCLUDE localhost",
@@ -149,6 +154,39 @@ static void dia_custom_install_process_arguments(NSString *profile) {
     *argumentsPointer = expanded;
 }
 
+static BOOL dia_custom_bridge_health_matches(id value, NSString *runtimeID,
+                                               NSString *profile, NSString *mods) {
+    if (![value isKindOfClass:[NSDictionary class]] || runtimeID.length == 0 ||
+        profile.length == 0 || mods.length == 0) return NO;
+    NSDictionary *health = value;
+    NSDictionary *catalog = [health[@"catalog"] isKindOfClass:[NSDictionary class]]
+        ? health[@"catalog"] : nil;
+    if (![health[@"ok"] isEqual:@YES] || ![health[@"coreReady"] isEqual:@YES] ||
+        ![catalog[@"modelCount"] isKindOfClass:[NSNumber class]] ||
+        [catalog[@"modelCount"] integerValue] <= 0 ||
+        ![health[@"runtimeID"] isEqual:runtimeID]) return NO;
+    NSString *actualProfile = [health[@"profileDirectory"] isKindOfClass:[NSString class]]
+        ? health[@"profileDirectory"] : nil;
+    if (actualProfile.length == 0 ||
+        ![[actualProfile.stringByStandardizingPath stringByResolvingSymlinksInPath]
+            isEqualToString:[profile.stringByStandardizingPath stringByResolvingSymlinksInPath]]) {
+        return NO;
+    }
+    NSArray *actualMods = [health[@"enabledMods"] isKindOfClass:[NSArray class]]
+        ? health[@"enabledMods"] : nil;
+    if (actualMods == nil) return NO;
+    for (id entry in actualMods) {
+        if (![entry isKindOfClass:[NSString class]]) return NO;
+    }
+    NSMutableSet *expectedMods = [NSMutableSet set];
+    for (NSString *entry in [mods componentsSeparatedByString:@","]) {
+        NSString *identifier = [entry stringByTrimmingCharactersInSet:
+            NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (identifier.length > 0) [expectedMods addObject:identifier];
+    }
+    return [expectedMods isEqualToSet:[NSSet setWithArray:actualMods]];
+}
+
 static BOOL dia_custom_bridge_is_healthy(NSString *runtimeID) {
     int socketDescriptor = socket(AF_INET, SOCK_STREAM, 0);
     if (socketDescriptor < 0) return NO;
@@ -166,12 +204,13 @@ static BOOL dia_custom_bridge_is_healthy(NSString *runtimeID) {
         close(socketDescriptor);
         return NO;
     }
-    const char *request = "GET /health HTTP/1.1\r\nHost: 127.0.0.1:8765\r\nConnection: close\r\n\r\n";
+    // HTTP/1.0 keeps the bounded body unchunked, so JSON is parsed exactly once.
+    const char *request = "GET /health HTTP/1.0\r\nHost: 127.0.0.1:8765\r\nConnection: close\r\n\r\n";
     if (send(socketDescriptor, request, strlen(request), 0) < 0) {
         close(socketDescriptor);
         return NO;
     }
-    char response[16384];
+    char response[65536];
     size_t total = 0;
     ssize_t received = 0;
     while (total + 1 < sizeof(response) &&
@@ -181,11 +220,19 @@ static BOOL dia_custom_bridge_is_healthy(NSString *runtimeID) {
     }
     close(socketDescriptor);
     response[total] = '\0';
-    if (strstr(response, "\"ok\":true") == NULL) return NO;
-    if (runtimeID.length == 0) return YES;
-    NSString *needle = [NSString stringWithFormat:@"\"runtimeID\":\"%@\"",
-        runtimeID];
-    return strstr(response, needle.UTF8String) != NULL;
+    if (received < 0 || total + 1 >= sizeof(response) ||
+        (strncmp(response, "HTTP/1.1 200 ", 13) != 0 &&
+         strncmp(response, "HTTP/1.0 200 ", 13) != 0)) return NO;
+    char *body = strstr(response, "\r\n\r\n");
+    if (body == NULL) return NO;
+    body += 4;
+    NSData *data = [NSData dataWithBytes:body length:total - (size_t)(body - response)];
+    id health = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    const char *profile = getenv("DIA_CUSTOM_PROFILE");
+    const char *mods = getenv("DIA_CUSTOM_MODS");
+    return dia_custom_bridge_health_matches(health, runtimeID,
+        profile != NULL ? [NSString stringWithUTF8String:profile] : nil,
+        mods != NULL ? [NSString stringWithUTF8String:mods] : nil);
 }
 
 extern char **environ;
@@ -364,7 +411,8 @@ static void dia_custom_prepare_self_contained_runtime(void) {
     dia_custom_install_process_arguments(profile);
     dia_custom_log_status(@"self-contained-launch-policy-installed");
     NSString *server = [bridge stringByAppendingPathComponent:@"src/server.js"];
-    if ([manager isExecutableFileAtPath:node] &&
+    if (getenv("DIA_CUSTOM_PREFLIGHT") == NULL &&
+        [manager isExecutableFileAtPath:node] &&
         [manager fileExistsAtPath:server]) {
         dia_custom_start_bundled_bridge(node, server,
             [state stringByAppendingPathComponent:@"bridge.pid"],
@@ -656,13 +704,52 @@ static NSUInteger dia_custom_mark_window_menu_items(NSMenu *menu) {
     return marked;
 }
 
+typedef NSMenu *(*DiaCustomDockMenuIMP)(id, SEL, NSApplication *);
+static const void *dia_custom_dock_menu_original_key =
+    &dia_custom_dock_menu_original_key;
+
+static NSMenu *dia_custom_application_dock_menu(id delegate, SEL selector,
+                                               NSApplication *application) {
+    NSValue *stored = nil;
+    for (Class owner = object_getClass(delegate); owner != Nil && stored == nil;
+         owner = class_getSuperclass(owner)) {
+        stored = objc_getAssociatedObject(owner, dia_custom_dock_menu_original_key);
+    }
+    DiaCustomDockMenuIMP original = (DiaCustomDockMenuIMP)stored.pointerValue;
+    NSMenu *menu = original != NULL ? original(delegate, selector, application) : nil;
+    // AppKit asks for fresh Dock menu items independently of NSApp.mainMenu.
+    // Mark the returned native items before AppKit validates/serializes them;
+    // their original actions, targets and every unrelated item stay intact.
+    if (menu != nil) dia_custom_mark_window_menu_items(menu);
+    return menu;
+}
+
+static BOOL dia_custom_install_dock_menu_hook(void) {
+    id delegate = NSApp.delegate;
+    if (delegate == nil || !dia_custom_install_window_menu_enabled_hook()) return NO;
+    Class owner = object_getClass(delegate);
+    SEL selector = @selector(applicationDockMenu:);
+    Method method = class_getInstanceMethod(owner, selector);
+    if (method == NULL) return NO;
+    IMP original = method_getImplementation(method);
+    if (original == (IMP)dia_custom_application_dock_menu) return YES;
+    objc_setAssociatedObject(owner, dia_custom_dock_menu_original_key,
+        [NSValue valueWithPointer:original], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // Replacing on the concrete delegate class also handles inherited methods
+    // without changing the superclass used by unrelated delegates.
+    class_replaceMethod(owner, selector, (IMP)dia_custom_application_dock_menu,
+                        method_getTypeEncoding(method));
+    return YES;
+}
+
 static void dia_custom_schedule_window_menu_repair(NSUInteger attempt) {
     dispatch_async(dispatch_get_main_queue(), ^{
         dia_custom_install_window_menu_enabled_hook();
+        BOOL dockReady = dia_custom_install_dock_menu_hook();
         NSUInteger marked = NSApp.mainMenu != nil
             ? dia_custom_mark_window_menu_items(NSApp.mainMenu) : 0;
-        if (marked >= 2) {
-            dia_custom_log_status(@"native-window-menu-items-repaired");
+        if (marked >= 2 && dockReady) {
+            dia_custom_log_status(@"native-window-menu-items-and-dock-repaired");
             return;
         }
         if (attempt >= 20) {
@@ -2987,12 +3074,15 @@ static void dia_custom_install_developer_menu(void);
 - (void)openModelSettings:(id)sender;
 - (void)showDiaMods:(id)sender;
 - (BOOL)openLocalSettingsFragment:(NSString *)fragment;
+- (void)openCustomUpdater:(id)sender;
 - (void)windowBecameKey:(NSNotification *)notification;
 - (void)windowDidUpdate:(NSNotification *)notification;
 - (void)openBrowserDeveloperTools:(id)sender;
 - (void)openAgentServerDashboard:(id)sender;
 - (void)openLogLevels:(id)sender;
 @end
+
+static void dia_custom_install_updater_controls(id target);
 
 @implementation DiaCustomDeveloperMenuController
 - (void)applicationReady:(NSNotification *)notification {
@@ -3074,6 +3164,13 @@ static void dia_custom_install_developer_menu(void);
     [self openLocalSettingsFragment:nil];
 }
 
+- (void)openCustomUpdater:(id)sender {
+    (void)sender;
+    if (dia_custom_mod_enabled("custom-updater")) {
+        [self openLocalSettingsFragment:@"custom-updater"];
+    }
+}
+
 - (void)showDiaMods:(id)sender {
     (void)sender;
     dia_custom_install_mod_manager(self);
@@ -3118,6 +3215,7 @@ static void dia_custom_install_developer_menu(void);
     if (refreshing) return;
     refreshing = YES;
     @try {
+        dia_custom_install_updater_controls(self);
         if (dia_custom_mod_enabled("model-picker")) {
             dia_custom_install_custom_model_picker(self,
                 @selector(selectCustomModel:));
@@ -3142,6 +3240,7 @@ static void dia_custom_install_developer_menu(void);
 }
 
 - (void)windowDidUpdate:(NSNotification *)notification {
+    dia_custom_install_updater_controls(self);
     dia_custom_request_interface_refresh(self,
         @selector(selectCustomModel:),
         @selector(toggleLocalMemory:));
@@ -3314,7 +3413,8 @@ static void dia_custom_install_developer_menu(void);
 }
 
 - (void)checkLocalMorningBriefSchedule {
-    if (!dia_custom_mod_enabled("morning-brief")) return;
+    if (!dia_custom_mod_enabled("morning-brief") ||
+        getenv("DIA_CUSTOM_PREFLIGHT") != NULL) return;
     if (dia_custom_local_apps_state == nil) {
         dia_custom_fetch_native_apps_state(self, YES);
         return;
@@ -3734,6 +3834,18 @@ static void dia_custom_install_developer_menu(void);
     if (applicationController == nil) {
         return NO;
     }
+    if (strcmp(fieldName, "openOrGenerateCliaReport") == 0) {
+        const void *implementation = dia_custom_main_image_address(DIA_CUSTOM_MORNING_BRIEF_OFFSET);
+        NSString *build = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"];
+        if ([build isEqualToString:@DIA_CUSTOM_NATIVE_ACTION_BUILD] && implementation != NULL &&
+            memcmp(implementation, dia_custom_morning_brief_signature,
+                sizeof(dia_custom_morning_brief_signature)) == 0 &&
+            dia_custom_swift_invoke_morning_brief(applicationController,
+                dia_custom_platform_window(), implementation)) {
+            dia_custom_log_status(@"morning-brief-native-window-controller-invoked");
+            return YES;
+        }
+    }
     return dia_custom_swift_invoke_window_presenter_action(
         (const void *)applicationController,
         fieldName);
@@ -3785,6 +3897,104 @@ static void dia_custom_install_developer_menu(void);
 
 static DiaCustomDeveloperMenuController *dia_custom_developer_menu_controller;
 static BOOL dia_custom_native_apps_actions_installed = NO;
+
+static void dia_custom_intercept_manual_update(id object, SEL command, ...) {
+    (void)object;
+    (void)command;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [dia_custom_developer_menu_controller openCustomUpdater:nil];
+    });
+}
+
+static void dia_custom_intercept_background_update(id object, SEL command, ...) {
+    (void)object;
+    (void)command;
+    // Scheduled checks belong to the custom bridge. Sparkle must never stage
+    // or swap the vendor bundle over this customized, signed application.
+}
+
+static BOOL dia_custom_is_update_action(SEL action) {
+    NSString *name = action != NULL ? NSStringFromSelector(action) : @"";
+    return [@[@"checkForUpdates", @"checkForUpdates:", @"onUpdaterCheckNowTapped",
+        @"installUpdate:", @"installAndQuit", @"installAndQuit:"] containsObject:name];
+}
+
+static void dia_custom_retarget_update_menu(NSMenu *menu, id target) {
+    for (NSMenuItem *item in menu.itemArray) {
+        if (dia_custom_is_update_action(item.action) ||
+            [item.title hasPrefix:@"Check for Updates"]) {
+            item.target = target;
+            item.action = @selector(openCustomUpdater:);
+            item.enabled = YES;
+        }
+        if (item.submenu != nil) dia_custom_retarget_update_menu(item.submenu, target);
+    }
+}
+
+static void dia_custom_retarget_update_buttons(NSView *view, id target, BOOL inUpdateView) {
+    NSString *className = NSStringFromClass(view.class);
+    inUpdateView = inUpdateView || [className containsString:@"UpdateBanner"] ||
+        [className containsString:@"SoftwareUpdate"];
+    if ([view isKindOfClass:[NSButton class]]) {
+        NSButton *button = (NSButton *)view;
+        NSString *title = button.title.lowercaseString;
+        BOOL installButton = inUpdateView &&
+            ([title containsString:@"update"] || [title containsString:@"restart"] ||
+             [title containsString:@"relaunch"] || [title containsString:@"install"]) &&
+            ![title containsString:@"later"] && ![title containsString:@"notes"];
+        if (dia_custom_is_update_action(button.action) || installButton) {
+            button.target = target;
+            button.action = @selector(openCustomUpdater:);
+            button.enabled = YES;
+        }
+    }
+    for (NSView *child in view.subviews) {
+        dia_custom_retarget_update_buttons(child, target, inUpdateView);
+    }
+}
+
+static void dia_custom_install_updater_controls(id target) {
+    if (!dia_custom_mod_enabled("custom-updater")) return;
+    static CFTimeInterval lastRefresh;
+    CFTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+    if (lastRefresh > 0 && now - lastRefresh < 0.5) return;
+    lastRefresh = now;
+    dia_custom_retarget_update_menu(NSApp.mainMenu, target);
+    // Only inspect the native update views on window events. No controls are
+    // inserted into web pages or into unrelated update/settings dialogs.
+    for (NSWindow *window in NSApp.windows) {
+        dia_custom_retarget_update_buttons(window.contentView, target, NO);
+    }
+    static NSMutableSet *installed;
+    if (installed == nil) installed = [[NSMutableSet alloc] init];
+    NSDictionary *methods = @{
+        @"SPUUpdater": @[@"checkForUpdates", @"checkForUpdatesInBackground", @"checkForUpdateInformation"],
+        @"SUUpdater": @[@"checkForUpdates:", @"checkForUpdatesInBackground", @"checkForUpdateInformation"],
+        @"SPUStandardUpdaterController": @[@"checkForUpdates:"],
+    };
+    for (NSString *className in methods) {
+        Class cls = NSClassFromString(className);
+        if (cls == Nil) continue;
+        for (NSString *action in methods[className]) {
+            NSString *key = [className stringByAppendingString:action];
+            if ([installed containsObject:key]) continue;
+            SEL selector = NSSelectorFromString(action);
+            Method method = class_getInstanceMethod(cls, selector);
+            if (method == NULL) continue;
+            char resultType[8] = {0};
+            method_getReturnType(method, resultType, sizeof(resultType));
+            if (strcmp(resultType, "v") != 0 || method_getNumberOfArguments(method) > 3) continue;
+            BOOL manual = [action isEqualToString:@"checkForUpdates"] ||
+                [action isEqualToString:@"checkForUpdates:"];
+            IMP replacement = manual ? (IMP)dia_custom_intercept_manual_update
+                : (IMP)dia_custom_intercept_background_update;
+            if (!class_addMethod(cls, selector, replacement, method_getTypeEncoding(method))) {
+                method_setImplementation(method, replacement);
+            }
+            [installed addObject:key];
+        }
+    }
+}
 
 static void dia_custom_install_native_apps_action_hooks(void) {
     if (!dia_custom_mod_enabled("native-apps") ||
@@ -3862,7 +4072,7 @@ static void dia_custom_install_developer_menu(void) {
             @selector(selectCustomModel:));
 
         NSMenuItem *modelSettings = [[NSMenuItem alloc]
-            initWithTitle:@"Model Providers & Settings…"
+            initWithTitle:@"Dia Mod Settings…"
                    action:@selector(openModelSettings:)
             keyEquivalent:@""];
         [modelSettings setTarget:dia_custom_developer_menu_controller];
@@ -4002,7 +4212,8 @@ static void dia_custom_install_runtime_overrides(void) {
         dia_custom_mod_enabled("mod-manager") ||
         dia_custom_mod_enabled("native-memory") ||
         dia_custom_mod_enabled("native-apps") ||
-        dia_custom_mod_enabled("morning-brief")) {
+        dia_custom_mod_enabled("morning-brief") ||
+        dia_custom_mod_enabled("custom-updater")) {
         dia_custom_install_ui_runtime();
     }
 }

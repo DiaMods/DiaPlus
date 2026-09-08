@@ -1,184 +1,114 @@
 # Dia Custom
 
-Dia Custom keeps Dia's native browser and New Chat UI while routing AI through providers the user controls. It is a separate app with bundle ID **local.rttm.dia**; **/Applications/Dia.app** and its profile remain untouched.
+Dia Custom keeps Dia's native browser, New Chat, tools, Memory settings and Reports while routing AI through providers you control. It runs as **Dia Custom RTTM.app**, with bundle ID **local.rttm.dia**, its own profile and Keychain label. Official Dia and its account remain separate.
 
-The default is **gpt-5.6-luna** through the existing Codex login. The native chat can also use:
-
-- Codex Luna, Terra, or Sol;
-- Apple Foundation Models on-device;
-- Apple Private Cloud Compute when the helper has Apple's managed PCC entitlement;
-- Ollama models discovered at **127.0.0.1:11434**;
-- OpenAI's Responses API;
-- custom OpenAI-compatible Responses or Chat Completions endpoints.
+The installed and supported release is **Dia 1.48.0, build 86584, on Apple silicon**. The signed custom app passes `doctor`, Finder launch and structural checks for all **20 default Mods**, with **49 available models** and all **17 existing user extensions** retained. Native chat, browser-tool execution and the custom update menu passed live checks. The full suite passed with 198 bridge tests passing, one explicit Apple native-image runtime skip and no failures; native/script checks and signed update preparation also passed. See [Status](docs/STATUS.md) for completed live checks and remaining verification.
 
 ## Start here
 
-For a complete first install or rebuild, point the setup command at the
-official Dia app:
+For a first install or rebuild from the official application:
 
-~~~sh
+```sh
 ./dia-custom setup /Applications/Dia.app
-~~~
+```
 
-This installs **Dia Custom RTTM.app** in Applications, configures its isolated
-profile, prepares the safe native Dia import, and launches it. Afterward, open
-Dia Custom normally from Applications; no terminal command or development
-folder is needed to run it. The clone registers `http` and `https` under its
-own bundle ID, so it can be selected as the default browser and targeted by
-external apps without changing official Dia. Use `./dia-custom doctor`
-whenever you want to verify the installed app.
+Setup installs the custom app in Applications, configures its isolated profile, prepares safe native import data and opens it. Afterward, launch it normally from Applications: the app owns its bundled Node runtime, local AI bridge and launch policy. It registers its own `http`/`https` handlers and can be chosen as the default browser.
 
-Choose a model from View → Developer → AI Model. Dia Custom also inserts a compact picker into the chat toolbar: it remains before the attachment button in side chat and sits immediately before the microphone on New Tab. Provider, credential, memory, connector, and tool settings are available at:
+Choose a model in the native chat toolbar or **View → Developer → AI Model**. The default is **gpt-5.6-luna** through the existing Codex login. Settings also support Codex Terra/Sol, Apple Foundation Models, Ollama at `127.0.0.1:11434`, OpenAI Responses, and custom OpenAI-compatible Responses or Chat Completions endpoints.
 
-~~~sh
-./dia-custom settings
-~~~
-
-The Developer menu opens Dia Custom's routing editor, model/tool dashboard, diagnostics folder, and Dia's native browser developer tools. Browser Developer Tools require a normal webpage because Dia disables its inspector on New Tab. Dia 1.46's private Prompt Tools window is intentionally not constructed: its production initializer requires an unavailable task-local dependency context and crashes when invoked with a synthetic one.
-
-Useful commands:
-
-~~~text
-./dia-custom bridge             Start only the localhost bridge
+```text
+./dia-custom settings           Open Dia Mod Settings
 ./dia-custom models             Print the discovered model catalog
 ./dia-custom openai-key         Save or clear the OpenAI key privately
-./dia-custom test               Run provider, tool, patch, and build checks
-./dia-custom update             Rebuild only from an audited /Applications/Dia.app
-./dia-custom compatibility      Validate every Mod against a Dia app
 ./dia-custom mods               List or configure Dia Mods
+./dia-custom compatibility      Validate every Mod against a Dia app
+./dia-custom update             Rebuild from the installed official Dia app
 ./dia-custom migrate            Open native import from official Dia
-./dia-custom status             Print the exact verified/remaining status
-~~~
+./dia-custom doctor             Verify the installed app and bridge
+./dia-custom test               Run provider, tool, patch and build checks
+./dia-custom status             Print verified coverage and remaining checks
+```
 
-## Browser tools and internet access
+Dia Mod Settings groups controls into **Models, Mods, Connections, Knowledge, Memory, Updates and Advanced** tabs. Profile dropdowns use the browser’s actual profile names and retain the selected profile across sections and reloads. Existing settings deep links continue to open the matching tab.
 
-Dia still assembles browser context and runs its native harness. Schemas supplied by Dia are passed to the selected provider, and calls return through Dia's Anthropic-compatible tool stream. Deferred browser tools are loaded through Dia's native `ToolSearch` handshake—even when a weaker local model tries to call one prematurely. This preserves native tab reading, opening, closing, tab mentions, file/skill tools, calculation, attachments, Report upload, and Dia's built-in step cards. Provider reasoning keeps its original token spacing, while action progress stays in Dia's Thought/tool UI instead of leaking into the final answer.
+## Native chat, tools and media
 
-Server-dependent tools have local replacements:
+Dia still assembles browser context and executes its native harness. Schemas are discovered dynamically, including deferred tools loaded through native `ToolSearch`. Tab mentions, tab reading/opening, file and skill tools, calculation and Report upload retain Dia's tool stream and progress cards. Public web search/fetch, imported people lookup and Memory have local implementations. Cookies used by browser-session tools remain inside Chromium.
 
-- **search_web** and **fetch_web_content** notify Dia's original native presentation callback—rendering its “Searched the web” and “Read link” cards—but execute through a bounded localhost public-web client with redirect, DNS, private-network, and Dia-host checks. OpenAI-compatible local models receive both the standard tool-role result and an explicit completed-result continuation so weaker runtimes do not loop while waiting for data they already have;
-- **list_recent_people** and **lookup_person** use user-imported local connector records;
-- **memory_search** and **memory_query** search the private local index;
-- Dia product-knowledge tools are intentionally unavailable because they require Dia's service.
+Markdown tables and equations use Dia's existing table and SwiftMath views. Native Report creation and revision retain `artifact-generation`, `report-kit`, the per-context file sandbox, bounded upload validation and Reports-library ingestion. Reports open through Dia's sandboxed `chrome-untrusted://…dia-artifacts/` presentation.
 
-The settings page records every eager and on-demand tool Dia exposes. It labels each route as native, local override, native on-demand, or blocked, so a future Dia update reveals its tool changes without a hard-coded allowlist. When public fetch reaches an authentication wall, the model is directed through Dia's native `open_tabs`, `read_tabs`, and `close_tabs` workflow. Existing signed-in tabs are reused and never closed; only a tab proven to have been opened for that read may be closed. Cookies remain inside Chromium.
+All provider adapters now support incremental final text, including safe text deltas from Codex and Apple's structured decisions. Tool decisions are validated before execution; malformed responses, interrupted streams and explicit tool failures are surfaced.
 
-Chat output retains Dia's native rich formatting. Standard Markdown tables render through Dia's table view. Math and science requests deterministically load Dia's own `latex-formatting` skill, then a narrow compatibility pass repairs common `$...$`, `$$...$$`, `\\(...\\)`, `\\[...\\]`, and fenced `latex` output from local models into Dia's required inline/block markers. Dia's bundled SwiftMath views still perform the rendering; the bridge does not draw replacement tables or equations. OpenAI Responses, Ollama, RChat, and compatible Chat Completions providers stream final text incrementally through one native Dia text block; Codex and Apple remain buffered until their structured adapters can expose safe deltas.
+| Input | Routing |
+| --- | --- |
+| Images | Native image channels for capable OpenAI-compatible models; staged SDK image inputs for Codex; local Vision observations by default for Apple |
+| PDFs | Native PDF channels for Responses/Chat Completions; local text extraction and bounded page images for other adapters |
+| Audio files | WAV/MP3 native audio channel for capable Chat Completions models; local on-device transcription for other routes |
+| Video files | Bounded local frame sampling, with available speech transcription; this is not a continuous native video model channel |
+| Native dictation | Dia's raw M4A request is served locally with its named transcription event stream |
 
-## Memory and connectors
+Media staging is private, bounded and removed after use. A provider must support the native input channel selected for it. Apple's native image attachment API is available as an explicit configuration option, but the installed macOS 27 beta model can reject it with a guardrail error; local Vision preprocessing is the default. Speech assets can be prepared in settings. A native URLSession M4A request passed through the complete local transcription bridge; microphone recording through Dia's UI has not yet been verified end to end. Apple Private Cloud Compute requires Apple's managed entitlement and is unavailable in an ordinary personal build.
 
-Local Memory is an owner-only SQLite database containing:
+## Memory, Apps and connectors
 
-- history from Dia Custom's isolated Chromium profile;
-- page content returned by native tab tools;
-- user and assistant chat turns;
-- records explicitly imported from account exports.
+Local Memory stores isolated-profile history, native page results, chat turns and imported records in an owner-only SQLite index. The selected provider can derive durable Memories with provenance and recall them in later chats. Profiles remain separate; incognito activity, excluded hosts and sensitive data are filtered. Native **Settings → Memory** controls the local index. Off stops capture and recall without deleting entries; Reset removes browsing/chat/derived Memory while retaining connector records. Remote providers receive the filtered evidence needed for a requested model operation; the index itself stays on this Mac.
 
-Those sources are not themselves the final Memory product. Following [Dia's published Memory behavior](https://public.diabrowser.com/what-is-dia-memory), the selected user-controlled model infers durable plans, projects, preferences, interests, routines, facts, and relationships even when the user did not explicitly say “remember this.” Derived Memories retain source provenance, are recalled automatically into relevant chats, and remain isolated by Chromium profile. Incognito activity is never stored. Credential, medical, financial/payment, excluded-site, and known-sensitive-site content is filtered before storage and again before derivation.
+**Live connectors** settings can add, edit, connect, inspect and disconnect:
 
-Search combines FTS with Apple's on-device sentence embeddings when available. The settings page includes counts, JSON export, retention pruning, deletion controls, and host exclusions through Advanced JSON.
+- MCP servers using Streamable HTTP, legacy HTTP+SSE or stdio;
+- OAuth with discovery, PKCE, refresh/revocation and supported public-client registration, or manually supplied client details;
+- generic CLI tools with fixed executable/argument templates;
+- the Spark Mail CLI preset.
 
-Dia's native **Settings → Memory** pane remains Dia's own view and view model. Dia Custom redirects its existing Enable, Disable, Reset, and per-profile retention actions to this local index, and changes only the inaccurate Dia-server sentence to say the activity is summarized using the selected model. Turning Memory off immediately removes memory tools, automatic recall, derivation, and future browsing/chat capture; it does not delete existing entries. Reset deletes browsing, chat, and derived Memories after confirmation while retaining imported connector records. No pane action contacts Dia. Use **./dia-custom settings** for export and granular deletion.
+Saving configuration does not connect it. Connections, credentials, sessions, schemas and indexed records are scoped to the selected Dia profile. Connected MCP and CLI integrations reopen on browser restart; an explicit Disconnect remains disconnected. Temporary errors retain the saved preference and retry, while missing authorization is shown as needing sign-in. Incremental indexing accepts a connector's explicitly read-only changes tool and advances its cursor after successful indexing. Service-specific sync integrations are not assumed.
 
-Memory storage and retrieval stay on this Mac. Derivation runs through the selected model: Apple on-device stays local, while Codex/OpenAI or another remote provider receives the filtered evidence needed for that derivation under that provider's own privacy boundary. It is never sent to Dia.
+Spark 1.3.1 exposes 26 tools spanning mail/calendar/contact reads, attachments, drafts, triage, assignment, sending/scheduling, comments and event changes. Older versions retain the 11-tool read catalog. Spark's own **Settings → AI Agents** permissions apply, and all Dia profiles share the same signed-in Spark Desktop accounts. Sending and other external communication require explicit user authorization. Real write operations were not used in tests. See [Connectors](docs/CONNECTORS.md) and [manifest examples](examples/connectors/).
 
-Connector JSON may be an array or `{ "records": [...] }`. Records can contain `id`, `title`/`name`/`subject`, `content`/`text`/`body`, `url`, `updatedAt`, `metadata`, and `kind: "person"`.
+Native Apps, live connectors and Morning Brief are separate Mods. Morning Brief uses Dia's bundled `clia-brief` agent and Report template with the selected model, one designated profile and once-daily scheduling from 5 AM. It catches up after launch, retains partial-source diagnostics, retries recoverable failures and records success only after native artifact ingestion. The guarded native WindowController action executes on build 86584; a complete scheduled brief with connected sources remains a separate live QA check.
 
-Dia's native Apps pane is also locally enabled. Browser-session connectors—currently Gmail, Calendar, Drive, GitHub, Slack, Notion, LinkedIn, plus future native capabilities detected from Dia—keep authentication and cookies inside Chromium and return their tools through Dia's native progress UI. Direct third-party MCP connectors can be added by copying a manifest based on **examples/connectors/sample-mcp.json** into **Bridge/.state/connectors/** and restarting the bridge. Those adapters use explicit allowed domains, direct OAuth with PKCE/refresh/revocation, owner-only token storage, and namespaced generic tool presentation. Dia-owned authentication services remain blocked.
+## Knowledge and research
 
-The native Apps layout owns the Advanced Chat, Profile, Morning Brief, and Connected Apps presentation; Dia Custom changes its real local view-model state rather than injecting replacement controls. Morning Brief uses Dia's bundled `clia-brief` agent and Report template with the selected model. It is exclusive to one profile, runs once per local day beginning at 5 AM, catches up on launch, retries recoverable failures after 30 minutes, and counts success only after Dia ingests the artifact into its native Reports library. Cmd-Shift-M uses that same native workflow. Because Dia's background-agent model request omits its native `clia-brief` header, the bridge recognizes the audited agent structure, preserves its JSON-only template handoff, and watches for native Reports-library ingestion. Source failures are retained as diagnostics so a partial brief can still be delivered. If Dia omits the private native controller from a build/profile, only this optional Mod reports a runtime incompatibility.
+The **local-knowledge** Mod adds a profile-specific library of text, Markdown, public pages and saved research, with source provenance and search/read tools in chat. The **local-workflows** Mod runs manual research and interval schedules using the selected provider and read-only local/connector tools, then saves results to that library.
 
-## Native Reports
+Schedules start disabled and run only after being explicitly enabled, while the bridge is running. They skip missed intervals after restart and do not overlap. Native browser actions and remote write tools are excluded from this runner. See [Local workflows](docs/LOCAL-WORKFLOWS.md) for limits and APIs.
 
-Report requests retain Dia's original **artifact-generation** and **report-kit** prompts and its native `Skill`, `Read`, `Write`, `Edit`, `Bash`, and `upload_artifact` tools. Files are therefore created inside Dia's real per-context agent sandbox, not in the bridge or an unrelated temporary directory.
+## Custom updates and Mods
 
-The bridge treats Report creation as a staged native workflow: it loads the two required skills, pins `Write` to a deterministic folder inside the exact active context, and withholds `upload_artifact` from the model until that write succeeds. Follow-up edit requests reopen the completed workflow, read the existing HTML, write the complete revision back to the same artifact, and re-upload it before the model may claim completion. For OpenAI-compatible local/API providers, the native `Write` input streams to Dia as the model produces the HTML, restoring Report Kit's top-down live construction instead of waiting for the entire tool argument. If the model chooses Report Kit for a request that did not literally say “report,” the bridge adopts the native workflow and its safe artifact folder instead of losing coordination.
+The **custom-updater** Mod is **on by default** and is separate from the required **update-blocker** Mod. The blocker prevents stock Sparkle replacement. The custom updater redirects native update controls to local settings, checks the official release feed, verifies the signed archive and publisher, validates every configured Mod, and builds a staged custom app. Background checks only announce availability; preparation and installation are explicit actions.
 
-Premature status messages and upload attempts are corrected internally; a blank/root upload path follows Dia's contract and resolves to `index.html`. If a smaller model replaces the complete document with a body-only Report Kit fragment during a revision, the upload boundary restores Dia's required document shell and `style.css` link before native ingestion. A visual preflight rejects copied example tokens such as `IMAGE_URL`, missing bundled image files, ephemeral blob URLs, and canvases without matching initialization code. The model is directed to use accessible inline SVG for diagrams when it has no real image asset. The Report Kit's approved Chart.js dependency is copied into the artifact locally before upload, so rendering never needs the Dia-owned CDN. Only then does the bridge submit the report to Dia's uploader.
+The updater uses the toolkit bundled in the app, so the development checkout is not required. Preparation still requires installed Apple command-line build tools and a usable signing configuration. Any incompatible enabled Mod stops in-app preparation; it is not silently disabled. A remote Mods repository is deferred and is not configured.
 
-Anonymous Dia profiles normally skip construction of the native Artifacts controller, and the uploader also performs a duplicate official-profile registry check that cannot recognize a separately bundled profile. The clone structurally selects Dia's own controller-setup continuation and bypasses only that duplicate registry rejection. Before allowing an upload, the bridge still requires the exact active context's `work/artifacts/<folder>` shape, a regular `index.html`, no symlinks, bounded files and bytes, and safe public outbound URLs. It then emits Dia's expected tool-safety event and hands the same call to the native Reports-library path.
+Installation snapshots the complete closed profile, preflights the candidate against a disposable copy, and retains the previous app with its matching profile snapshot. Launch and preflight use the custom app's existing macOS Keychain encryption, preserving protected preferences and extension registrations. Replacement and launch-health failures have a rollback path. The CLI can separately stage optional compatibility exclusions with an explicit choice or `--allow-disable-incompatible`; critical identity, network, updater and routing checks always fail closed. Known build numbers never bypass validation of the candidate's actual contents.
 
-The binary layouts, live Artifacts controller, context safety gate, complete stream handoff, and visible native Report presentation are tested on build 86064. A generated Report is registered through Dia's artifact database and opens at Dia's sandboxed `chrome-untrusted://…dia-artifacts/` URL; it is not represented as a separate local-file export.
+Configure optional Mods in native **Settings → Mods** or the CLI:
 
-## Network and sandbox boundary
-
-Normal websites and explicitly selected providers remain reachable. Dia/The Browser Company AI, registry, telemetry, feature-flag, crash, and updater destinations are redirected locally, cancelled by the runtime hook, and covered by Chromium hostname rules. Dia-owned provider URLs are rejected in configuration.
-
-Three distinct sandboxes remain enabled:
-
-- Chromium's browser-process sandbox;
-- Dia's per-agent filesystem sandbox, with localhost port 8765 admitted for the bridge;
-- an empty read-only Codex decision workspace with Codex built-in shell, filesystem mutation, MCP, and web search disabled.
-
-Browser internet access happens through native/local browser tools. Report files are written through Dia's sandboxed native tools. Disabling these sandboxes is neither required nor the Report fix.
-
-The clone's updater is disabled at the Sparkle preferences, feed, runtime-network, and Chromium-host layers. Let official Dia update normally, then run **./dia-custom update**. The updater validates every Mod before replacing anything. A critical identity, network, updater, or AI-routing failure aborts immediately; optional incompatibilities are listed and require an interactive choice (or explicit `--allow-disable-incompatible`). Before any replacement, it takes an owner-only APFS snapshot of the complete closed browser profile—including open sessions, `tabs.db` and its WAL, extension packages, and extension-local data. The staged app is then launched against a disposable clone of that snapshot with all network access blocked. If Chromium rejects extension registrations, removes package/data directories, or drops session or pinned-tab storage, the replacement is aborted before the live profile or installed app is touched. The previous app and matching profile snapshot remain linked in an install transaction as an additional rollback point. A later compatible build automatically reactivates previously unavailable optional Mods. Builds 85660, 85823, 86064, and 86261 are currently audited on Apple silicon.
-
-## Dia Mods
-
-Every browser change is an independently gated Dia Mod with a stable ID in **bridge/config/dia-mods.json**. Optional mods can be configured from Dia's native **Settings → Mods** tab or from the command line:
-
-~~~sh
-./dia-custom mods
+```sh
 ./dia-custom mods disable developer-tools
 ./dia-custom mods enable developer-tools
-~~~
+```
 
-Runtime/bridge mods apply after a restart. Binary mods report that a clean **./dia-custom build --replace** is required, so disabling a Report or account patch never pretends to undo bytes in place. The current resolved build-mod snapshot is sealed into the clone and checked by **doctor**. Safety/core mods—identity isolation, Dia-service network isolation, controlled updates, and localhost AI routing—are required and deliberately cannot be switched off.
+Runtime Mods apply on restart. Disabling a binary patch requires a clean rebuild. The installed Mod snapshot is checked by `doctor`. When a Developer ID identity is available, builds use it for stable macOS permission identity; `DIA_CUSTOM_SIGN_IDENTITY=-` selects the ad-hoc fallback.
 
-When a Developer ID Application certificate is available, installs use it automatically so Dia Custom keeps one stable macOS code requirement across rebuilds. This prevents repeated Documents, microphone, and similar permission prompts caused by changing ad-hoc CDHashes. `DIA_CUSTOM_SIGN_IDENTITY=-` explicitly selects the portable ad-hoc fallback; that fallback can require permissions again after a rebuild. Chromium also uses its mock keychain and the clone's patched **Dia Custom Store** label, so it does not reuse official Dia's **Dia Safe Storage** item.
+## Isolation and import
 
-### Import from official Dia
+Normal websites and selected providers remain reachable. Dia-owned AI, registry, telemetry, crash and stock-update destinations are blocked or redirected locally. The custom updater's verified download path is separate. Chromium's sandbox, Dia's per-agent file sandbox and the restricted Codex decision workspace remain enabled. Codex's own built-in action tools and inherited MCP connections are disabled in that decision process; browser actions run through Dia's harness.
 
-The `dia-import` Mod reuses Dia's native **Import from Another Browser** flow. It presents official Dia as a source and supports multiple browser profiles, bookmarks, history, extensions, favicons, and Dia's local pinned-tab/group database. On a fresh Dia Custom profile, the native importer is offered automatically; it can be reopened later with:
+The **dia-import** Mod reuses Dia's native importer with sanitized local staging. Profiles, bookmarks, history, favicons, extension packages and local pinned-tab/group data can be imported. Account tokens, cookies, passwords, Keychain items, open sessions, chats, Memory, Reports and extension site data are excluded. Official account authentication and browser Sync are outside this project's scope.
 
-~~~sh
-./dia-custom migrate
-./dia-custom migrate status
-~~~
+## Project and runtime files
 
-The importer never reads official Dia's account tokens or Keychain. It makes an owner-only, Chromium-shaped staging copy containing only the selected safe browser data. Cookies, saved passwords, open sessions, extension site data, chats, Memory, Reports, and credentials are excluded. This keeps the apps independent and does not allow any Dia service traffic.
-
-Official Dia Sync remains research-only because a modified bundle cannot retain Dia's official Apple code signature. Dia Custom will not impersonate that signature or send requests intended to appear as the official client; see **research/OFFICIAL-DIA-SYNC.md**.
-
-## Project map
-
-| Path | Purpose |
+| Location | Purpose |
 | --- | --- |
-| **dia-custom** | Single command-line entry point |
-| **bridge/src/provider-manager.js** | Provider discovery, selection, local-tool loop, and coverage tracking |
-| **bridge/src/providers/** | Codex, Apple, OpenAI Responses, and Chat Completions adapters |
-| **bridge/src/local-tools/** | Memory, connector, and public-web implementations |
-| **bridge/src/connectors/** | Native-session and direct OAuth/MCP connector registry |
-| **bridge/src/apps-state.js** | Native Apps and once-daily Morning Brief state |
-| **bridge/src/artifact-safety.js** | Active-context Report upload and outbound-network gate |
-| **bridge/src/server.js** | Dia protocols, streaming, health, and local administration API |
-| **src/bootstrap/** | Native picker/import hooks, Developer menu, and service-host blocking |
-| **src/patches/** | Guarded identity, endpoint, account, handler, and Report patches |
-| **bridge/config/dia-mods.json** | Dia Mods manifest, defaults, scope, and rebuild policy |
-| **src/config/supported-dia-builds.json** | Audited Dia-build allowlist used before install/update |
-| **scripts/** | Build, compatibility, staged verification, update, doctor, and test workflows |
-| **research/** | Build-analysis tools and notes; never runtime code |
+| `bridge/src/providers/` | Provider adapters and validated text streaming |
+| `bridge/src/connectors/` | MCP, OAuth, CLI and Spark adapters |
+| `bridge/src/local-tools/` | Memory, connectors and public web tools |
+| `bridge/src/knowledge.js`, `workflows.js` | Local library and research schedules |
+| `bridge/src/custom-updater.js`, `update-worker.js` | Update preparation and installation |
+| `src/bootstrap/`, `src/patches/` | Guarded native integration and binary patches |
+| `bridge/config/dia-mods.json` | Mod defaults, dependencies and rebuild policy |
+| `src/config/supported-dia-builds.json` | Audited build metadata; structural checks still run |
+| `scripts/`, `research/` | Build/test workflows and native analysis tools |
 
-See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), and [Status](docs/STATUS.md) for exact boundaries.
+The app lives at `/Applications/Dia Custom RTTM.app`; the profile is `~/Library/Application Support/Dia Custom RTTM`. Its `Bridge/.state` contains provider configuration, separate credentials, model/tool catalogs, Memory, knowledge, connector manifests and workflow state. `Diagnostics` holds runtime logs. Bridge code and required runtime executables are bundled inside the app.
 
-## Runtime locations
-
-- App: **/Applications/Dia Custom RTTM.app**
-- Profile: **~/Library/Application Support/Dia Custom RTTM**
-- Bundled bridge and Node runtime: **Dia Custom RTTM.app/Contents**
-- Mutable bridge state: **~/Library/Application Support/Dia Custom RTTM/Bridge/.state**
-- Provider config: **Bridge/.state/config.json**
-- Provider credentials: **Bridge/.state/credentials.json**
-- Model/tool catalogs: **Bridge/.state/models.json**, **Bridge/.state/tool-coverage.json**
-- Local memory: **Bridge/.state/memory.sqlite3**
-- Apps/Morning Brief state: **Bridge/.state/apps.json**
-- Safe official-Dia import staging: **~/Library/Application Support/DiaImport**
-- Custom connector manifests: **Bridge/.state/connectors/*.json**
-- Diagnostics: **~/Library/Application Support/Dia Custom RTTM/Diagnostics**
-
-For a complete first install, run **./dia-custom setup /Applications/Dia.app**.
-The command validates the official source, builds the audited clone directly in
-Applications, prepares safe import data, and opens Dia Custom. Afterwards the
-app is launched normally from Applications; it starts its signed, bundled local
-AI bridge and applies the isolation policy itself.
+See [Architecture](docs/ARCHITECTURE.md), [Dia Mods](docs/MODS.md), [Status](docs/STATUS.md) and the [September audit](docs/AUDIT-2026-09-07.md).

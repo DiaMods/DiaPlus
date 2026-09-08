@@ -178,3 +178,130 @@ test("OpenAI Responses API stream maps function calls back to Dia tools", async 
     globalThis.fetch = originalFetch;
   }
 });
+
+for (const api of ["chat-completions", "responses"]) {
+  test(`${api} preserves image attachments and their position beside user text`, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body);
+      const messages = api === "responses" ? body.input : body.messages;
+      assert.deepEqual(messages.at(-1), { role: "user", content: api === "responses" ? [
+        { type: "input_text", text: "Compare these images" },
+        { type: "input_image", image_url: "data:image/png;base64,aGVsbG8=", detail: "auto" },
+        { type: "input_text", text: "with this reference" },
+        { type: "input_image", image_url: "https://example.com/reference.jpg", detail: "auto" },
+      ] : [
+        { type: "text", text: "Compare these images" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } },
+        { type: "text", text: "with this reference" },
+        { type: "image_url", image_url: { url: "https://example.com/reference.jpg" } },
+      ] });
+      return sseResponse([]);
+    };
+    try {
+      await runOpenAICompatibleProvider({
+        provider: { api, baseURL: "https://example.com/v1", label: "Vision provider" },
+        payload: { messages: [{ role: "user", content: [
+          { type: "text", text: "Compare these images" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "aGVsbG8=" } },
+          { type: "text", text: "with this reference" },
+          { type: "image", source: { type: "url", url: "https://example.com/reference.jpg" } },
+        ] }] },
+        tools: [], model: "vision-test",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test(`${api} retains tool error flags and renders images after all pending results`, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body);
+      const messages = api === "responses" ? body.input : body.messages;
+      const results = messages.filter((message) => message.role === "tool" || message.type === "function_call_output");
+      assert.equal(results.length, 2);
+      assert.match(results[0].content ?? results[0].output, /^\[Tool execution failed\]/);
+      assert.ok(messages.indexOf(results[1]) < messages.findIndex((message) => message.role === "user"));
+      const attachment = messages.flatMap((message) => Array.isArray(message.content) ? message.content : [])
+        .find((part) => ["input_image", "image_url"].includes(part.type));
+      assert.equal(typeof attachment.image_url === "string" ? attachment.image_url : attachment.image_url.url,
+        "data:image/jpeg;base64,aGVsbG8=");
+      assert.ok(!String(results[1].content ?? results[1].output).includes("aGVsbG8="));
+      return sseResponse([]);
+    };
+    try {
+      await runOpenAICompatibleProvider({
+        provider: { api, baseURL: "https://example.com/v1", label: "Vision provider" },
+        payload: { messages: [
+          { role: "assistant", content: [
+            { type: "tool_use", id: "first", name: "read_tabs", input: {} },
+            { type: "tool_use", id: "second", name: "Read", input: {} },
+          ] },
+          { role: "user", content: [
+            { type: "text", text: "Use what you could retrieve." },
+            { type: "tool_result", tool_use_id: "first", is_error: true, content: "No longer available." },
+            { type: "tool_result", tool_use_id: "second", content: [
+              { type: "text", text: "Screenshot" },
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "aGVsbG8=" } },
+            ] },
+          ] },
+        ] },
+        tools: [], model: "vision-test",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test(`${api} rejects blocked image destinations and invalid PDFs before sending`, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { assert.fail("Invalid attachment must not be sent to a provider"); };
+    try {
+      for (const block of [
+        { type: "image", source: { type: "url", url: "https://api.diabrowser.com/image.png" } },
+        { type: "image", source: { type: "url", url: "https://user:secret@example.com/image.png" } },
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: "cGRm" } },
+      ]) {
+        await assert.rejects(runOpenAICompatibleProvider({
+          provider: { api, baseURL: "https://example.com/v1", label: "Vision provider" },
+          payload: { messages: [{ role: "user", content: [block] }] },
+          tools: [], model: "vision-test",
+        }), /refuses provider traffic|cannot contain credentials|cannot translate/i);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test(`${api} surfaces streaming API errors instead of completing with an empty answer`, async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => sseResponse([
+      { data: { ...(api === "responses" ? { type: "error" } : {}), error: { message: "Provider quota exceeded" } } },
+    ]);
+    try {
+      await assert.rejects(runOpenAICompatibleProvider({
+        provider: { api, baseURL: "https://example.com/v1", label: "Test provider" },
+        payload, tools: [], model: "test",
+      }), /Provider quota exceeded/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
+
+test("Responses reports token-limited incomplete output as an error", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => sseResponse([
+    { data: { type: "response.output_text.delta", delta: "Partial answer" } },
+    { data: { type: "response.incomplete", response: { incomplete_details: { reason: "max_output_tokens" } } } },
+  ]);
+  try {
+    await assert.rejects(runOpenAICompatibleProvider({
+      provider: { api: "responses", baseURL: "https://example.com/v1", label: "Test provider" },
+      payload, tools: [], model: "test",
+    }), /incomplete: max_output_tokens/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
