@@ -106,10 +106,13 @@ async function validate(name, app, context) {
         ? { compatible: true }
         : { compatible: false, reason: "native chat/New Tab model surfaces changed" };
     case "developer-tools":
-      return executable.includes(Buffer.from("toggleDevTools:")) ||
-        executable.includes(Buffer.from("Developer Tools"))
-        ? { compatible: true }
-        : { compatible: false, reason: "native developer-tools action changed" };
+      if (!executable.includes(Buffer.from("toggleDevTools:")) &&
+          !executable.includes(Buffer.from("Developer Tools"))) {
+        return { compatible: false, reason: "native developer-tools action changed" };
+      }
+      return runNodeCheck("research/tools/discover-prompt-tools.js", [
+        resolve(app, "Contents/MacOS/Dia"), context.build,
+      ]);
     case "mod-manager":
       return executable.includes(Buffer.from("Preferences"))
         ? { compatible: true }
@@ -174,6 +177,7 @@ const known = new Set(manifest.mods.map((mod) => mod.id));
 const unknown = [...requested].filter((id) => !known.has(id));
 if (unknown.length > 0) throw new Error(`unknown Dia Mods: ${unknown.join(", ")}`);
 const context = {
+  build,
   executable,
   handler,
   schema,

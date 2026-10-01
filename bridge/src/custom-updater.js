@@ -42,7 +42,7 @@ export class CustomUpdater {
     this.stateWrites = pending.catch(() => {});
     return pending;
   }
-  async fetchBounded(url, source, maxBytes, outputPath = null) {
+  async fetchBounded(url, source, maxBytes, outputPath = null, onProgress = null) {
     allowedDownload(url, source);
     const response = await this.fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(outputPath ? 20 * 60_000 : 30_000) });
     if (!response.ok) throw new Error(`Official update server returned HTTP ${response.status}`);
@@ -54,6 +54,7 @@ export class CustomUpdater {
         size += chunk.length;
         if (size > maxBytes) throw new Error('Update response exceeds size limit');
         if (file) await file.writeFile(chunk); else chunks.push(chunk);
+        if (onProgress) await onProgress(size);
       }
     } finally { await file?.close(); }
     return file ? size : Buffer.concat(chunks);
@@ -71,21 +72,37 @@ export class CustomUpdater {
       const source = await this.source();
       const release = parseAppcast((await this.fetchBounded(source.feedURL, source, 2 * 1024 ** 2)).toString('utf8'), source);
       const current = Number(await plist(this.app, 'CFBundleVersion'));
-      await this.setState({ phase: Number(release.build) > current ? (previous.phase === 'ready' && previous.release?.build === release.build && JSON.stringify(previous.preparedMods) === JSON.stringify(await this.configuredMods()) ? 'ready' : 'available') : 'current', release, checkedAt: new Date().toISOString() });
+      const preparedConfiguration = Array.isArray(previous.compatibility?.requestedMods)
+        ? [...previous.compatibility.requestedMods].sort()
+        : previous.preparedMods;
+      const keepPrepared = Number(release.build) > current && previous.phase === 'ready' &&
+        previous.release?.build === release.build &&
+        JSON.stringify(preparedConfiguration) === JSON.stringify(await this.configuredMods());
+      const phase = Number(release.build) <= current ? 'current' : keepPrepared ? 'ready' : 'available';
+      await this.setState({ phase, release, checkedAt: new Date().toISOString(),
+        ...(!keepPrepared ? {
+          job: null, compatibility: null, disabledMods: null, preparedMods: null,
+          runtimeID: null, download: null, rollbackError: null,
+        } : {}),
+      });
       return this.status();
     } catch (error) { if (checking) await this.setState({ phase: 'failed', error: error.message }); throw error; }
     finally { this.busy = false; }
   }
-  async materialize(job) {
+  jobContext(job) {
     const toolkit = join(job, 'toolkit');
+    const bin = join(toolkit, '.build/runtime/node-v24.20.0-darwin-arm64/bin');
+    return { toolkit, node: join(bin, 'node'), env: { ...process.env, PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin`, DIA_CUSTOM_STAGING: '1', DIA_CUSTOM_WORK_DIR: join(job, 'work') } };
+  }
+  async materialize(job) {
+    const { toolkit } = this.jobContext(job);
     await cp(join(this.app, 'Contents/Resources/DiaCustomUpdater'), toolkit, { recursive: true, verbatimSymlinks: true });
     await cp(this.bridgeDirectory, join(toolkit, 'bridge'), { recursive: true, verbatimSymlinks: true, filter: path => !path.includes('/.state') });
     await mkdir(join(toolkit, '.build/runtime'), { recursive: true, mode: 0o700 });
     const archive = 'node-v24.20.0-darwin-arm64.tar.gz';
     await copyFile(join(toolkit, 'runtime', archive), join(toolkit, '.build/runtime', archive));
     await run('/usr/bin/tar', ['-xzf', join(toolkit, 'runtime', archive), '-C', join(toolkit, '.build/runtime')]);
-    const bin = join(toolkit, '.build/runtime/node-v24.20.0-darwin-arm64/bin');
-    return { toolkit, node: join(bin, 'node'), env: { ...process.env, PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin`, DIA_CUSTOM_STAGING: '1', DIA_CUSTOM_WORK_DIR: join(job, 'work') } };
+    return this.jobContext(job);
   }
   async prepare() {
     await this.assertEnabled();
@@ -97,7 +114,9 @@ export class CustomUpdater {
       if (!state.release || Number(state.release.build) <= Number(await plist(this.app, 'CFBundleVersion'))) throw new Error('Check for an available update first');
       const job = join(this.root, 'jobs', randomUUID());
       await mkdir(job, { recursive: true, mode: 0o700 });
-      await this.setState({ phase: 'downloading', job, error: null });
+      const startedAt = new Date().toISOString();
+      await this.setState({ phase: 'downloading', job, error: null, compatibility: null, disabledMods: null,
+        download: { receivedBytes: 0, totalBytes: state.release.length, percent: 0, startedAt } });
       this.preparation = this.prepareJob(job, state.release).catch(async error => {
         await this.setState({ phase: 'failed', error: error.message });
       }).finally(() => { this.busy = false; });
@@ -107,7 +126,14 @@ export class CustomUpdater {
   async prepareJob(job, release) {
     const source = await this.source(), mods = await this.configuredMods();
     const archive = join(job, 'official.zip');
-    await this.fetchBounded(release.url, source, release.length, archive);
+    const startedAt = new Date().toISOString();
+    let reportedPercent = -1;
+    await this.fetchBounded(release.url, source, release.length, archive, async receivedBytes => {
+      const percent = Math.min(100, Math.floor(receivedBytes * 100 / release.length));
+      if (percent === reportedPercent && receivedBytes !== release.length) return;
+      reportedPercent = percent;
+      await this.setState({ download: { receivedBytes, totalBytes: release.length, percent, startedAt } });
+    });
     await this.setState({ phase: 'verifying' });
     verifyArchive(await readFile(archive), release, source);
     validateArchivePaths(await run('/usr/bin/unzip', ['-Z1', archive], { maxBytes: 32 * 1024 ** 2 }));
@@ -121,26 +147,77 @@ export class CustomUpdater {
         await plist(official, 'CFBundleShortVersionString') !== release.version) throw new Error('The signed app does not match the pinned Dia publisher and release');
     const { toolkit, node, env } = await this.materialize(job);
     await mkdir(join(job, 'work'), { recursive: true, mode: 0o700 });
-    const candidate = join(job, 'Dia+.app');
-    const buildEnv = { ...env, DIA_CUSTOM_MODS: mods.join(','), DIA_CUSTOM_EFFECTIVE_MODS: mods.join(','), DIA_CUSTOM_PROFILE: join(job, 'validation-profile'), DIA_CUSTOM_APP: candidate, DIA_CUSTOM_SOURCE_APP: official };
     await this.setState({ phase: 'validating' });
     const compatibility = JSON.parse(await run(node, [join(toolkit, 'scripts/compatibility.js'), official, '--mods', mods.join(','), '--json'], { env, timeout: 300000 }));
-    requireAllMods(compatibility, mods);
     await saveJSON(join(job, 'compatibility.json'), compatibility);
-    await this.setState({ phase: 'building', compatibility });
+    await this.setState({ compatibility });
+    const failures = Array.isArray(compatibility.perMod) ? compatibility.perMod.filter(mod => mods.includes(mod.id) && !mod.compatible) : [];
+    const requiredFailures = failures.filter(mod => mod.required || mod.criticality === 'critical');
+    if (requiredFailures.length) {
+      throw new Error(`Update blocked: required mods are incompatible (${requiredFailures.map(mod => mod.label || mod.id).join(', ')})`);
+    }
+    requireAllMods(compatibility, mods.filter(id => !failures.some(mod => mod.id === id)));
+    if (failures.length) {
+      await this.setState({ phase: 'compatibility-review', compatibility, error: null });
+      return;
+    }
+    await this.buildPreparedJob(job, release, compatibility, mods, mods);
+  }
+  async buildPreparedJob(job, release, compatibility, mods, requestedMods = mods) {
+    requireAllMods(compatibility, mods);
+    const { toolkit, node, env } = this.jobContext(job);
+    const official = join(job, 'official', 'Dia.app');
+    const candidate = join(job, 'Dia+.app');
+    const buildEnv = { ...env, DIA_CUSTOM_MODS: requestedMods.join(','), DIA_CUSTOM_EFFECTIVE_MODS: mods.join(','), DIA_CUSTOM_PROFILE: join(job, 'validation-profile'), DIA_CUSTOM_APP: candidate, DIA_CUSTOM_SOURCE_APP: official };
+    await this.setState({ phase: 'building', compatibility, error: null });
     const log = createWriteStream(join(job, 'build.log'), { mode: 0o600 });
     try { await run('/bin/zsh', [join(toolkit, 'scripts/build.sh')], { env: buildEnv, timeout: 30 * 60_000, log }); }
     finally { log.end(); }
     const quitHelper = await run(node, [join(toolkit, 'scripts/prebuilt.js'), 'quit-app'], { env });
     if (quitHelper) await copyFile(quitHelper, join(job, 'quit-app'));
     else await run('/usr/bin/xcrun', ['swiftc', '-target', 'arm64-apple-macos14.0', join(toolkit, 'src/updater/quit-app.swift'), '-o', join(job, 'quit-app')], { env, timeout: 120000 });
-    if (JSON.stringify(await this.configuredMods()) !== JSON.stringify(mods)) throw new Error('Mods changed during preparation; check and prepare the update again');
+    if (JSON.stringify(await this.configuredMods()) !== JSON.stringify(requestedMods)) throw new Error('Mods changed during preparation; check and prepare the update again');
     const runtimeID = await plist(candidate, 'DiaCustomBridgeRuntimeID');
-    const transaction = { job, toolkit, node, env, app: await realpath(this.app), profile: await realpath(this.profileDirectory), candidate, mods, runtimeID, release, statePath: this.statePath };
+    const transaction = { job, toolkit, node, env, app: await realpath(this.app), profile: await realpath(this.profileDirectory), candidate, mods, requestedMods, runtimeID, release, statePath: this.statePath };
     // Environment here excludes provider/connector credentials, which stay in the live profile.
     transaction.env = { PATH: env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, DIA_CUSTOM_WORK_DIR: env.DIA_CUSTOM_WORK_DIR, DIA_CUSTOM_STAGING: '1' };
     await saveJSON(join(job, 'transaction.json'), transaction);
     await this.setState({ phase: 'ready', job, compatibility, preparedMods: mods, runtimeID });
+  }
+  async continueWithoutIncompatible() {
+    await this.assertEnabled();
+    if (this.busy) throw new Error('An update operation is already running');
+    this.busy = true;
+    try {
+      const state = await loadJSON(this.statePath, {});
+      if (state.phase !== 'compatibility-review' || typeof state.job !== 'string' ||
+          !resolve(state.job).startsWith(`${resolve(this.root, 'jobs')}/`) || !state.release?.build ||
+          String(state.compatibility?.build) !== String(state.release.build)) {
+        throw new Error('There is no compatible partial update waiting for confirmation');
+      }
+      const failures = Array.isArray(state.compatibility?.perMod)
+        ? state.compatibility.perMod.filter(mod => !mod.compatible)
+        : [];
+      if (!failures.length || failures.some(mod => mod.required || mod.criticality === 'critical')) {
+        throw new Error('This update cannot continue without a required mod');
+      }
+      const requestedMods = Array.isArray(state.compatibility.requestedMods)
+        ? [...state.compatibility.requestedMods].sort()
+        : state.compatibility.perMod.map(mod => mod.id).sort();
+      if (JSON.stringify(await this.configuredMods()) !== JSON.stringify(requestedMods)) {
+        throw new Error('Mods changed during compatibility review; check and prepare the update again');
+      }
+      const mods = Array.isArray(state.compatibility.effectiveMods)
+        ? [...state.compatibility.effectiveMods].sort()
+        : state.compatibility.perMod.filter(mod => mod.compatible).map(mod => mod.id).sort();
+      requireAllMods(state.compatibility, mods);
+      const disabledMods = failures.map(mod => mod.id);
+      await this.setState({ phase: 'building', disabledMods, preparedMods: mods, error: null });
+      this.preparation = this.buildPreparedJob(state.job, state.release, state.compatibility, mods, requestedMods).catch(async error => {
+        await this.setState({ phase: 'failed', error: error.message });
+      }).finally(() => { this.busy = false; });
+      return this.status();
+    } catch (error) { this.busy = false; throw error; }
   }
   async install() {
     await this.assertEnabled();
@@ -150,7 +227,8 @@ export class CustomUpdater {
     try {
       const state = await loadJSON(this.statePath, {});
       if (state.phase !== 'ready' || !state.job?.startsWith(`${this.root}/jobs/`)) throw new Error('Prepare and validate the update first');
-      if (JSON.stringify(await this.configuredMods()) !== JSON.stringify(state.preparedMods)) throw new Error('Mods changed; prepare the update again');
+      const expectedConfigured = Array.isArray(state.compatibility?.requestedMods) ? [...state.compatibility.requestedMods].sort() : state.preparedMods;
+      if (JSON.stringify(await this.configuredMods()) !== JSON.stringify(expectedConfigured)) throw new Error('Mods changed; prepare the update again');
       const transaction = await loadJSON(join(state.job, 'transaction.json'));
       await access(transaction.node);
       launching = true;
@@ -191,6 +269,7 @@ export async function handleUpdaterAPI(request, response, url, { updater, hasAdm
     if (request.method === 'GET' && url.pathname === '/api/updater') value = await updater.status();
     else if (request.method === 'POST' && url.pathname === '/api/updater/check') value = await updater.check();
     else if (request.method === 'POST' && url.pathname === '/api/updater/prepare') value = await updater.prepare();
+    else if (request.method === 'POST' && url.pathname === '/api/updater/continue') value = await updater.continueWithoutIncompatible();
     else if (request.method === 'POST' && url.pathname === '/api/updater/install') value = await updater.install();
     else { jsonResponse(response, 405, { error: 'method_not_allowed' }); return true; }
     jsonResponse(response, 200, value);

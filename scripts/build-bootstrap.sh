@@ -16,9 +16,19 @@ source_info="$source_app/Contents/Info.plist"
 source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$source_info")"
 
 mkdir -p "$output_dir"
-node "$project_dir/research/tools/discover-prompt-tools.js" \
-  "$source_binary" "$source_build" --header > "$output_dir/prompt-tools-offsets.h"
 enabled_mods="${DIA_CUSTOM_EFFECTIVE_MODS:-$(node "$project_dir/scripts/mods.js" resolved)}"
+if [[ ",${enabled_mods}," == *,developer-tools,* ]]; then
+  node "$project_dir/research/tools/discover-prompt-tools.js" \
+    "$source_binary" "$source_build" --header > "$output_dir/prompt-tools-offsets.h"
+else
+  # Prompt Tools' private presenter is irrelevant when Developer Tools is off.
+  # A zero offset is never callable; the native menu is omitted in this mode.
+  cat > "$output_dir/prompt-tools-offsets.h" <<'HEADER'
+#define DIA_CUSTOM_PROMPT_TOOLS_BUILD ""
+#define DIA_CUSTOM_PROMPT_TOOLS_INIT_OFFSET ((uintptr_t)0)
+#define DIA_CUSTOM_PROMPT_TOOLS_PRESENT_OFFSET ((uintptr_t)0)
+HEADER
+fi
 if [[ ",${enabled_mods}," == *,morning-brief,* ]]; then
   node "$source_dir/discover-native-actions.js" \
     "$source_binary" "$source_build" --header > "$output_dir/native-actions-offsets.h"

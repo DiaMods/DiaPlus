@@ -52,6 +52,7 @@ test("Morning Brief reaches the selected provider with its native prompt and res
   };
   const manager = new ProviderManager({
     configStore: { load: async () => config },
+    codexDiscoveryImplementation: async () => [{ id: 'test', label: 'Test', isDefault: true }],
     memoryStore: {},
     toolCoverageStore: { record: async () => {} },
     appsStateStore: { recordMorningBrief: async () => {} },
@@ -212,7 +213,7 @@ test("startup publishes a built-in catalog before slow discovery completes", asy
   assert.equal(manager.healthState().catalog.state, "refreshing");
   assert.equal(manager.historyImportPromise, null);
   assert.ok(manager.historyImportTimer);
-  assert.ok(manager.catalogValue.models.some((model) => model.key === "codex:gpt-5.6-luna"));
+  assert.equal(manager.catalogValue.models.some((model) => model.providerID === "codex"), false);
   assert.ok(manager.catalogValue.models.some((model) => model.key === "apple-on-device:default"));
   releaseApple();
   await manager.catalogRefreshPromise;

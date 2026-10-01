@@ -144,6 +144,107 @@ const layouts = {
     cliaExpected: "a882ff9008712891",
     cliaReplacement: "6882fff008611191",
   },
+  "86796": {
+    accountStateGuard: 0x075d048,
+    accountStateGuardExpected: "c0524439",
+    capabilityGateOne: 0x07e48a4,
+    capabilityGateOneExpected: "131c0036",
+    capabilityGateTwo: 0x07f6b50,
+    accountState: 0x2a42300,
+    authenticationMethod: 0x075e090,
+    modelTokenFailure: {
+      offset: 0x42f3528,
+      expected: "e05240f961ba57940000009000101c9104000014",
+      replacement: "e00314aa61ba5794ff5a00f9150080d21300fcd2",
+    },
+    authClientConstructor: {
+      offset: 0x2a28adc,
+      expected: "9efeff97",
+      replacement: "cbc29697",
+    },
+    keyVerification: 0x28e0044,
+    cliaClosures: [0x0fd969c, 0x0fd96b4, 0x0fd96d8],
+    cliaExpected: "8882ffd008712891",
+    cliaReplacement: "6882ffb008611191",
+  },
+  "87561": {
+    accountStateGuard: 0x075cd8c,
+    accountStateGuardExpected: "c0f24439",
+    capabilityGateOne: 0x07e440c,
+    capabilityGateOneExpected: "131d0036",
+    capabilityGateTwo: 0x07f7bcc,
+    capabilityGateTwoExpected: "36190036",
+    accountState: 0x2dd504c,
+    accountStateExpected: "fc6fbaa9",
+    accountStateNextExpected: "fa6701a9",
+    authenticationMethod: 0x075e6ec,
+    modelTokenFailure: {
+      offset: 0x452e85c,
+      expected: "00000090",
+      codeCave: 0x5aeeca4,
+      returnOffset: 0x452e868,
+      releaseStub: 0x5aee158,
+    },
+    keyVerification: 0x2a12e64,
+    keyVerificationExpected: "20090036",
+    authClientConstructor: {
+      offset: 0x2dbbd08,
+      expected: "bdfeff97",
+      // Preserve AuthClientImpl's per-subscriber streams. The anonymous
+      // dependency shares one AsyncThrowingStream across concurrent consumers
+      // in 1.50+, which traps on the second next(). State/method gates below
+      // retain local restored mode without replacing that dependency.
+      replacement: "bdfeff97",
+    },
+    cliaClosures: [
+      { offset: 0x0f609c0, expected: "4886fff008b10391", replacement: "2886ffb008c12091" },
+      { offset: 0x0f609d8, expected: "4886fff008b10391", replacement: "2886ffb008c12091" },
+      { offset: 0x0f609fc, expected: "280000b008710b91", replacement: "2886ffb008c12091" },
+    ],
+  },
+  "87864": {
+    accountStateGuard: 0x0767238,
+    accountStateGuardExpected: "c0f24439",
+    capabilityGateOne: 0x07f10e0,
+    capabilityGateOneExpected: "131d0036",
+    capabilityGateTwo: 0x0804e34,
+    capabilityGateTwoExpected: "36190036",
+    accountState: 0x2e13ba4,
+    accountStateExpected: "fc6fbaa9",
+    accountStateNextExpected: "fa6701a9",
+    authenticationMethod: 0x0768b98,
+    modelTokenFailure: {
+      offset: 0x45b3618,
+      expected: "00000090",
+      // The old 24-byte import-stub padding is gone in 1.51. Reuse only
+      // this token callback's error continuation, made unreachable by the
+      // selector redirect. Exact caller/continuation guards below are required.
+      codeCave: 0x45b37fc,
+      codeCaveExpected: "bd0344b2ff4302d1fcef03a9fae704a9f8df05a9f5cf06a9",
+      returnOffset: 0x45b3624,
+      releaseStub: 0x5b4f24c,
+    },
+    keyVerification: 0x2ce46ac,
+    keyVerificationExpected: "20090036",
+    // AuthenticatedURLLoadRequestProvider's async authentication gate.
+    // Use its native no-auth continuation for local routing; keep the request,
+    // response parsing, ECDH encryption and independent account streams intact.
+    localRequestAuthentication: [
+      { offset: 0xf2b788, expected: "bd0344b2f70f1df8f5cf00a9fd7b02a9f60f00f9fd830091", replacement: "bd0344b2f70f1df8f5cf00a9fd7b02a9f60f00f9fd830091" },
+      { offset: 0xf2b7a0, expected: "e1020036", replacement: "17000014" },
+      { offset: 0xf2b7fc, expected: "c00640f9140080d2fd7b42a9f5cf40a9f70743f8bdfb439200001fd6", replacement: "c00640f9140080d2fd7b42a9f5cf40a9f70743f8bdfb439200001fd6" },
+    ],
+    authClientConstructor: {
+      offset: 0x2dfa1c8,
+      expected: "b9feff97",
+      replacement: "b9feff97",
+    },
+    cliaClosures: [
+      { offset: 0x0f785a0, expected: "8885ffd008412891", replacement: "6885ffb008f10b91" },
+      { offset: 0x0f785b8, expected: "8885ffd008412891", replacement: "6885ffb008f10b91" },
+      { offset: 0x0f785d0, expected: "8885ffd008412891", replacement: "6885ffb008f10b91" },
+    ],
+  },
 };
 
 const layout = layouts[build];
@@ -152,41 +253,73 @@ if (!layout) {
     `unsupported Dia build ${build}; account patches are audited only for ${Object.keys(layouts).join(", ")}`,
   );
 }
+if (layout.anonymousSupported === false && !capabilitiesOnly) {
+  throw new Error(`unsupported Dia build ${build} for the anonymous account patch; local capability routing is independently audited`);
+}
+
+function branch(from, to, link = false) {
+  const delta = to - from;
+  if (delta % 4 !== 0 || delta < -(1 << 27) || delta >= 1 << 27) {
+    throw new Error("ARM64 account patch branch is out of range");
+  }
+  const result = Buffer.alloc(4);
+  result.writeUInt32LE(((link ? 0x94000000 : 0x14000000) | ((delta / 4) & 0x03ffffff)) >>> 0);
+  return result;
+}
+
+function dia150TokenPatches(site) {
+  const { offset, codeCave, returnOffset, releaseStub } = site;
+  const trampoline = Buffer.concat([
+    bytes("e00314aa"), // mov x0, x20: release the discarded error.
+    branch(codeCave + 4, releaseStub, true),
+    bytes("ff5a00f9"), // str xzr, [x23, #0xb0]: clear the async frame.
+    bytes("150080d2"), // mov x21, #0
+    bytes("1300fcd2"), // mov x19, #empty Swift String tag
+    branch(codeCave + 20, returnOffset),
+  ]);
+  return [
+    { scope: "capability", offset, expected: bytes(site.expected),
+      replacement: branch(offset, codeCave) },
+    { scope: "capability", offset: codeCave,
+      expected: site.codeCaveExpected ? bytes(site.codeCaveExpected) : Buffer.alloc(trampoline.length),
+      replacement: trampoline },
+  ];
+}
 
 const patches = [
-  {
+  ...(layout.localRequestAuthentication ?? []).map(patch => ({ scope: "capability", offset: patch.offset,
+    expected: bytes(patch.expected), replacement: bytes(patch.replacement) })),
+  ...(layout.anonymousSupported === false ? [] : [{
     scope: "anonymous",
     offset: layout.accountStateGuard,
     expected: bytes(layout.accountStateGuardExpected ?? "c0d24a39"),
     replacement: bytes(layout.accountStateGuardExpected ?? "c0d24a39"),
-  },
+  }]),
   {
     scope: "capability",
     offset: layout.capabilityGateOne,
     expected: bytes(layout.capabilityGateOneExpected ?? "d31a0036"),
     replacement: nop,
   },
-  { scope: "capability", offset: layout.capabilityGateTwo, expected: bytes("d6170036"), replacement: nop },
-  {
+  { scope: "capability", offset: layout.capabilityGateTwo,
+    expected: bytes(layout.capabilityGateTwoExpected ?? "d6170036"), replacement: nop },
+  ...(layout.anonymousSupported === false ? [] : [{
     scope: "anonymous",
     offset: layout.accountState,
-    expected: bytes("fa67bba9"),
+    expected: bytes(layout.accountStateExpected ?? "fa67bba9"),
     replacement: bytes("20008052"),
-  },
-  {
+  }, {
     scope: "anonymous",
     offset: layout.accountState + 4,
-    expected: bytes("f85f01a9"),
+    expected: bytes(layout.accountStateNextExpected ?? "f85f01a9"),
     replacement: bytes("c0035fd6"),
-  },
-  {
+  }, {
     scope: "anonymous",
     offset: layout.authenticationMethod,
     expected: bytes("bd0344b2"),
     alternates: [bytes("c10640f9")],
     replacement: bytes("c10640f9"),
-  },
-  {
+  }, {
     scope: "anonymous",
     offset: layout.authenticationMethod + 4,
     expected: bytes("ffc300d1"),
@@ -198,34 +331,35 @@ const patches = [
     ],
     // AuthenticationMethod: 0 = signUp, 1 = signIn, 2 = restored.
     replacement: bytes("40008052"),
-  },
-  {
+  }, {
     scope: "anonymous",
     offset: layout.authenticationMethod + 8,
     expected: bytes("f5cf00a9"),
     replacement: bytes("140080d2"),
-  },
-  {
+  }, {
     scope: "anonymous",
     offset: layout.authenticationMethod + 12,
     expected: bytes("fd7b02a9"),
     replacement: bytes("20001fd6"),
-  },
-  {
+  }]),
+  ...(layout.modelTokenFailure.codeCave
+    ? dia150TokenPatches(layout.modelTokenFailure)
+    : [{
     scope: "capability",
     // Treat a missing Dia account token as an empty Swift String, releasing
     // the discarded error before the original success continuation runs.
     offset: layout.modelTokenFailure.offset,
     expected: bytes(layout.modelTokenFailure.expected),
     replacement: bytes(layout.modelTokenFailure.replacement),
-  },
-  {
+  }]),
+  ...(layout.anonymousSupported === false ? [] : [{
     scope: "anonymous",
-    // Use Dia's anonymous AuthClient dependency instead of AuthClientImpl.
+    // Older builds use the anonymous dependency. 1.50+ must retain the
+    // original constructor, also guarded against the previous crashing patch.
     offset: layout.authClientConstructor.offset,
     expected: bytes(layout.authClientConstructor.expected ?? "a2feff97"),
     replacement: bytes(layout.authClientConstructor.replacement),
-  },
+  }]),
   ...(layout.restoreAnonymousFallback ? [{
     scope: "anonymous",
     // Build 85660 was used during an earlier UI-test identity experiment.
@@ -240,15 +374,15 @@ const patches = [
     // Keep parsing and ECDH, but accept the localhost bridge's ephemeral key
     // without Dia's production-only long-term signing key.
     offset: layout.keyVerification,
-    expected: bytes("40090036"),
+    expected: bytes(layout.keyVerificationExpected ?? "40090036"),
     replacement: nop,
   },
-  ...layout.cliaClosures.map((offset) => ({
+  ...layout.cliaClosures.map((closure) => ({
     scope: "capability",
     // The anonymous dependency's Clia flags use a constant-true closure.
-    offset,
-    expected: bytes(layout.cliaExpected),
-    replacement: bytes(layout.cliaReplacement),
+    offset: typeof closure === "number" ? closure : closure.offset,
+    expected: bytes(typeof closure === "number" ? layout.cliaExpected : closure.expected),
+    replacement: bytes(typeof closure === "number" ? layout.cliaReplacement : closure.replacement),
   })),
 ];
 
@@ -257,6 +391,89 @@ const selectedPatches = patches.filter((patch) =>
   capabilitiesOnly && patch.scope === "capability" ||
   anonymousOnly && patch.scope === "anonymous");
 const data = fs.readFileSync(executable);
+
+if (build === "87864") {
+  for (const [offset, expected, label] of [
+    [0x45b360c, "f45a00f917705694940000b4", "token error selector"],
+    [0x45b361c, "00f01f9104000014f3d60ba90000009000301991", "token continuations"],
+    [0x45b366c, "fd430191d3824ba9d55240f9", "success continuation frame"],
+    [0x252fc, "20008052c0035fd6", "constant-true Clia closure"],
+    [0x5b4f24c, "708900f010f244f900021fd6", "Swift error release stub"],
+  ]) {
+    if (!data.subarray(offset, offset + expected.length / 2).equals(bytes(expected))) {
+      throw new Error(`Dia 87864 ${label} layout changed at 0x${offset.toString(16)}`);
+    }
+  }
+  const token = layout.modelTokenFailure;
+  const sign = (value, bits) => value & (1 << (bits - 1)) ? value - 2 ** bits : value;
+  for (let offset = 0x3200; offset < 0x5b41638; offset += 4) {
+    const word = data.readUInt32LE(offset);
+    let target = null;
+    if (((word & 0x7c000000) >>> 0) === 0x14000000) {
+      target = offset + sign(word & 0x03ffffff, 26) * 4;
+    } else if (((word & 0xff000010) >>> 0) === 0x54000000 ||
+               ((word & 0x7e000000) >>> 0) === 0x34000000) {
+      target = offset + sign((word >>> 5) & 0x7ffff, 19) * 4;
+    } else if (((word & 0x7e000000) >>> 0) === 0x36000000) {
+      target = offset + sign((word >>> 5) & 0x3fff, 14) * 4;
+    } else if (((word & 0x9f000000) >>> 0) === 0x90000000) {
+      const next = data.readUInt32LE(offset + 4);
+      const register = word & 31;
+      if (((next & 0xffc00000) >>> 0) === 0x91000000 &&
+          ((next >>> 5) & 31) === register) {
+        target = (offset & ~4095) + sign(((word >>> 5) & 0x7ffff) * 4 +
+          ((word >>> 29) & 3), 21) * 4096 + ((next >>> 10) & 4095);
+      }
+    }
+    if (target !== null && target >= token.codeCave && target < token.codeCave + 24 &&
+        !(offset === token.offset && target === token.codeCave)) {
+      throw new Error(`Dia 87864 token error continuation gained a reference from 0x${offset.toString(16)}`);
+    }
+  }
+}
+
+if (build === "87561") {
+  const same = (offset, hex) => data.subarray(offset, offset + hex.length / 2)
+    .equals(bytes(hex));
+  const token = layout.modelTokenFailure;
+  // This continuation still stores the callback's error in its async frame,
+  // then selects error/success solely on x20. The injected trampoline releases
+  // that error, clears the frame slot, writes an empty Swift String, and joins
+  // the original success continuation. Never use a generic branch skip here.
+  for (const [offset, expected, label] of [
+    [0x452e850, "f45a00f9a9ff5694940000b4", "token error selector"],
+    [0x452e860, "0000299104000014f3d60ba90000009000402291", "token continuations"],
+    [0x25830, "20008052c0035fd6", "constant-true Clia closure"],
+    [token.codeCave + 24, "00000000", "trampoline alignment padding"],
+    [0x5aeeca0, "00021fd6", "last Swift import stub"],
+    [0x5aeecc0, "41ae00d0", "first Objective-C import stub"],
+  ]) {
+    if (!same(offset, expected)) {
+      throw new Error(`Dia 87561 ${label} layout changed at 0x${offset.toString(16)}`);
+    }
+  }
+  // The six-word cave is the exact, otherwise unused alignment gap between
+  // import-stub sections. Reject any new direct reference into that gap.
+  const caveEnd = token.codeCave + 24;
+  for (let offset = 0x3200; offset < 0x5add50c; offset += 4) {
+    const word = data.readUInt32LE(offset);
+    let target = null;
+    const signed = (value, bits) => value & (1 << (bits - 1))
+      ? value - (1 << bits) : value;
+    if (((word & 0x7c000000) >>> 0) === 0x14000000) {
+      target = offset + signed(word & 0x03ffffff, 26) * 4;
+    } else if (((word & 0xff000010) >>> 0) === 0x54000000 ||
+               ((word & 0x7e000000) >>> 0) === 0x34000000) {
+      target = offset + signed((word >>> 5) & 0x7ffff, 19) * 4;
+    } else if (((word & 0x7e000000) >>> 0) === 0x36000000) {
+      target = offset + signed((word >>> 5) & 0x3fff, 14) * 4;
+    }
+    if (target !== null && target >= token.codeCave && target < caveEnd &&
+        !(offset === token.offset && target === token.codeCave)) {
+      throw new Error(`Dia 87561 token trampoline gap gained a reference from 0x${offset.toString(16)}`);
+    }
+  }
+}
 for (const patch of selectedPatches) {
   const current = data.subarray(
     patch.offset,

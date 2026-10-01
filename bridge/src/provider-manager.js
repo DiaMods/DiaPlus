@@ -46,6 +46,7 @@ import {
   runAppleProvider,
 } from "./providers/apple.js";
 import { runCodexProvider } from "./providers/codex.js";
+import { discoverCodexModels } from "./providers/codex-runtime.js";
 import { runOpenAICompatibleProvider } from "./providers/openai-compatible.js";
 
 const catalogLifetimeMilliseconds = 60_000;
@@ -542,6 +543,7 @@ export class ProviderManager {
     memoryStore = null,
     fetchImplementation = fetch,
     appleStatusImplementation = appleProviderStatus,
+    codexDiscoveryImplementation = discoverCodexModels,
     catalogPath = modelCatalogPath,
     toolCoverageStore = new ToolCoverageStore(),
     appsStateStore = new AppsStateStore(),
@@ -577,6 +579,7 @@ export class ProviderManager {
     });
     this.fetch = fetchImplementation;
     this.appleStatus = appleStatusImplementation;
+    this.codexDiscovery = codexDiscoveryImplementation;
     this.catalogPath = catalogPath;
     this.toolCoverageStore = toolCoverageStore;
     this.profileDirectory = profileDirectoryPath;
@@ -765,7 +768,9 @@ export class ProviderManager {
       return provider.models.map((model) => modelRecord(provider, model,
         provider.type === "apple-foundation-models"
           ? { available: false, reason: "Checking Apple model availability…" }
-          : {}));
+          : provider.type === "codex"
+            ? { available: false, reason: "Checking installed Codex model catalog…" }
+            : {}));
     });
     return {
       version: 1,
@@ -944,7 +949,17 @@ export class ProviderManager {
   async discoverProvider(provider, appleStatus) {
     if (!provider.enabled) return [];
     if (provider.type === "codex") {
-      return provider.models.map((model) => modelRecord(provider, model));
+      try {
+        const discovered = await this.codexDiscovery();
+        return discovered.map((model) => ({ ...modelRecord(provider, model),
+          isDefault: model.isDefault, defaultReasoningEffort: model.defaultReasoningEffort,
+          supportedReasoningEfforts: model.supportedReasoningEfforts, inputModalities: model.inputModalities }));
+      } catch (error) {
+        const reason = `Codex model discovery failed: ${String(error?.message ?? error)}`;
+        this.catalogError = reason;
+        const cached = this.catalogValue?.models?.filter(model => model.providerID === provider.id) ?? [];
+        return cached.map(model => ({ ...model, available: false, reason }));
+      }
     }
     if (provider.type === "apple-foundation-models") {
       if (!modEnabled("apple-models")) return [];
@@ -968,7 +983,7 @@ export class ProviderManager {
     this.catalogPromise = (async () => {
       this.catalogState = "refreshing";
       this.catalogError = null;
-      const config = await this.configStore.load();
+      let config = await this.configStore.load();
       const credentialStatus = await this.credentialStore.status(config.providers);
       const hasApple = config.providers.some((provider) =>
         provider.enabled && provider.type === "apple-foundation-models");
@@ -976,6 +991,12 @@ export class ProviderManager {
       const groups = await Promise.all(config.providers.map((provider) =>
         this.discoverProvider(provider, appleStatus)));
       const models = groups.flat();
+      const selectedProvider = config.providers.find(provider => provider.id === splitModelKey(config.selectedModel).providerID);
+      if (selectedProvider?.type === "codex" && !models.some(model => model.key === config.selectedModel && model.available)) {
+        const discovered = models.filter(model => model.providerID === selectedProvider.id && model.available);
+        const recommended = discovered.find(model => model.isDefault) ?? discovered[0];
+        if (recommended) config = await this.configStore.select(recommended.key);
+      }
       const catalog = {
         version: 1,
         generatedAt: new Date().toISOString(),
@@ -1063,7 +1084,11 @@ export class ProviderManager {
   }
 
   async selectedProvider() {
-    const config = await this.configStore.load();
+    let config = await this.configStore.load();
+    if (splitModelKey(config.selectedModel).model === defaultCodexModel) {
+      await this.refreshCatalog();
+      config = await this.configStore.load();
+    }
     const { providerID, model } = splitModelKey(config.selectedModel);
     const provider = config.providers.find((candidate) =>
       candidate.id === providerID && candidate.enabled);
@@ -1098,7 +1123,12 @@ export class ProviderManager {
   }
 
   async runProvider(provider, options) {
-    if (provider.type === "codex") return runCodexProvider(options);
+    if (provider.type === "codex") {
+      const catalog = await this.refreshCatalog();
+      const metadata = catalog.models.find(model => model.key === `${provider.id}:${options.model}`);
+      if (!metadata?.available) throw new Error(metadata?.reason ?? 'Selected Codex model is unavailable; refresh the model picker');
+      return runCodexProvider({ ...options, modelMetadata: metadata });
+    }
     if (provider.type === "apple-foundation-models") {
       return runAppleProvider({ ...options, provider });
     }

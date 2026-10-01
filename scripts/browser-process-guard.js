@@ -96,7 +96,7 @@ export async function stopProfileBrowser(probe, app, profile, { timeoutMs = 5000
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, app, profile, ...extra] = process.argv.slice(2);
-  if (!['list', 'assert-stopped', 'stop-profile'].includes(command) || !app || extra.length ||
+    if (!['list', 'assert-stopped', 'stop-profile', 'assert-no-other-custom'].includes(command) || !app || extra.length ||
       (command === 'stop-profile' && !profile)) {
     process.stderr.write('usage: browser-process-guard.js {list|assert-stopped} APP [PROFILE] | stop-profile APP PROFILE\n');
     process.exitCode = 2;
@@ -105,6 +105,20 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     try {
       probe = createProcessProbe();
       if (command === 'stop-profile') await stopProfileBrowser(probe, app, profile);
+      else if (command === 'assert-no-other-custom') {
+        const executable = normalizedPath(join(app, 'Contents/MacOS/Dia'));
+        const other = probe.list().filter(entry => {
+          if (!entry.executable.endsWith('/Contents/MacOS/Dia') ||
+              normalizedPath(entry.executable) === executable) return false;
+          try {
+            const bundle = resolve(dirname(entry.executable), '../..');
+            return execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier',
+              join(bundle, 'Contents/Info.plist')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+              .trim() === 'local.rttm.dia';
+          } catch { return false; }
+        });
+        if (other.length) throw new Error(`Close the other Dia+ instance(s) before native startup validation (process ${other.map(({pid}) => pid).join(', ')}).`);
+      }
       else {
         const matches = matchingBrowserProcesses(probe.list(), app, profile);
         if (command === 'list') process.stdout.write(`${JSON.stringify(matches)}\n`);

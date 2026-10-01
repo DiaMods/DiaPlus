@@ -36,6 +36,7 @@ import { CustomUpdater, handleUpdaterAPI } from "./custom-updater.js";
 import { handleConnectorAPI } from "./connector-api.js";
 import { handleMediaTranscription } from "./media-transcription.js";
 import { handleProfilesAPI } from "./profiles.js";
+import { canonicalNativeAIRoute } from "./native-ai-route.js";
 
 const host = "127.0.0.1";
 const port = Number.parseInt(process.env.DIA_CUSTOM_BRIDGE_PORT ?? "8765", 10);
@@ -544,6 +545,7 @@ async function handleRequest(request, response) {
     jsonResponse(response, 421, { error: "loopback_host_required" });
     return;
   }
+  request.url = canonicalNativeAIRoute(request.method, request.url);
   const requestURL = new URL(request.url ?? "/", `http://${host}:${port}`);
   if (await handleProfilesAPI(request, response, requestURL, { hasAdminToken, jsonResponse })) return;
   if (await handleMediaTranscription(request, response, requestURL, { readBody, jsonResponse })) return;

@@ -69,6 +69,10 @@ export function renderSettingsPage(adminToken) {
     .connection-badge[data-state="connected"] { color: light-dark(#18603a, #78d8a3); background: light-dark(#e4f3eb, #183a29); }
     .connection-badge[data-state="error"], .connection-badge[data-state="auth-required"] { color: light-dark(#885115, #edc48a); background: light-dark(#fff1da, #45331e); }
     button.danger { background: Canvas; border-color: color-mix(in srgb, #b4232c 30%, Canvas); color: light-dark(#b4232c, #ff9299); }
+    progress { width: 100%; height: 8px; accent-color: var(--accent); }
+    .update-progress { margin: 12px 0; }
+    .update-progress .muted { margin-top: 5px; font-size: 12px; }
+    .update-review { padding: 13px; margin: 12px 0; border: 1px solid color-mix(in srgb, #b7791f 35%, Canvas); border-radius: 9px; background: color-mix(in srgb, #b7791f 8%, Canvas); white-space: pre-line; }
     textarea { width: 100%; min-height: 380px; padding: 13px; tab-size: 2; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; line-height: 1.6; resize: vertical; }
     #status { min-height: 22px; margin-top: 12px; }
     .error { color: light-dark(#b4232c, #ff9299); }
@@ -268,7 +272,9 @@ export function renderSettingsPage(adminToken) {
   <div class="card">
     <div id="updaterStatus" role="status">Loading updater…</div>
     <div id="updaterDetail" class="muted" style="margin:10px 0"></div>
-    <div class="actions"><button id="checkUpdate">Check for updates</button><button id="prepareUpdate" class="secondary" disabled>Download &amp; validate</button><button id="installUpdate" disabled>Install &amp; restart</button></div>
+    <div id="updaterProgress" class="update-progress" hidden><progress id="updaterProgressBar" max="100" value="0" aria-label="Update download progress"></progress><div id="updaterProgressText" class="muted"></div></div>
+    <div id="updaterCompatibility" class="update-review" hidden></div>
+    <div class="actions"><button id="checkUpdate">Check for updates</button><button id="prepareUpdate" class="secondary" disabled>Download &amp; validate</button><button id="continueUpdate" class="secondary" hidden disabled>Continue and disable incompatible mods</button><button id="installUpdate" disabled>Install &amp; restart</button></div>
   </div>
 
   </section>
@@ -1200,14 +1206,47 @@ export function renderModsPage(adminToken) {
 export function initializeUpdaterSettings({ document, request }) {
   const field = id => document.querySelector('#' + id);
   let timer;
+  const bytes = value => {
+    if (!Number.isFinite(value) || value < 0) return '';
+    const units = ['B','KB','MB','GB']; let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+    return value.toFixed(unit ? 1 : 0) + ' ' + units[unit];
+  };
   async function refresh() {
     try {
       const state = await request('/api/updater');
       const busy = ['checking','downloading','verifying','validating','building','installing','closing'].includes(state.phase);
-      field('updaterStatus').textContent = !state.supported ? 'Available after rebuilding the installed app.' : !state.enabled ? 'Custom updater is disabled.' : 'Build ' + state.currentBuild + ' · ' + state.phase;
-      field('updaterDetail').textContent = [state.release ? 'Latest release: ' + state.release.version + ' (' + state.release.build + ')' : '', state.error || '', state.rollbackError || '', state.compatibility?.perMod ? state.compatibility.perMod.filter(m => m.compatible).length + ' mods passed compatibility checks.' : '', state.modRepository || ''].filter(Boolean).join(' ');
+      const progress = state.phase === 'downloading' ? state.download : null;
+      const percent = Number.isFinite(progress?.percent) ? Math.max(0, Math.min(100, progress.percent)) : null;
+      const phase = state.phase === 'compatibility-review' ? 'waiting for confirmation' : state.phase;
+      const showCompatibility = Array.isArray(state.compatibility?.perMod) &&
+        ['validating','building','compatibility-review','ready','installing','closing','installed','failed','recovery-required'].includes(state.phase);
+      field('updaterStatus').textContent = !state.supported ? 'Available after rebuilding the installed app.' : !state.enabled ? 'Custom updater is disabled.' : 'Build ' + state.currentBuild + ' · ' + phase + (percent === null ? '' : ' · ' + percent + '%');
+      field('updaterDetail').textContent = [state.release ? 'Latest release: ' + state.release.version + ' (' + state.release.build + ')' : '', state.error || '', state.rollbackError || '', showCompatibility ? state.compatibility.perMod.filter(m => m.compatible).length + ' mods passed compatibility checks.' : '', state.modRepository || ''].filter(Boolean).join(' ');
+      field('updaterProgress').hidden = !progress;
+      if (progress) {
+        field('updaterProgressBar').value = percent ?? 0;
+        const elapsed = (Date.now() - Date.parse(progress.startedAt)) / 1000;
+        const rate = elapsed > 0 ? progress.receivedBytes / elapsed : 0;
+        const remaining = rate > 0 ? Math.ceil((progress.totalBytes - progress.receivedBytes) / rate) : null;
+        field('updaterProgressText').textContent = bytes(progress.receivedBytes) + ' of ' + bytes(progress.totalBytes) +
+          (rate > 0 ? ' · ' + bytes(rate) + '/s' : '') +
+          (remaining !== null && remaining > 0 ? ' · about ' + (remaining < 60 ? remaining + ' sec' : Math.ceil(remaining / 60) + ' min') + ' remaining' : '');
+      }
+      const failures = showCompatibility ? state.compatibility.perMod.filter(mod => !mod.compatible) : [];
+      const requiredFailures = failures.filter(mod => mod.required || mod.criticality === 'critical');
+      const review = field('updaterCompatibility');
+      review.hidden = failures.length === 0;
+      if (failures.length) {
+        const heading = requiredFailures.length ? 'Update cannot continue because required mods are incompatible:' :
+          state.phase === 'compatibility-review' ? 'Continue updating? These incompatible mods will be disabled:' : 'Incompatible mods disabled for this Dia build:';
+        review.textContent = heading + '\n' + failures.map(mod => '• ' + (mod.label || mod.id) + ' — ' + (mod.reason || 'Compatibility check failed')).join('\n') +
+          (!requiredFailures.length && state.phase === 'compatibility-review' ? '\n\nThey will be re-enabled automatically when a later compatible update is installed.' : '');
+      }
       field('checkUpdate').disabled = busy || !state.supported || !state.enabled;
       field('prepareUpdate').disabled = busy || !state.supported || !state.enabled || !['available','failed'].includes(state.phase) || !state.release || Number(state.release.build) <= Number(state.currentBuild);
+      field('continueUpdate').hidden = state.phase !== 'compatibility-review' || requiredFailures.length > 0;
+      field('continueUpdate').disabled = state.phase !== 'compatibility-review' || requiredFailures.length > 0;
       field('installUpdate').disabled = state.phase !== 'ready' || !state.enabled;
       clearTimeout(timer); if (busy) timer = setTimeout(refresh, 2000);
     } catch (error) { field('updaterStatus').textContent = error.message; }
@@ -1220,6 +1259,12 @@ export function initializeUpdaterSettings({ document, request }) {
       catch (error) { field('updaterStatus').textContent = error.message; field(id).disabled = false; }
     });
   }
+  field('continueUpdate').addEventListener('click', async () => {
+    field('continueUpdate').disabled = true;
+    field('updaterStatus').textContent = 'Disabling incompatible mods and continuing…';
+    try { await request('/api/updater/continue', { method: 'POST', body: '{}' }); await refresh(); }
+    catch (error) { field('updaterStatus').textContent = error.message; field('continueUpdate').disabled = false; }
+  });
   return { ready: refresh(), refresh };
 }
 

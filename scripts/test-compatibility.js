@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, open, readFile, rm, symlink } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,7 +45,8 @@ try {
   assert.equal(perMod["identity-isolation"].compatible, true);
   assert.equal(perMod["live-connectors"].compatible, true);
   assert.equal(perMod["local-ai-routing"].compatible, false);
-  assert.match(perMod["local-ai-routing"].reason, /^unsupported Dia build 999999/);
+  assert.match(perMod["local-ai-routing"].reason,
+    /^(unsupported Dia build 999999|expected one unpatched endpoint)/);
   assert.doesNotMatch(perMod["local-ai-routing"].reason, /^Node\.js /);
   process.stdout.write("ok    structural compatibility reports actionable failures\n");
 
@@ -90,7 +91,29 @@ try {
     join(scriptDirectory, "../src/patches/patch-endpoint.js"), "--check", fixtureApp,
   ], { encoding: "utf8" });
   assert.equal(digest(await readFile(patchedPath)), digest(patched), "checking must not modify the executable");
-  const endpoint = Buffer.from("http://localhost:8765/tools-cache-local-xx");
+  if (sourceBuild === "87864") {
+    for (const offset of [0xf68794, 0xf687b0, 0xf687b4, 0x8cac8, 0xf6734c, 0x2ce6674, 0x5b4243c, 0x60cee90]) {
+      const invalid = Buffer.from(patched);
+      invalid[offset] ^= 1;
+      await writeFile(patchedPath, invalid);
+      assert.throws(() => execFileSync(process.execPath, [
+        join(scriptDirectory, "../src/patches/patch-endpoint.js"), fixtureApp,
+      ], { stdio: "pipe" }), /AI service|expected one unpatched endpoint/);
+      assert.equal(digest(await readFile(patchedPath)), digest(invalid), "reject changed AI service ABI without a partial write");
+    }
+    const referenced = Buffer.from(patched);
+    referenced.writeUInt32LE((0x14000000 | ((0xf687b8 - 0x3200) / 4 & 0x03ffffff)) >>> 0, 0x3200);
+    await writeFile(patchedPath, referenced);
+    assert.throws(() => execFileSync(process.execPath, [
+      join(scriptDirectory, "../src/patches/patch-endpoint.js"), fixtureApp,
+    ], { stdio: "pipe" }), /AI service URL continuation gained a reference/);
+    assert.equal(digest(await readFile(patchedPath)), digest(referenced),
+      "reject an unexpected native continuation caller without writing");
+    await writeFile(patchedPath, patched);
+  }
+  const endpoint = Buffer.from(["87561", "87864"].includes(sourceBuild)
+    ? "http://localhost:8765/aiproxy/dia-claude-stream-local-testxx"
+    : "http://localhost:8765/tools-cache-local-xx");
   const endpointOffset = patched.indexOf(endpoint);
   assert.ok(endpointOffset >= 0);
   const endpointFile = await open(patchedPath, "r+");
@@ -104,7 +127,7 @@ try {
   assert.match(corruptedRouting.reason, /expected one unpatched endpoint/);
   assert.throws(() => execFileSync(process.execPath, [
     join(scriptDirectory, "check-dia-build.js"), fixtureApp,
-    "--mods", "local-ai-routing", "--json",
+    "--mods", "local-ai-routing", "--allow-structural", "--json",
   ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
   /expected one unpatched endpoint/);
   process.stdout.write("ok    endpoint validation accepts exact original/patched layouts, stays read-only, and rejects corrupted local routes\n");

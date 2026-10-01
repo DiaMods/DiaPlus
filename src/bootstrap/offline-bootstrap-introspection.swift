@@ -414,11 +414,23 @@ private func sendAdvancedNewTabStateCopy<T>(
         "lightConfiguration",
         "areAnimationsEnabled",
     ]
-    // Build 86584 inserted a native rebrand flag and renamed the advanced
-    // logo field. Keep both audited shapes, without overwriting the rebrand
-    // choice or guessing offsets in an unfamiliar state value.
+    // Dia 1.48 inserted a rebrand flag; 1.50 inserted postcard/daylight
+    // fields. Guard each audited shape and calculate only the two appearance
+    // offsets from Swift reflection.
+    let isDaylightLayout = fields.count == 22
     let isRebrandLayout = fields.count == 21
-    let expectedLabels = sharedLabels + (isRebrandLayout ? [
+    let daylightLabels = [
+        "windowID", "displayDefaultBrowserUpsell", "displayReleaseNotesPostcard",
+        "displayWelcomePostcardTeaser", "hidePostcardsOnlyWhenCommandBarIntersects",
+        "displayTrialGuideStampCard", "displayAppsUpsellBar",
+        "displayNewSingleAppUpsell", "themePalette", "skillOverridePalette",
+        "profileCustomizationPermitted", "displayTryForAWeek", "greeting",
+        "bookmarkBarMode", "konamiCodeOnboardingIntroTriggerEnabled",
+        "lightConfiguration", "daylightEffectInputs", "areAnimationsEnabled",
+        "isRebrandEnabled", "isPersonalizeButtonEnabled", "showDiaIcon",
+        "isPresentingCliaOnboardingView",
+    ]
+    let expectedLabels = isDaylightLayout ? daylightLabels : sharedLabels + (isRebrandLayout ? [
         "isRebrandEnabled",
         "isPersonalizeButtonEnabled",
         "showDiaIcon",
@@ -428,13 +440,14 @@ private func sendAdvancedNewTabStateCopy<T>(
         "showParticlesLogo",
         "isPresentingCliaOnboardingView",
     ])
-    let personalizeIndex = isRebrandLayout ? 18 : 17
-    let logoIndex = isRebrandLayout ? 19 : 18
+    let personalizeIndex = isDaylightLayout ? 19 : isRebrandLayout ? 18 : 17
+    let logoIndex = isDaylightLayout ? 20 : isRebrandLayout ? 19 : 18
     guard String(reflecting: T.self) == "NewTabPage.NewTabPageViewModel.State",
           fields.count == expectedLabels.count,
           fields.count == recursiveFieldCount(T.self),
           zip(fields, expectedLabels).allSatisfy({ $0.label == $1 }),
-          (16..<expectedLabels.count).allSatisfy({ fields[$0].value is Bool }) else {
+          ((isDaylightLayout ? 17 : 16)..<expectedLabels.count).allSatisfy({ fields[$0].value is Bool }),
+          (!isDaylightLayout || (fields[4].value is Bool && !(fields[16].value is Bool))) else {
         if !didLogUnexpectedAdvancedNewTabState {
             didLogUnexpectedAdvancedNewTabState = true
             let fieldLayout = fields.enumerated().map { index, field in

@@ -88,7 +88,12 @@ export function validateArchivePaths(listing) {
   }
 }
 export function requireAllMods(report, expected) {
-  if (!report?.compatible || !Array.isArray(report.perMod) ||
+  if (!Array.isArray(report?.perMod) ||
+      typeof report.compatible !== 'boolean' ||
+      report.perMod.some(mod => typeof mod?.id !== 'string' || typeof mod.compatible !== 'boolean') ||
+      report.compatible !== !report.perMod.some(mod => mod.compatible === false) ||
       expected.some(id => !report.perMod.some(mod => mod.id === id && mod.compatible)) ||
-      report.perMod.some(mod => !mod.compatible)) throw new Error('Update blocked: every enabled mod must pass compatibility checks');
+      new Set(report.perMod.map(mod => mod.id)).size !== report.perMod.length) {
+    throw new Error('Update blocked: every enabled mod must pass compatibility checks');
+  }
 }

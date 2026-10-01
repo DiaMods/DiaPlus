@@ -96,26 +96,30 @@ for (let constantLoad = 0; constantLoad + 12 <= binary.length; constantLoad += 4
     continue;
   }
 
-  const errorStart = constantLoad - 0x28;
-  const successBranchOffset = errorStart - 4;
-  if (errorStart < 64) continue;
-  const successBranch = binary.readUInt32LE(successBranchOffset);
-  if (!isConditionalZeroBranch(successBranch)) continue;
-  const successTarget = conditionalZeroBranchTarget(successBranchOffset, successBranch);
-  if (successTarget <= constantLoad || successTarget > constantLoad + 0x200) continue;
+  // Dia 1.50 stores the new error object in x20 before loading the enum,
+  // adding one instruction to the audited failure path.
+  for (const errorDistance of [0x28, 0x2c]) {
+    const errorStart = constantLoad - errorDistance;
+    const successBranchOffset = errorStart - 4;
+    if (errorStart < 64) continue;
+    const successBranch = binary.readUInt32LE(successBranchOffset);
+    if (!isConditionalZeroBranch(successBranch)) continue;
+    const successTarget = conditionalZeroBranchTarget(successBranchOffset, successBranch);
+    if (successTarget <= constantLoad || successTarget > constantLoad + 0x200) continue;
 
-  for (let offset = errorStart - 0x80; offset < errorStart; offset += 4) {
-    const instruction = binary.readUInt32LE(offset);
-    const previous = offset >= 4 ? binary.readUInt32LE(offset - 4) : 0;
-    // The validator result is an optional value loaded from the async frame;
-    // the branch immediately follows that load in Dia 1.45 and 1.46.
-    const followsFrameLoad = ((previous & 0xffc003ff) >>> 0) === 0xf94002c8;
-    const unpatched = isConditionalZeroBranch(instruction) &&
-      conditionalZeroBranchTarget(offset, instruction) === errorStart;
-    const patched = isUnconditionalBranch(instruction) &&
-      unconditionalBranchTarget(offset, instruction) === successTarget;
-    if (followsFrameLoad && (unpatched || patched)) {
-      matches.push({ offset, successTarget, patched });
+    for (let offset = errorStart - 0x80; offset < errorStart; offset += 4) {
+      const instruction = binary.readUInt32LE(offset);
+      const previous = offset >= 4 ? binary.readUInt32LE(offset - 4) : 0;
+      // The validator result is an optional value loaded from the async frame;
+      // the branch immediately follows that load in audited Dia builds.
+      const followsFrameLoad = ((previous & 0xffc003ff) >>> 0) === 0xf94002c8;
+      const unpatched = isConditionalZeroBranch(instruction) &&
+        conditionalZeroBranchTarget(offset, instruction) === errorStart;
+      const patched = isUnconditionalBranch(instruction) &&
+        unconditionalBranchTarget(offset, instruction) === successTarget;
+      if (followsFrameLoad && (unpatched || patched)) {
+        matches.push({ offset, successTarget, patched });
+      }
     }
   }
 }

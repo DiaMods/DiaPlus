@@ -5,7 +5,13 @@ script_dir="${0:A:h}"
 project_dir="${script_dir:h}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
-enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$project_dir/scripts/mods.js" resolved)"
+enabled_mods="${DIA_CUSTOM_EFFECTIVE_MODS:-$(DIA_CUSTOM_PROFILE="$profile" node "$project_dir/scripts/mods.js" resolved)}"
+mod_enabled() {
+  case ",${enabled_mods}," in
+    *",${1},"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 node "$project_dir/scripts/check-dia-build.js" "$source_app" --mods "$enabled_mods"
 node "$project_dir/src/patches/patch-no-account.js" --check "$source_app"
@@ -13,9 +19,14 @@ node "$project_dir/src/patches/patch-dia-import.js" --check "$source_app"
 node "$project_dir/src/patches/patch-report-controller.js" --check "$source_app"
 node "$project_dir/src/patches/patch-report-upload.js" --check "$source_app"
 source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$source_app/Contents/Info.plist")"
-node "$project_dir/research/tools/discover-prompt-tools.js" \
-  "$source_app/Contents/MacOS/Dia" "$source_build" | \
-  /usr/bin/grep -q '"initializerOffset"'
+if [[ "$source_build" == 87561 || "$source_build" == 87864 ]]; then
+  node "$script_dir/test-account-patch.js" "$source_app"
+fi
+if mod_enabled developer-tools; then
+  node "$project_dir/research/tools/discover-prompt-tools.js" \
+    "$source_app/Contents/MacOS/Dia" "$source_build" | \
+    /usr/bin/grep -q '"initializerOffset"'
+fi
 node "$project_dir/research/tools/parse-swift-fields.js" \
   "$source_app/Contents/MacOS/Dia" _artifactUtilities | \
   /usr/bin/grep -q '"name":"_artifactUtilities"'

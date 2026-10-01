@@ -36,12 +36,19 @@ try {
   run(app);
   assert.equal(hash(await readFile(handler)), hash(patched), "patching must be idempotent");
 
-  const permissionBefore = 'X.onCheck("permission", { tool: N, tool_use_id: I, ...M && { namespace: M }, input: P }, K(R)).catch(() => null)';
+  const dia150 = original.includes('X.onCheck("permission", { tool: N, tool_use_id: I, ...M && { namespace: M }, input: P }, H(R)).catch(() => null)');
+  const dia151 = original.includes('t.onCheck("permission", { tool: b, tool_use_id: v, ...y && { namespace: y }, input: A }, l(R)).catch(() => null)');
+  const permissionBefore = dia151
+    ? 't.onCheck("permission", { tool: b, tool_use_id: v, ...y && { namespace: y }, input: A }, l(R)).catch(() => null)'
+    : dia150
+    ? 'X.onCheck("permission", { tool: N, tool_use_id: I, ...M && { namespace: M }, input: P }, H(R)).catch(() => null)'
+    : 'X.onCheck("permission", { tool: N, tool_use_id: I, ...M && { namespace: M }, input: P }, K(R)).catch(() => null)';
   const permissionOffset = original.indexOf(permissionBefore);
-  assert.ok(permissionOffset >= 0, "86584 native permission fixture must be recognized");
+  assert.ok(permissionOffset >= 0, "native permission fixture must be recognized");
   const permissionExpression = patched.subarray(permissionOffset, permissionOffset + permissionBefore.length).toString().trim();
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-  const permission = new AsyncFunction("X", "N", "I", "M", "P", "K", "R", `return await ${permissionExpression};`);
+  const permission = new AsyncFunction(...(dia151 ? ["t", "b", "v", "y", "A", "l", "R"]
+    : ["X", "N", "I", "M", "P", dia150 ? "H" : "K", "R"]), `return await ${permissionExpression};`);
   const notifications = [];
   const decision = await Promise.race([
     permission({ onCheck: (...args) => { notifications.push(args); return new Promise(() => {}); } },
@@ -53,8 +60,8 @@ try {
     tool: "ToolSearch", tool_use_id: "tool-1", namespace: "dia", input: { query: "open_tabs" },
   }, { turn: "turn-1" }]]);
 
-  const callbackOffset = original.indexOf("async (l, C$) => {");
-  const callbackEnd = original.indexOf("}, Wx6(b,", callbackOffset) + 1;
+  const callbackOffset = original.indexOf(dia151 ? "async (ae, H) => {" : dia150 ? "async (J$, h) => {" : "async (l, C$) => {");
+  const callbackEnd = original.indexOf(dia151 ? "}, g2t(w," : dia150 ? "}, cd4(T," : "}, Wx6(b,", callbackOffset) + 1;
   assert.ok(callbackOffset >= 0 && callbackEnd > callbackOffset);
   const callbackExpression = patched.subarray(callbackOffset, callbackEnd).toString().trim();
   for (const [namespace, tool, local] of [
@@ -63,12 +70,21 @@ try {
     ["custom", "search_web", false], ["dia", "search_web_extra", false],
   ]) {
     const nativeCalls = [], fetchCalls = [], registrations = [];
-    const callback = new Function("j", "d", "Gx6", "X", "b", "W", "I", "Q", "fetch", `return (${callbackExpression});`)(
-      new Set(), tool, (...args) => registrations.push(args), "emitter", "definition",
-      () => ({ nativeContext: "context-1" }), namespace,
-      { onTool: async (...args) => { nativeCalls.push(args); return "native-result"; } },
-      async (...args) => { fetchCalls.push(args); return { ok: true, text: async () => "local-result" }; },
-    );
+    const onTool = { onTool: async (...args) => { nativeCalls.push(args); return "native-result"; } };
+    const fetch = async (...args) => { fetchCalls.push(args); return { ok: true, text: async () => "local-result" }; };
+    const callback = dia151
+      ? new Function("g", "X", "E2t", "t", "w", "i", "A", "r", "_2t", "fetch", `return (${callbackExpression});`)(
+        new Set(), tool, (...args) => registrations.push(args), "emitter", "definition",
+        () => ({ nativeContext: "context-1" }), namespace, onTool,
+        error => ({ content: [{ type: "text", text: JSON.stringify({ error }) }] }), fetch)
+      : dia150
+      ? new Function("w", "s", "ld4", "X", "T", "z", "P", "Z", "dd4", "fetch", `return (${callbackExpression});`)(
+        new Set(), tool, (...args) => registrations.push(args), "emitter", "definition",
+        () => ({ nativeContext: "context-1" }), namespace, onTool,
+        error => ({ content: [{ type: "text", text: JSON.stringify({ error }) }] }), fetch)
+      : new Function("j", "d", "Gx6", "X", "b", "W", "I", "Q", "fetch", `return (${callbackExpression});`)(
+        new Set(), tool, (...args) => registrations.push(args), "emitter", "definition",
+        () => ({ nativeContext: "context-1" }), namespace, onTool, fetch);
     const input = { query: "fixture" };
     const result = await callback(input, { _meta: { "claudecode/toolUseId": "tool-2" } });
     assert.deepEqual(result, { content: [{ type: "text", text: local ? "local-result" : "native-result" }] });
@@ -81,16 +97,21 @@ try {
     }
   }
 
-  for (const boundary of [
+  for (const boundary of (dia150 || dia151 ? [
+    '.onCheck("user_question",',
+    'permissionMode: "default"',
+    'CLAUDE_CODE_SANDBOX_PROFILE || (() => {',
+    'file:// URLs are not allowed in open_tabs',
+  ] : [
     'X.onCheck("user_question", { input: L }, K(W()))',
     'permissionMode: "default", canUseTool: u8.canUseTool',
     'CLAUDE_CODE_SANDBOX_PROFILE || (() => {',
     'let u = Vm$(SC4(G, "artifacts")) + yC4;\n  function e(d) {\n    return Vm$(d).startsWith(u);\n  }',
-  ]) {
+  ])) {
     assert.ok(original.includes(boundary), "native boundary exists in the official fixture");
     assert.ok(patched.includes(boundary), "native boundary must remain intact");
   }
-  for (const name of ["bC4", "bJ$", "CJ$"]) {
+  for (const name of dia151 ? ["XDr", "Ace", "_ce"] : dia150 ? [] : ["bC4", "bJ$", "CJ$"]) {
     const start = original.indexOf(`function ${name}(`);
     const end = original.indexOf("\nfunction ", start + 1);
     assert.ok(start >= 0 && end > start);

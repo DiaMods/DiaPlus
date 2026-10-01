@@ -91,6 +91,7 @@ try {
         char request[4096]; read(client, request, sizeof(request));
         const char *reply = "HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\n[]";
         write(client, reply, strlen(reply)); close(client);
+        if (getenv("DIA_TEST_PREFLIGHT_EXIT_AFTER_READY")) return 0;
       }
     }
   `);
@@ -165,9 +166,18 @@ try {
       DIA_CUSTOM_PREFLIGHT_SETTLE_SECONDS: '0', DIA_TEST_PREFLIGHT_PID_FILE: pidFile, DIA_TEST_PREFLIGHT_IGNORE_TERM: '0' },
   });
   assert.equal(successful.status, 0, successful.stderr);
-  assert.match(successful.stdout, /Profile preflight retained/);
+  assert.match(successful.stdout, /profile preflight retained/);
   assert.deepEqual((await readdir(directory)).filter((entry) => entry.startsWith('Dia Custom RTTM.profile-preflight.')), roots);
   process.stdout.write('ok    both successful preflight launches shut down and remove only their own temporary profile\n');
+  const lateExit = spawnSync('/bin/zsh', [join(scripts, 'preflight-profile.sh'), app, profile], {
+    encoding: 'utf8', timeout: 10000, env: { ...process.env, DIA_CUSTOM_WORK_DIR: directory,
+      DIA_CUSTOM_PREFLIGHT_SETTLE_SECONDS: '1', DIA_TEST_PREFLIGHT_PID_FILE: pidFile,
+      DIA_TEST_PREFLIGHT_IGNORE_TERM: '0', DIA_TEST_PREFLIGHT_EXIT_AFTER_READY: '1' },
+  });
+  assert.notEqual(lateExit.status, 0);
+  assert.match(lateExit.stderr, /exited during native startup/);
+  assert.deepEqual((await readdir(directory)).filter(entry => entry.startsWith('Dia Custom RTTM.profile-preflight.')), roots);
+  process.stdout.write('ok    native preflight rejects a browser that exits after initial readiness\n');
 } finally {
   // This PID is written only by the fixture binary launched for this test.
   if (preflightPID) { try { process.kill(preflightPID, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; } }

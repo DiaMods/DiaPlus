@@ -62,6 +62,62 @@ test("updater state patches serialize without losing independent fields", async 
   assert.equal(state.phase, "ready");
 });
 
+test("a current release clears stale failed compatibility state", async (t) => {
+  const { updater } = await fixture(t);
+  const source = {
+    distributionPrefix: "https://releases.diabrowser.com/releases/",
+    feedURL: "https://releases.diabrowser.com/releases/feed.xml",
+  };
+  const signature = Buffer.alloc(64).toString("base64");
+  const feed = `<enclosure url="${source.distributionPrefix}Dia.zip" sparkle:version="1" sparkle:shortVersionString="1.0 (1)" length="4" sparkle:edSignature="${signature}">`;
+  await saveJSON(updater.statePath, {
+    phase: "failed", error: "unsupported build", job: "/stale/job",
+    release: { build: "1" }, download: { percent: 100 },
+    compatibility: { build: "1", requestedMods: ["custom-updater"], perMod: [
+      { id: "custom-updater", compatible: false, reason: "unsupported build" },
+    ] },
+    disabledMods: ["custom-updater"], preparedMods: ["custom-updater"],
+    runtimeID: "stale", rollbackError: "stale rollback",
+  });
+  updater.source = async () => source;
+  updater.fetchBounded = async () => Buffer.from(feed);
+  const result = await updater.check();
+  assert.equal(result.phase, "current");
+  for (const key of ["job", "compatibility", "download", "disabledMods", "preparedMods", "runtimeID", "rollbackError"]) {
+    assert.equal(result[key], null);
+  }
+  assert.equal(result.error, null);
+});
+
+test("confirmed optional failures are excluded temporarily when the existing job resumes", async (t) => {
+  const { updater } = await fixture(t);
+  const job = resolve(updater.root, "jobs/reviewed");
+  const compatibility = {
+    build: "2", requestedMods: ["custom-updater", "optional"], compatible: false,
+    perMod: [
+      { id: "custom-updater", compatible: true, required: false },
+      { id: "optional", label: "Optional mod", compatible: false, required: false, reason: "surface changed" },
+    ],
+  };
+  await mkdir(job, { recursive: true });
+  await saveJSON(updater.statePath, { phase: "compatibility-review", job, release: { build: "2" }, compatibility });
+  updater.configuredMods = async () => ["custom-updater", "optional"];
+  let resumed;
+  let finishBuild;
+  updater.buildPreparedJob = async (...args) => {
+    resumed = args;
+    await new Promise((resolve) => { finishBuild = resolve; });
+  };
+  const result = await updater.continueWithoutIncompatible();
+  finishBuild();
+  await updater.preparation;
+  assert.deepEqual(resumed.slice(0, 2), [job, { build: "2" }]);
+  assert.deepEqual(resumed[3], ["custom-updater"]);
+  assert.deepEqual(resumed[4], ["custom-updater", "optional"]);
+  assert.equal(result.phase, "building");
+  assert.deepEqual((await loadJSON(updater.statePath)).disabledMods, ["optional"]);
+});
+
 test("updater subprocess limits remain failures when the process exits zero or ignores SIGTERM", async () => {
   await assert.rejects(run(process.execPath, ["-e", "process.on('SIGTERM',()=>process.exit(0)); setInterval(()=>{},1000)"], { timeout: 100 }), /timed out/);
   await assert.rejects(run(process.execPath, ["-e", "process.stdout.write('x'.repeat(2000));"], { maxBytes: 100 }), /output limit/);

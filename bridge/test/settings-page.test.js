@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { initializeConnectorSettings, initializeProfileSettings, initializeSettingsNavigation, renderModsPage, renderSettingsPage } from "../src/settings-page.js";
+import { initializeConnectorSettings, initializeProfileSettings, initializeSettingsNavigation, initializeUpdaterSettings, renderModsPage, renderSettingsPage } from "../src/settings-page.js";
 
 test("local settings page keeps provider, memory, connector, and tool controls parseable", () => {
   const html = renderSettingsPage("local-test-token");
@@ -14,6 +14,8 @@ test("local settings page keeps provider, memory, connector, and tool controls p
   assert.match(html, /id="dia-mods"/);
   assert.match(html, /id="tool-coverage"/);
   assert.match(html, /id="advanced-json"/);
+  assert.match(html, /id="updaterProgressBar"/);
+  assert.match(html, /Continue and disable incompatible mods/);
   assert.match(html, /local-test-token/);
   assert.match(html, /<title>Dia Mod Settings<\/title>/);
   assert.doesNotMatch(html, /Add an MCP server or connect Spark Mail/);
@@ -26,6 +28,52 @@ test("local settings page keeps provider, memory, connector, and tool controls p
   const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
   assert.ok(script);
   assert.doesNotThrow(() => new Function(script));
+});
+
+test("updater settings show download progress and name incompatible mods before continuing", async () => {
+  const html = renderSettingsPage("test-token");
+  const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map((match) => [match[1], new Element()]));
+  const field = (id) => elements.get(id);
+  const document = { querySelector: (selector) => field(selector.slice(1)) };
+  let state = {
+    phase: "downloading", supported: true, enabled: true, currentBuild: "1",
+    release: { version: "2.0", build: "2" },
+    download: { receivedBytes: 25, totalBytes: 100, percent: 25, startedAt: new Date(Date.now() - 1000).toISOString() },
+  };
+  const requests = [];
+  const request = async (path, options = {}) => {
+    requests.push({ path, method: options.method ?? "GET" });
+    if (path === "/api/updater/continue") state = { ...state, phase: "ready", disabledMods: ["optional"] };
+    return structuredClone(state);
+  };
+  const updater = initializeUpdaterSettings({ document, request });
+  await updater.ready;
+  assert.match(field("updaterStatus").textContent, /downloading · 25%/);
+  assert.equal(field("updaterProgress").hidden, false);
+  assert.equal(field("updaterProgressBar").value, 25);
+  assert.match(field("updaterProgressText").textContent, /25 B of 100 B/);
+
+  state = { ...state, phase: "compatibility-review", download: null, compatibility: { perMod: [
+    { id: "core", label: "Core", compatible: true, required: true },
+    { id: "optional", label: "Optional mod", compatible: false, required: false, reason: "native surface changed" },
+  ] } };
+  await updater.refresh();
+  assert.equal(field("updaterProgress").hidden, true);
+  assert.equal(field("updaterCompatibility").hidden, false);
+  assert.match(field("updaterCompatibility").textContent, /Optional mod — native surface changed/);
+  assert.match(field("updaterCompatibility").textContent, /Continue updating\?/);
+  assert.equal(field("continueUpdate").hidden, false);
+
+  state = { ...state, phase: "current" };
+  await updater.refresh();
+  assert.equal(field("updaterCompatibility").hidden, true);
+  assert.doesNotMatch(field("updaterDetail").textContent, /mods passed compatibility checks/);
+
+  state = { ...state, phase: "compatibility-review" };
+  await updater.refresh();
+  await field("continueUpdate").fire("click");
+  assert.ok(requests.some((item) => item.path === "/api/updater/continue" && item.method === "POST"));
+  assert.equal(field("installUpdate").disabled, false);
 });
 
 class Element {

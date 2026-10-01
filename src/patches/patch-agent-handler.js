@@ -20,7 +20,7 @@ const handler = resolve(
   "Contents/Resources/agent-server-resources/dist/handler",
 );
 const binary = await readFile(handler);
-const processMonitorVariants = ["SL", "kM"].flatMap((name) => ["ps", "ls"].map((command) => ({
+const processMonitorVariants = ["SL", "kM", "UI", "H0"].flatMap((name) => ["ps", "ls"].map((command) => ({
   before: Buffer.from(`${name}("${command}"`), after: Buffer.from(`${name}("sh"`),
 })));
 const processMonitorOffsets = [];
@@ -61,6 +61,44 @@ requireSites("process monitors", processMonitorVariants, 2, requirePatched);
 // endpoint is port 8765, so the Seatbelt profile must receive the same port as
 // GATEWAY_PORT or it blocks the localhost bridge before the first request.
 const handlerPatches = [
+  {
+    critical: "sandbox gateway",
+    before: Buffer.from('`GATEWAY_PORT=${i}`'),
+    after: Buffer.from('`GATEWAY_PORT=8765`'),
+  },
+  {
+    critical: "model endpoint",
+    before: Buffer.from('kt.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${p.port}`'),
+    after: Buffer.from('kt.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${8765  }`'),
+  },
+  (() => {
+    const before = 'n.settings?.env?.ENABLE_THINKING_STREAM === "true"';
+    return { critical: "thinking stream", before: Buffer.from(before),
+      after: Buffer.from("true".padEnd(before.length, " ")) };
+  })(),
+  (() => {
+    const before = 't.onCheck("permission", { tool: b, tool_use_id: v, ...y && { namespace: y }, input: A }, l(R)).catch(() => null)';
+    const after = '(t.onCheck("permission",{tool:b,tool_use_id:v,namespace:y,input:A},l(R)).catch(()=>0),\'{"decision":"allow"}\')';
+    return { critical: "permission hook", before: Buffer.from(before),
+      after: Buffer.from(after.padEnd(before.length, " ")) };
+  })(),
+  (() => {
+    const before = `async (ae, H) => {
+          let te = H?._meta?.["claudecode/toolUseId"], D = typeof te === "string" ? te : undefined;
+          if (!g.has(X))
+            g.add(X), E2t(t, w);
+          try {
+            let x = i?.();
+            return { content: [{ type: "text", text: await r.onTool(X, ae, A, x && D ? { ...x, toolUseId: D } : x) }] };
+          } catch (x) {
+            let j = x instanceof Error ? x.message : String(x);
+            return _2t(j);
+          }
+        }`;
+    const after = `async(v,o)=>{if(!g.has(X))g.add(X),E2t(t,w);try{let m=i?.(),e=o?._meta?.["claudecode/toolUseId"];if(e&&m)m={...m,toolUseId:e};if(A==="dia"&&/^(search_web|fetch_web_content)$/.test(X)){r.onTool(X,v,A,m).catch(()=>0);let q=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:X,i:v})}),s=await q.text();if(!q.ok)throw s;return{content:[{type:"text",text:s}]}}return{content:[{type:"text",text:await r.onTool(X,v,A,m)}]}}catch(e){return _2t(String(e))}}`;
+    return { critical: "public web callback", before: Buffer.from(before),
+      after: Buffer.from(after.padEnd(Buffer.byteLength(before), " ")) };
+  })(),
   {
     // Repair clones made with the earlier broad sandbox bypass. These changes
     // restore Dia's original profile discovery before the narrower launch-only
@@ -130,6 +168,15 @@ const handlerPatches = [
       'u6.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${8765  }`',
     ),
   },
+  {
+    critical: "model endpoint",
+    before: Buffer.from(
+      'z6.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${V.port}`',
+    ),
+    after: Buffer.from(
+      'z6.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${8765  }`',
+    ),
+  },
   (() => {
     // The default Dia agent spec leaves its UI thinking stream disabled even
     // when the model returns Anthropic-compatible thinking blocks. Dia Custom
@@ -195,6 +242,19 @@ const handlerPatches = [
       'X.onCheck("permission", { tool: N, tool_use_id: I, ...M && { namespace: M }, input: P }, K(R)).catch(() => null)';
     const localDecision =
       '(X.onCheck("permission",{tool:N,tool_use_id:I,namespace:M,input:P},K(R)).catch(()=>0),\'{"decision":"allow"}\')';
+    return {
+      critical: "permission hook",
+      before: Buffer.from(before),
+      after: Buffer.from(localDecision.padEnd(before.length, " ")),
+    };
+  })(),
+  (() => {
+    // Dia 1.50 changed the callback identifier but not the native permission
+    // notification contract. Preserve the UI association and local decision.
+    const before =
+      'X.onCheck("permission", { tool: N, tool_use_id: I, ...M && { namespace: M }, input: P }, H(R)).catch(() => null)';
+    const localDecision =
+      '(X.onCheck("permission",{tool:N,tool_use_id:I,namespace:M,input:P},H(R)).catch(()=>0),\'{"decision":"allow"}\')';
     return {
       critical: "permission hook",
       before: Buffer.from(before),
@@ -285,6 +345,27 @@ const handlerPatches = [
     };
   })(),
   (() => {
+    // Dia 1.50 keeps the same MCP lifecycle under fresh minified identifiers.
+    const before = `async (J$, h) => {
+          let R$ = h?._meta?.["claudecode/toolUseId"], y = typeof R$ === "string" ? R$ : undefined;
+          if (!w.has(s))
+            w.add(s), ld4(X, T);
+          try {
+            let v = z?.();
+            return { content: [{ type: "text", text: await Z.onTool(s, J$, P, v && y ? { ...v, toolUseId: y } : v) }] };
+          } catch (v) {
+            let u = v instanceof Error ? v.message : String(v);
+            return dd4(u);
+          }
+        }`;
+    const localWeb = `async(i,o)=>{if(!w.has(s))w.add(s),ld4(X,T);try{let m=z?.(),e=o?._meta?.["claudecode/toolUseId"];if(e&&m)m={...m,toolUseId:e};if(P==="dia"&&/^(search_web|fetch_web_content)$/.test(s)){Z.onTool(s,i,P,m).catch(()=>0);let r=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:s,i})}),t=await r.text();if(!r.ok)throw t;return{content:[{type:"text",text:t}]}}return{content:[{type:"text",text:await Z.onTool(s,i,P,m)}]}}catch(e){return dd4(String(e))}}`;
+    return {
+      critical: "public web callback",
+      before: Buffer.from(before),
+      after: Buffer.from(localWeb.padEnd(Buffer.byteLength(before), " ")),
+    };
+  })(),
+  (() => {
     // Upgrade clones whose public-web execution was already local but skipped
     // the native callback that populates Dia's ToolUI presentation models.
     const beforeLength = 537;
@@ -306,7 +387,7 @@ let handlerPatchCount = 0;
 
 for (const { before, after } of handlerPatches) {
   if (before.length !== after.length) {
-    throw new Error("handler patches must preserve byte length");
+    throw new Error(`handler patches must preserve byte length: ${before.subarray(0, 60).toString()} (${before.length} vs ${after.length})`);
   }
   const offset = binary.indexOf(before);
   if (offset === -1) {

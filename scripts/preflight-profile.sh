@@ -7,12 +7,13 @@ work_dir="${DIA_CUSTOM_WORK_DIR:-${project_dir:h}}"
 app="${1:-}"
 snapshot="${2:-}"
 
-if (( $# != 2 )) || [[ ! -d "$app" || ! -f "$snapshot/User Data/Local State" ]]; then
-  print -u2 "usage: preflight-profile.sh /path/to/Dia\ Custom.app /path/to/profile.snapshot"
+if (( $# < 1 || $# > 2 )) || [[ ! -d "$app" ]] || \
+    [[ -n "$snapshot" && ! -f "$snapshot/User Data/Local State" ]]; then
+  print -u2 "usage: preflight-profile.sh /path/to/Dia\ Custom.app [/path/to/profile.snapshot]"
   exit 2
 fi
 app="${app:A}"
-snapshot="${snapshot:A}"
+[[ -z "$snapshot" ]] || snapshot="${snapshot:A}"
 work_dir="${work_dir:A}"
 
 test_root="$(/usr/bin/mktemp -d "$work_dir/Dia Custom RTTM.profile-preflight.XXXXXX")"
@@ -42,7 +43,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 node "$script_dir/browser-process-guard.js" assert-stopped "$app" "$candidate"
-/bin/cp -cR "$snapshot" "$candidate"
+node "$script_dir/browser-process-guard.js" assert-no-other-custom "$app"
+if [[ -n "$snapshot" ]]; then
+  /bin/cp -cR "$snapshot" "$candidate"
+else
+  mkdir -p "$candidate"
+fi
 /bin/chmod 700 "$candidate"
 mkdir -p "$candidate/Diagnostics"
 /bin/chmod 700 "$candidate/Diagnostics"
@@ -96,10 +102,25 @@ start_candidate() {
 # and background network activity are disabled for both processes.
 for launch_number in 1 2; do
   start_candidate || exit $?
-  sleep "${DIA_CUSTOM_PREFLIGHT_SETTLE_SECONDS:-5}"
-  node "$script_dir/profile-integrity.js" assert-compatible "$snapshot" "$candidate" \
-    >/dev/null
+  # Readiness can precede a fatal async subscription by several seconds.
+  # Exercise native startup and require the exact launched process to survive.
+  sleep "${DIA_CUSTOM_PREFLIGHT_SETTLE_SECONDS:-20}"
+  if ! /bin/kill -0 "$browser_pid" >/dev/null 2>&1 || \
+      ! /usr/bin/curl --silent --fail --max-time 2 \
+        "http://127.0.0.1:$debug_port/json/list" >/dev/null; then
+    print -u2 "The staged browser exited during native startup (launch $launch_number)."
+    /usr/bin/tail -30 "$candidate/Diagnostics/profile-preflight.log" >&2
+    exit 1
+  fi
+  if [[ -n "$snapshot" ]]; then
+    node "$script_dir/profile-integrity.js" assert-compatible "$snapshot" "$candidate" \
+      >/dev/null
+  fi
   stop_candidate || exit $?
 done
 
-print "Profile preflight retained extensions, open sessions, and pinned-tab data."
+if [[ -n "$snapshot" ]]; then
+  print "Native startup passed twice; profile preflight retained extensions, open sessions, and pinned-tab data."
+else
+  print "Native startup passed twice with an isolated fresh profile."
+fi

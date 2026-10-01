@@ -29,7 +29,8 @@ test("configuration persists selection without exposing its administration token
   const path = resolve(directory, "config.json");
   const store = new ConfigStore(path);
   const initial = await store.load();
-  assert.equal(initial.selectedModel, "codex:gpt-5.6-luna");
+  assert.equal(initial.selectedModel, "codex:default");
+  assert.deepEqual(initial.providers.find(provider => provider.type === 'codex').models, []);
   assert.ok(initial.adminToken.length >= 24);
   assert.equal(store.publicValue().adminToken, undefined);
 

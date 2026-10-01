@@ -10,6 +10,9 @@ final class NewTabPageViewModel {
         var displayDefaultBrowserUpsell = true
         var displayReleaseNotesPostcard = false
         var displayWelcomePostcardTeaser = true
+        #if DAYLIGHT_LAYOUT
+        var hidePostcardsOnlyWhenCommandBarIntersects = false
+        #endif
         var displayTrialGuideStampCard = false
         var displayAppsUpsellBar = true
         var displayNewSingleAppUpsell = false
@@ -20,14 +23,19 @@ final class NewTabPageViewModel {
         var greeting: String? = "greeting-sentinel"
         var bookmarkBarMode = 37
         var konamiCodeOnboardingIntroTriggerEnabled = false
+        #if !DAYLIGHT_LAYOUT
         var diaProBackgroundButtonState: Int? = 89
+        #endif
         var lightConfiguration = "light-sentinel"
+        #if DAYLIGHT_LAYOUT
+        var daylightEffectInputs = "daylight-sentinel"
+        #endif
         var areAnimationsEnabled = false
-        #if REBRAND_LAYOUT
+        #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
         var isRebrandEnabled = false
         #endif
         var isPersonalizeButtonEnabled = true
-        #if REBRAND_LAYOUT
+        #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
         #if INVALID_TYPE
         var showDiaIcon = "wrong-type-sentinel"
         #else
@@ -52,7 +60,7 @@ struct AdvancedChatFixture {
     static func main() {
         for rebrand in [false, true] {
             var initial = NewTabPageViewModel.State()
-            #if REBRAND_LAYOUT
+            #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
             initial.isRebrandEnabled = rebrand
             #endif
             let model = NewTabPageViewModel(initial)
@@ -68,7 +76,7 @@ struct AdvancedChatFixture {
             assert(applied)
             var expected = initial
             expected.isPersonalizeButtonEnabled = false
-            #if REBRAND_LAYOUT
+            #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
             expected.showDiaIcon = true
             #else
             expected.showParticlesLogo = true
@@ -85,6 +93,8 @@ struct AdvancedChatFixture {
         print("ok    Advanced Chat rejects a non-Boolean native appearance field without mutation")
         #elseif UNKNOWN_LAYOUT
         print("ok    Advanced Chat rejects an unknown native state layout without mutation")
+        #elseif DAYLIGHT_LAYOUT
+        print("ok    Advanced Chat applies the 22-field daylight layout and preserves native state")
         #elseif REBRAND_LAYOUT
         print("ok    Advanced Chat applies the 21-field rebrand layout and preserves native rebrand/settings state")
         #else

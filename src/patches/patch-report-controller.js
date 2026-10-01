@@ -43,21 +43,27 @@ function instructionMask(instruction) {
   return 0xffffffff;
 }
 
-const reportSetupPrefix = [
-  0xd107c3ff, 0xa9196ffc, 0xa91a67fa, 0xa91b5ff8,
-  0xa91c57f6, 0xa91d4ff4, 0xa91e7bfd, 0x910783fd,
-  0xaa1403f3, 0xf9400296, 0xa90103f4, 0xd2800000,
+const reportSetupPrefixes = [
+  [
+    0xd107c3ff, 0xa9196ffc, 0xa91a67fa, 0xa91b5ff8,
+    0xa91c57f6, 0xa91d4ff4, 0xa91e7bfd, 0x910783fd,
+    0xaa1403f3, 0xf9400296, 0xa90103f4, 0xd2800000,
+  ],
+  [
+    // Dia 1.50 kept the same Reports setup contract with a smaller frame.
+    0xd10483ff, 0xa90c6ffc, 0xa90d67fa, 0xa90e5ff8,
+    0xa90f57f6, 0xa9104ff4, 0xa9117bfd, 0x910443fd,
+    0xaa1403f3, 0xf9400296, 0xa90103f4, 0xd2800000,
+  ],
 ];
 
 function hasReportSetupPrefix(offset) {
-  if (offset < 0 || offset + reportSetupPrefix.length * 4 > binary.length) {
-    return false;
-  }
-  return reportSetupPrefix.every((expected, index) => {
+  return reportSetupPrefixes.some((prefix) => offset >= 0 &&
+    offset + prefix.length * 4 <= binary.length && prefix.every((expected, index) => {
     const actual = binary.readUInt32LE(offset + index * 4);
     const mask = instructionMask(expected);
     return ((actual & mask) >>> 0) === ((expected & mask) >>> 0);
-  });
+    }));
 }
 
 // BrowserContextDataController receives an authenticated-capability boolean

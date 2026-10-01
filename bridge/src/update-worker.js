@@ -18,7 +18,7 @@ export async function installTransaction(t, overrides = {}) {
     const configuredEnv = { ...env };
     delete configuredEnv.DIA_CUSTOM_MODS; delete configuredEnv.DIA_CUSTOM_MODULES; delete configuredEnv.DIA_CUSTOM_EFFECTIVE_MODS;
     const configured = (await io.run(t.node, [script('mods.js'), 'resolved', '--profile', t.profile], { env: configuredEnv })).split(',').filter(Boolean).sort();
-    if (JSON.stringify(configured) !== JSON.stringify([...t.mods].sort())) throw new Error('Mods changed after update preparation');
+    if (JSON.stringify(configured) !== JSON.stringify([...(t.requestedMods ?? t.mods)].sort())) throw new Error('Mods changed after update preparation');
   }
   let closed = false, swapped = false, preservedApp = false, snapshotted = false;
   try {
@@ -38,6 +38,8 @@ export async function installTransaction(t, overrides = {}) {
     snapshotted = true;
     if (await io.stat(join(snapshot, 'User Data/Local State')).then(() => true).catch(() => false)) {
       await io.run('/bin/zsh', [script('preflight-profile.sh'), staged, snapshot], { env, timeout: 180000 });
+    } else {
+      await io.run('/bin/zsh', [script('preflight-profile.sh'), staged], { env, timeout: 180000 });
     }
     await assertModConfiguration();
     await io.run(t.node, [script('browser-process-guard.js'), 'assert-stopped', t.app, t.profile], { env });
@@ -51,7 +53,7 @@ export async function installTransaction(t, overrides = {}) {
     await io.cp(join(t.job, 'rollback.json'), join(t.profile, 'Bridge/.state/latest-install-transaction.json'));
     await io.run('/bin/zsh', [script('launch.sh')], { env: { ...env, DIA_CUSTOM_STAGING: '0' }, timeout: 120000 });
     // launch.sh checks runtime, profile, mod identities; also require the browser to stay alive.
-    await io.run('/bin/sleep', ['3']);
+    await io.run('/bin/sleep', ['20']);
     const processes = JSON.parse(await io.run(t.node, [script('browser-process-guard.js'), 'list', t.app], { env }));
     if (!Array.isArray(processes) || processes.length === 0) throw new Error('Updated browser exited after launch');
     await state({ phase: 'installed', installedAt: new Date().toISOString(), backupApp, profileSnapshot: snapshot, error: null });

@@ -2,7 +2,7 @@
 
 Dia+ keeps Dia's native browser, New Chat, tools, Memory settings and Reports while routing AI through providers you control. It runs as **Dia+.app**, with bundle ID **local.rttm.dia**, its own profile and Keychain label. The existing bundle ID and `Dia Custom RTTM` profile directory are retained for upgrade compatibility. Official Dia and its account remain separate.
 
-The installed and supported release is **Dia 1.48.0, build 86584, on Apple silicon**. The signed custom app passes `doctor`, Finder launch and structural checks for all **20 default Mods**, with **49 available models** and all **17 existing user extensions** retained. Native chat, browser-tool execution and the custom update menu passed live checks. The full suite passed with 198 bridge tests passing, one explicit Apple native-image runtime skip and no failures; native/script checks and signed update preparation also passed. See [Status](docs/STATUS.md) for completed live checks and remaining verification.
+The installed release is **Dia 1.51.0, build 87864, on Apple silicon**. **19 Mods** pass, including local AI routing, anonymous profile and native Reports. The guarded routing update preserves native encrypted requests and other backend services; a clean-profile native Codex chat returned the requested answer. Installation retained the previous app and closed-profile backups, and its two-launch profile preflight preserved extensions, sessions and pinned-tab data. Developer surfaces remain unavailable because Dia changed its private Prompt Tools presenter; that optional Mod is omitted for this build. The full suite passed with **229 bridge tests passing**, one explicit Apple native-image runtime skip and no failures. See [Status](docs/STATUS.md) for completed live checks and remaining verification.
 
 ## Start here
 
@@ -25,7 +25,7 @@ For development, a first install or rebuild from the official application:
 
 Setup installs the custom app in Applications, configures its isolated profile, prepares safe native import data and opens it. Afterward, launch it normally from Applications: the app owns its bundled Node runtime, local AI bridge and launch policy. It registers its own `http`/`https` handlers and can be chosen as the default browser.
 
-Choose a model in the native chat toolbar or **View → Developer → AI Model**. The default is **gpt-5.6-luna** through the existing Codex login. Settings also support Codex Terra/Sol, Apple Foundation Models, Ollama at `127.0.0.1:11434`, OpenAI Responses, and custom OpenAI-compatible Responses or Chat Completions endpoints.
+Choose a model in the native chat toolbar or **View → Developer → AI Model**. Codex models, labels, reasoning levels and the recommended default are discovered from your installed Codex through `model/list`, using its existing login. New models appear automatically on catalog refresh; the list is not hardcoded. Settings also support Apple Foundation Models, Ollama at `127.0.0.1:11434`, OpenAI Responses, and custom OpenAI-compatible Responses or Chat Completions endpoints.
 
 ```text
 ./dia-custom settings           Open Dia Mod Settings
@@ -87,9 +87,9 @@ Schedules start disabled and run only after being explicitly enabled, while the 
 
 The **custom-updater** Mod is **on by default** and is separate from the required **update-blocker** Mod. The blocker prevents stock Sparkle replacement. The custom updater redirects native update controls to local settings, checks the official release feed, verifies the signed archive and publisher, validates every configured Mod, and builds a staged custom app. Background checks only announce availability; preparation and installation are explicit actions.
 
-The updater uses the toolkit bundled in the app, so the development checkout is not required. Preparation still requires installed Apple command-line build tools and a usable signing configuration. Any incompatible enabled Mod stops in-app preparation; it is not silently disabled. A remote Mods repository is deferred and is not configured.
+The updater uses the toolkit bundled in the app, so the development checkout is not required. Preparation still requires installed Apple command-line build tools and a usable signing configuration. Required compatibility failures stop preparation. Optional failures are listed with their reasons and require explicit confirmation before the in-app updater resumes with those Mods disabled for that Dia build; they can reactivate automatically after a later compatible update. A remote Mods repository is deferred and is not configured.
 
-Installation snapshots the complete closed profile, preflights the candidate against a disposable copy, and retains the previous app with its matching profile snapshot. Launch and preflight use the custom app's existing macOS Keychain encryption, preserving protected preferences and extension registrations. Replacement and launch-health failures have a rollback path. The CLI can separately stage optional compatibility exclusions with an explicit choice or `--allow-disable-incompatible`; critical identity, network, updater and routing checks always fail closed. Known build numbers never bypass validation of the candidate's actual contents.
+Installation snapshots the complete closed profile, preflights the candidate against a disposable copy, and retains the previous app with its matching profile snapshot. Launch and preflight use the custom app's existing macOS Keychain encryption, preserving protected preferences and extension registrations. Replacement and launch-health failures have a rollback path. The CLI supports the same optional compatibility exclusions with an explicit choice or `--allow-disable-incompatible`; critical identity, network, updater and routing checks always fail closed. Known build numbers never bypass validation of the candidate's actual contents.
 
 Configure optional Mods in native **Settings → Mods** or the CLI:
 

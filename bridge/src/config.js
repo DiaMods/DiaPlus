@@ -4,13 +4,8 @@ import { dirname } from "node:path";
 import { configPath } from "./paths.js";
 import { assertAllowedProviderURL } from "./network-policy.js";
 
-export const defaultCodexModel = "gpt-5.6-luna";
-
-export const builtInCodexModels = [
-  { id: "gpt-5.6-luna", label: "GPT-5.6 Luna", description: "Fast Codex model" },
-  { id: "gpt-5.6-terra", label: "GPT-5.6 Terra", description: "Balanced Codex model" },
-  { id: "gpt-5.6-sol", label: "GPT-5.6 Sol", description: "Most capable Codex model" },
-];
+// Resolved to Codex's recommended model by live discovery, never a model ID.
+export const defaultCodexModel = "default";
 
 export function defaultConfig() {
   return {
@@ -22,7 +17,7 @@ export function defaultConfig() {
         type: "codex",
         label: "Codex",
         enabled: true,
-        models: builtInCodexModels,
+        models: [],
       },
       {
         id: "apple-on-device",

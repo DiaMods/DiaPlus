@@ -6,10 +6,10 @@
   "minimumMacOS": "14.0",
   "appleHelperMinimumMacOS": "27.0",
   "dia": {
-    "build": "86584",
-    "version": "1.48.0",
-    "length": 759682207,
-    "signature": "23Ff6V3KN575eedwEw5P2/mtUVtPxYF4HklbzCXymSdYvVShRqL8UC2WX4n78T7TPZAPwOLJbKchVYStry94Cw==",
-    "url": "https://releases.diabrowser.com/release-candidate/D5B696F0-E63E-475D-92F6-28176299CA06/Dia-1.48.0-86584.zip"
+    "build": "87864",
+    "version": "1.51.0",
+    "length": 852212202,
+    "signature": "InsoIhL8VKQdnGnl+M3yP+Xsf0pif9CjV0wXKai6rJzgzZhUUyxjygbiP3pMcbrbbBH0NnY4j/eu79I3yhyADg==",
+    "url": "https://releases.diabrowser.com/release-candidate/D5B696F0-E63E-475D-92F6-28176299CA06/Dia-1.51.0-87864.zip"
   }
 }

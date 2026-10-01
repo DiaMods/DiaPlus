@@ -7,8 +7,13 @@ work_dir="${project_dir:h}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
 app="${DIA_CUSTOM_APP:-$("$script_dir/default-app.sh")}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
-enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
-enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build)"
+if [[ -d "$app" ]]; then
+  enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --app "$app")"
+  enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build --app "$app")"
+else
+  enabled_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved)"
+  enabled_build_mods="$(DIA_CUSTOM_PROFILE="$profile" node "$script_dir/mods.js" resolved --scope build)"
+fi
 failures=0
 
 pass() { print "ok    $1"; }
@@ -92,7 +97,11 @@ if [[ -d "$app" ]]; then
   else
     pass "Apple Foundation Models mod is disabled"
   fi
-  if /usr/bin/grep -a -q "http://localhost:8765/ai-service-local-v1" "$app/Contents/MacOS/Dia"; then pass "AI endpoint is local"; else fail "local AI endpoint patch is missing"; fi
+  if node "$project_dir/src/patches/patch-endpoint.js" --check --require-patched "$app" >/dev/null 2>&1; then
+    pass "AI endpoints are local"
+  else
+    fail "local AI endpoint patch is missing"
+  fi
   if /usr/bin/grep -a -q 'GATEWAY_PORT=8765' "$app/Contents/Resources/agent-server-resources/dist/handler"; then
     pass "native per-context agent sandbox is enabled for the local bridge"
   else

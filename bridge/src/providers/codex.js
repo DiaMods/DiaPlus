@@ -11,36 +11,31 @@ import { prepareMediaPayload } from "../media-inputs.js";
 import { FinalTextStream, partialFinalText } from "./decision-stream.js";
 
 
-function reasoningEffort(payload, model, tools) {
+function reasoningEffort(payload, metadata, tools) {
   const requested = payload?.reasoning_effort;
-  if (["minimal", "low", "medium", "high", "xhigh", "max", "ultra"].includes(requested)) {
-    return requested;
-  }
-  // A Report requires choosing and sequencing several native tools. Luna is
-  // still the selected model, but medium effort avoids turning that workflow
-  // into a premature status sentence.
-  if (reportWorkflowRequiresTool(payload, tools)) return "medium";
-  if (model.includes("luna")) return "low";
-  if (model.includes("sol")) return "high";
-  return "medium";
+  const supported = metadata?.supportedReasoningEfforts?.map(option => option.reasoningEffort) ?? [];
+  if (requested && supported.includes(requested)) return requested;
+  if (reportWorkflowRequiresTool(payload, tools) && supported.includes("medium")) return "medium";
+  return metadata?.defaultReasoningEffort;
 }
 
-export async function runCodexProvider({ payload, tools, model, onReasoning, onTextDelta, codexClient = null }) {
+export async function runCodexProvider({ payload, tools, model, modelMetadata, onReasoning, onTextDelta, codexClient = null }) {
   codexClient ??= await createDecisionCodex();
   const media = await prepareMediaPayload(payload, { target: "codex" });
   try {
-    return await runCodexTurn({ payload: media.payload, images: media.images, tools, model, onReasoning, onTextDelta, codexClient });
+    return await runCodexTurn({ payload: media.payload, images: media.images, tools, model, modelMetadata, onReasoning, onTextDelta, codexClient });
   } finally { await media.cleanup(); }
 }
 
-async function runCodexTurn({ payload, images, tools, model, onReasoning, onTextDelta, codexClient }) {
+async function runCodexTurn({ payload, images, tools, model, modelMetadata, onReasoning, onTextDelta, codexClient }) {
   await mkdir(decisionWorkspacePath, { recursive: true, mode: 0o700 });
+  const effort = reasoningEffort(payload, modelMetadata, tools);
   const thread = codexClient.startThread({
     model,
     sandboxMode: "read-only",
     workingDirectory: decisionWorkspacePath,
     skipGitRepoCheck: true,
-    modelReasoningEffort: reasoningEffort(payload, model, tools),
+    ...(effort ? { modelReasoningEffort: effort } : {}),
     webSearchMode: "disabled",
     networkAccessEnabled: false,
     approvalPolicy: "never",

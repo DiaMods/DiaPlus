@@ -26,7 +26,7 @@ node "$script_dir/check-dia-build.js" "$app" \
   --mods "$enabled_mods" --allow-structural --require-patched >/dev/null
 
 if mod_enabled local-ai-routing; then
-  /usr/bin/grep -a -q 'http://localhost:8765/ai-service-local-v1' "$app/Contents/MacOS/Dia"
+  node "$script_dir/../src/patches/patch-endpoint.js" --check --require-patched "$app" >/dev/null
   /usr/bin/grep -a -q 'GATEWAY_PORT=8765' \
     "$app/Contents/Resources/agent-server-resources/dist/handler"
 fi
@@ -73,3 +73,7 @@ if [[ -z "${health:-}" ]]; then
 fi
 print -r -- "$health" | node "$script_dir/bridge-runtime.js" check-health \
   "$runtime_id" "$temporary_profile" "$enabled_mods"
+
+# Preparation can run while the installed browser is open. Dia permits only
+# one custom instance, so native startup runs after the installer closes it,
+# in preflight-profile.sh, before any app/profile replacement.

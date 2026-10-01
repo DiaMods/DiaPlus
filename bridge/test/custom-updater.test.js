@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { allowedDownload, parseAppcast, requireAllMods, validateArchivePaths, verifyArchive } from '../src/updater-common.js';
@@ -29,12 +29,39 @@ test('archive traversal and any failed or omitted enabled mod block staging', ()
   for (const path of ['/Dia.app/x', 'Dia.app/../evil', 'evil.app/x', 'Dia.app\\x']) assert.throws(() => validateArchivePaths(path));
   assert.throws(() => requireAllMods({ compatible: true, perMod: [{ id: 'a', compatible: true }] }, ['a','b']));
   assert.throws(() => requireAllMods({ compatible: false, perMod: [{ id: 'a', compatible: false }] }, ['a']));
+  assert.doesNotThrow(() => requireAllMods({ compatible: false, perMod: [{ id: 'a', compatible: true }, { id: 'b', compatible: false }] }, ['a']));
+  assert.throws(() => requireAllMods({ compatible: true, perMod: [{ id: 'a', compatible: true }, { id: 'b', compatible: false }] }, ['a']));
+});
+test('bounded update downloads report streamed byte progress', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dia-updater-progress-'));
+  const output = join(directory, 'update.zip');
+  const updater = new CustomUpdater({ bridgeDirectory: '/development/bridge', profileDirectory: null, stateDirectory: directory,
+    isEnabled: () => true, modConfigStore: { publicState: async () => ({ mods: [] }) },
+    fetchImpl: async () => new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(Buffer.from('ab')); controller.enqueue(Buffer.from('cd')); controller.close();
+    } }), { status: 200, headers: { 'content-length': '4' } }),
+  });
+  const progress = [];
+  try {
+    assert.equal(await updater.fetchBounded(source.distributionPrefix + 'Dia.zip', source, 4, output, size => progress.push(size)), 4);
+    assert.deepEqual(progress, [2, 4]);
+    assert.equal(await readFile(output, 'utf8'), 'abcd');
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 test('all updater administration endpoints require the local token', async () => {
   let called = false, result;
   const updater = { status: () => { called = true; } };
   await handleUpdaterAPI({ method: 'GET' }, {}, new URL('http://localhost/api/updater'), { updater, hasAdminToken: async () => false, jsonResponse: (_, code, value) => { result = { code, value }; } });
   assert.equal(result.code, 403); assert.equal(called, false);
+});
+test('the authenticated updater continuation endpoint resumes a reviewed update', async () => {
+  let called = false, result;
+  const updater = { continueWithoutIncompatible: async () => { called = true; return { phase: 'building' }; } };
+  await handleUpdaterAPI({ method: 'POST' }, {}, new URL('http://localhost/api/updater/continue'), {
+    updater, hasAdminToken: async () => true,
+    jsonResponse: (_, code, value) => { result = { code, value }; },
+  });
+  assert.equal(called, true); assert.deepEqual(result, { code: 200, value: { phase: 'building' } });
 });
 test('development bridge cannot download/install an app', async () => {
   const updater = new CustomUpdater({ bridgeDirectory: '/development/bridge', profileDirectory: null, stateDirectory: '/unused', isEnabled: () => true, modConfigStore: { publicState: async () => ({ mods: [{ id: 'custom-updater', configuredEnabled: true }] }) } });
@@ -109,4 +136,14 @@ test('successful staged install retains recovery pointers and records completion
   const state = JSON.parse(await readFile(f.t.statePath));
   assert.equal(state.phase, 'installed'); assert.ok(state.backupApp); assert.ok(state.profileSnapshot);
   assert.equal(f.moves.some(([,b]) => b.startsWith(f.t.profile + '.failed-update-')), false);
+});
+test('a partial staged install compares the profile with requested rather than effective mods', async () => {
+  const f = await fixture(() => false);
+  f.t.requestedMods = ['a', 'optional'];
+  const run = f.io.run;
+  f.io.run = async (command, args) => command === '/node' && args[0].endsWith('/mods.js')
+    ? 'a,optional'
+    : run(command, args);
+  await installTransaction(f.t, f.io);
+  assert.equal(JSON.parse(await readFile(f.t.statePath)).phase, 'installed');
 });

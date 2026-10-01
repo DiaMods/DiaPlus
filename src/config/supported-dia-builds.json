@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-07",
+  "updatedAt": "2026-10-01",
   "builds": {
     "85660": {
       "status": "audited",
@@ -128,6 +128,74 @@
         "local-workflows"
       ],
       "mainExecutableSHA256": "d5a9b944ef132d60bba8645ee6028d512b5df737ae4a0547409f1d60e0e1eccf"
+    },
+    "86796": {
+      "status": "audited",
+      "version": "1.48.0",
+      "notes": "Dia 1.48.0 point build: account/capability ARM64 sites relocated and re-audited against the signed official executable. Native endpoint, agent handler, Reports, importer, schema, Apps and Morning Brief structural checks pass. Candidate contents are always revalidated.",
+      "mods": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "custom-updater",
+        "local-ai-routing",
+        "account-bypass",
+        "dia-import",
+        "model-picker",
+        "developer-tools",
+        "mod-manager",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
+        "apple-models",
+        "local-knowledge",
+        "local-workflows"
+      ],
+      "mainExecutableSHA256": "a9ebd28aa38dac09f2a2c8cab061dc71ac93fe6f6ffd24df990d006137fe4eda"
+    },
+    "87561": {
+      "status": "withdrawn",
+      "version": "1.50.0",
+      "notes": "The 1.50 installation crashed from concurrent consumers of the substituted anonymous AuthClient stream and was rolled back to 86796. The constructor guard now retains AuthClientImpl, but this build has not repeated the complete runtime audit. Prefer audited 87864. Developer surfaces remain unavailable.",
+      "mods": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "custom-updater",
+        "local-ai-routing",
+        "account-bypass",
+        "dia-import",
+        "model-picker",
+        "mod-manager",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
+        "apple-models",
+        "local-knowledge",
+        "local-workflows"
+      ],
+      "mainExecutableSHA256": "bc49f166353263d352961461692a6c808631e2a12456f1fadeb0d481c723912e"
+    },
+    "87864": {
+      "status": "audited",
+      "version": "1.51.0",
+      "notes": "Signed official archive/publisher verified. Guarded AIService-only resolver redirect preserves native URL construction and other backend services; encryption handshake and native Codex chat pass on a clean profile. Preserve AuthClientImpl stream ownership while enabling restored local account state and local no-auth request construction. Two launches against a closed-profile snapshot preserve extensions, sessions and pinned tabs. Full source suite passes: 229 bridge tests passed, one explicit Apple image runtime skip, zero failures. Reports, Apps and Morning Brief structural checks pass; broader live UI parity remains unverified. Developer surfaces unavailable pending a presenter audit. Every candidate is still validated from its actual contents.",
+      "mods": [
+        "identity-isolation", "network-isolation", "update-blocker", "custom-updater",
+        "local-ai-routing", "account-bypass", "dia-import", "model-picker",
+        "mod-manager", "native-memory", "reports", "local-web", "connectors",
+        "native-apps", "live-connectors", "morning-brief", "apple-models",
+        "local-knowledge", "local-workflows"
+      ],
+      "mainExecutableSHA256": "7686865a6a688912df875b738c729f49b246869e3f775f71e93c09af931493f9"
     }
   }
 }

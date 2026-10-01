@@ -24,11 +24,24 @@ const shared = [
 const layouts = [
   [...shared, "isPersonalizeButtonEnabled", "showParticlesLogo", "isPresentingCliaOnboardingView"],
   [...shared, "isRebrandEnabled", "isPersonalizeButtonEnabled", "showDiaIcon", "isPresentingCliaOnboardingView"],
+  [
+    "windowID", "displayDefaultBrowserUpsell", "displayReleaseNotesPostcard",
+    "displayWelcomePostcardTeaser", "hidePostcardsOnlyWhenCommandBarIntersects",
+    "displayTrialGuideStampCard", "displayAppsUpsellBar", "displayNewSingleAppUpsell",
+    "themePalette", "skillOverridePalette", "profileCustomizationPermitted",
+    "displayTryForAWeek", "greeting", "bookmarkBarMode",
+    "konamiCodeOnboardingIntroTriggerEnabled", "lightConfiguration",
+    "daylightEffectInputs", "areAnimationsEnabled", "isRebrandEnabled",
+    "isPersonalizeButtonEnabled", "showDiaIcon", "isPresentingCliaOnboardingView",
+  ],
 ];
 if (rows.length !== 1 || !layouts.some((labels) =>
   rows[0].fields.length === labels.length && labels.every((label, index) =>
-    rows[0].fields[index].name === label && (index < 16 || rows[0].fields[index].type === "Sb")))) {
-  throw new Error("native Advanced Chat state layout changed; expected one guarded 20/21-field state with Boolean appearance flags");
+    rows[0].fields[index].name === label &&
+    (index < (labels.length === 22 ? 17 : 16) || rows[0].fields[index].type === "Sb") &&
+    (label !== "hidePostcardsOnlyWhenCommandBarIntersects" || rows[0].fields[index].type === "Sb") &&
+    (label !== "daylightEffectInputs" || rows[0].fields[index].type !== "Sb")))) {
+  throw new Error("native Advanced Chat state layout changed; expected one guarded 20/21/22-field state with Boolean appearance flags");
 }
 process.stdout.write(`${JSON.stringify({
   offset: rows[0].offset,

@@ -15,6 +15,13 @@ fi
 
 developer_dir="${DIA_CUSTOM_XCODE_DEVELOPER_DIR:-${DEVELOPER_DIR:-}}"
 if [[ -z "$developer_dir" ]]; then
+  active_developer_dir="$(/usr/bin/xcode-select --print-path 2>/dev/null || true)"
+  active_sdk_version="$(DEVELOPER_DIR="$active_developer_dir" xcrun --sdk macosx --show-sdk-version 2>/dev/null || true)"
+  if [[ -d "$active_developer_dir" && "${active_sdk_version%%.*}" == <27-> ]]; then
+    developer_dir="$active_developer_dir"
+  fi
+fi
+if [[ -z "$developer_dir" ]]; then
   for candidate in /Applications/Xcode*27*.app/Contents/Developer(N); do
     if [[ -d "$candidate" ]]; then
       developer_dir="$candidate"
