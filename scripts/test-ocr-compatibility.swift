@@ -30,6 +30,16 @@ struct OCRCompatibilityTests {
         precondition(calls == 2 && fallback.compatibility)
 
         calls = 0
+        let missingCapabilities = try recognizeTextWithCompatibilityFallback(
+            supportedLanguages: { _ in throw unrelated }
+        ) { request in
+            calls += 1
+            if calls == 1 { throw readerError }
+            precondition(!request.recognitionLanguages.isEmpty)
+        }
+        precondition(calls == 2 && missingCapabilities.compatibility)
+
+        calls = 0
         let fast = try recognizeTextWithCompatibilityFallback { request in
             calls += 1
             if request.recognitionLevel == .accurate { throw readerError }

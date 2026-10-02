@@ -65,7 +65,7 @@ test("OCR compatibility fallback retries only the native reader failure", async 
     execFileSync('/usr/bin/xcrun', ['swiftc', '-parse-as-library',
       resolve(directory, '../../src/apple-model-helper/ocr-compatibility.swift'),
       resolve(directory, '../../scripts/test-ocr-compatibility.swift'), '-o', binary]);
-    assert.match(execFileSync(binary, [fixture], { encoding: 'utf8' }), /failure propagation passed/);
+    assert.match(execFileSync(binary, [fixture], { encoding: 'utf8', timeout: 180_000 }), /failure propagation passed/);
   } finally { await rm(temporary, { recursive: true, force: true }); }
 });
 

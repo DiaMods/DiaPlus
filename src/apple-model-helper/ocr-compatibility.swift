@@ -14,6 +14,7 @@ func isOCRReaderCompatibilityError(_ error: Error) -> Bool {
 }
 
 func recognizeTextWithCompatibilityFallback(
+    supportedLanguages: (VNRecognizeTextRequest) throws -> [String] = { try $0.supportedRecognitionLanguages() },
     perform: (VNRecognizeTextRequest) throws -> Void
 ) throws -> (request: VNRecognizeTextRequest, compatibility: Bool) {
     let primary = VNRecognizeTextRequest()
@@ -33,7 +34,11 @@ func recognizeTextWithCompatibilityFallback(
                 request.recognitionLevel = level
                 request.automaticallyDetectsLanguage = false
                 // Query each revision/level; do not assume they support the same languages.
-                let supported = try request.supportedRecognitionLanguages()
+                // Preview runtimes can fail this capability query without an
+                // NSError (Swift nilError), including on supported revisions.
+                // Keep the request's own default languages in that case; the
+                // actual recognition below still must succeed and return text.
+                let supported = (try? supportedLanguages(request)) ?? request.recognitionLanguages
                 let preferred = Locale.preferredLanguages + ["en-US"]
                 let language = preferred.compactMap { preference in
                     supported.first { $0 == preference } ?? supported.first {
