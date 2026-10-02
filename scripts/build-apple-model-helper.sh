@@ -43,6 +43,7 @@ DEVELOPER_DIR="$developer_dir" xcrun swiftc \
   -framework FoundationModels \
   -framework NaturalLanguage \
   "$source_file" \
+  "$project_dir/src/apple-model-helper/ocr-compatibility.swift" \
   -o "$output_file"
 
 /usr/bin/codesign --force --sign - "$output_file"

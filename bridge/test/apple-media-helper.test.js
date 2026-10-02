@@ -55,6 +55,20 @@ function redPNG() {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(pixels)), chunk("IEND", Buffer.alloc(0))]);
 }
 
+test("OCR compatibility fallback retries only the native reader failure", async (context) => {
+  if (!await built(context)) return;
+  const temporary = await mkdtemp(join(tmpdir(), "dia-ocr-compatibility-"));
+  try {
+    const binary = join(temporary, "ocr-tests");
+    const fixture = join(temporary, "fixture.pdf");
+    await writeFile(fixture, pdfFixture(), { mode: 0o600 });
+    execFileSync('/usr/bin/xcrun', ['swiftc', '-parse-as-library',
+      resolve(directory, '../../src/apple-model-helper/ocr-compatibility.swift'),
+      resolve(directory, '../../scripts/test-ocr-compatibility.swift'), '-o', binary]);
+    assert.match(execFileSync(binary, [fixture], { encoding: 'utf8' }), /failure propagation passed/);
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
+
 test("real local PDF extraction returns page text and rendered images", async (context) => {
   if (!await built(context)) return;
   const temporary = await mkdtemp(join(tmpdir(), "dia-pdf-fixture-"));
