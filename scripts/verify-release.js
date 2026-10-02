@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { createPublicKey, verify } from 'node:crypto';
 import { sha256, validateModifierZIP, verifyModManifest, zipEntry } from '../bridge/src/release-verification.js';
 import { verifyReleaseFiles } from '../bridge/src/release-inventory.js';
+import { releaseChecksums } from './release-checksums.js';
 
 const directory = resolve(process.argv[2]);
 const source = JSON.parse(await readFile(new URL('../src/config/updater-source.json', import.meta.url)));
@@ -31,7 +32,7 @@ try {
     const checksumSignature = Buffer.from((await readFile(join(directory, 'SHA256SUMS.sig'), 'utf8')).trim(), 'base64');
     const publicKey = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(process.env.DIA_PLUS_RELEASE_PUBLIC_KEY, 'base64')]), format: 'der', type: 'spki' });
     assert(checksumSignature.length === 64 && verify(null, Buffer.from(sums), publicKey, checksumSignature), 'Checksum signature verification failed');
-    for (const file of [name, manifest.assets.mods.name, manifest.assets.engine.name, 'release-manifest.json', 'release-manifest.sig']) assert(sums.includes(`${sha256(await readFile(join(directory, file)))}  ${file}\n`), `Checksum mismatch: ${file}`);
+    assert.equal(sums, (await releaseChecksums(directory, manifest)).toString(), 'Mod release checksum list must match its assets exactly');
     validateModifierZIP(data, name.slice(0, -4) + '/');
     execFileSync('/usr/bin/ditto', ['-xk', join(directory, name), temporary]);
     const stage = join(temporary, name.slice(0, -4));

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { verifyModManifest, validateModifierZIP, sha256 } from '../bridge/src/release-verification.js';
 import { verifyReleaseFiles } from '../bridge/src/release-inventory.js';
+import { releaseChecksums } from './release-checksums.js';
 
 const directory = resolve(process.argv[2] ?? 'release');
 const source = JSON.parse(await readFile(new URL('../src/config/updater-source.json', import.meta.url)));
@@ -51,8 +52,7 @@ try {
   if (process.platform === 'darwin') run('/usr/bin/ditto', ['-c', '-k', '--norsrc', '--keepParent', stage, join(directory, manual)]);
   else run('/usr/bin/zip', ['-q', '-r', join(directory, manual), label], temporary);
   await writeFile(join(directory, 'release-manifest.sig'), signature);
-  const names = [manifest.assets.mods.name, manifest.assets.engine.name, manual, 'release-manifest.json', 'release-manifest.sig'];
-  const checksums = Buffer.from((await Promise.all(names.map(async name => `${sha256(await readFile(join(directory, name)))}  ${name}\n`))).join(''));
+  const checksums = await releaseChecksums(directory, manifest);
   await writeFile(join(directory, 'SHA256SUMS.txt'), checksums);
   await writeFile(join(directory, 'SHA256SUMS.sig'), sign(null, checksums, key).toString('base64') + '\n');
   console.log(`Signed ${manifest.tag} and assembled its credential-free manual installer.`);

@@ -171,8 +171,14 @@ jobs:
           args=()
           if [[ "$CHANNEL" == beta ]]; then args=(--prerelease); fi
           gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/mods-$RELEASE_VERSION" -f sha="$RELEASE_COMMIT" >/dev/null
-          gh release create "mods-$RELEASE_VERSION" release/* --verify-tag --draft "${args[@]}" --title "Dia+ mods $RELEASE_VERSION" --notes 'Signed mod bundle and self-contained manual installer. Publish this draft as a private prerelease for Beta testing; promote the same tested assets to Stable. See the included README. Repository access is required only for the updater.'
+          # Keep the standalone engine in its own release, not every mod release.
+          gh release create "mods-$RELEASE_VERSION" \
+            "release/DiaPlus-Mods-$RELEASE_VERSION-macOS-arm64.zip" \
+            "release/DiaPlus-$RELEASE_VERSION-macOS-arm64.zip" \
+            release/release-manifest.json release/release-manifest.sig \
+            release/SHA256SUMS.txt release/SHA256SUMS.sig \
+            --verify-tag --draft "${args[@]}" --title "Dia+ mods $RELEASE_VERSION" --notes "Signed mod bundle and self-contained manual installer. For manual installation, download DiaPlus-$RELEASE_VERSION-macOS-arm64.zip; it already contains the stable engine and these mods. The standalone engine is maintained in its separate installer release. Publish this draft as a private prerelease for Beta testing; promote the same tested assets to Stable. Repository access is required only for the updater."
           if [[ "$REBUILD_INSTALLER" == true ]]; then
             gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/installer-$INSTALLER_VERSION" -f sha="$RELEASE_COMMIT" >/dev/null
-            gh release create "installer-$INSTALLER_VERSION" "release/DiaPlus-Installer-$INSTALLER_VERSION-macOS-arm64.zip" --verify-tag --draft --title "Dia+ installer engine $INSTALLER_VERSION" --notes 'Separately versioned stable engine. Publish after manual-installer QA and owner review so subsequent workflows can reuse this exact engine asset.'
+            gh release create "installer-$INSTALLER_VERSION" "release/DiaPlus-Installer-$INSTALLER_VERSION-macOS-arm64.zip" --verify-tag --draft --title "Dia+ installer engine $INSTALLER_VERSION" --notes 'Separately versioned build component, not the complete end-user installer. For manual installation, download the full DiaPlus-vX.Y.Z ZIP from the matching mods release. Publish this engine after manual-installer QA and owner review so subsequent workflows can reuse this exact engine asset.'
           fi

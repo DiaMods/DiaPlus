@@ -15,13 +15,16 @@ The checked-in updater configuration intentionally has no client ID or release p
 
 ## Release contents and versioning
 
+Each `mods-vX.Y.Z` release contains these end-user/update assets:
+
 | Asset | Contents |
 | --- | --- |
 | `DiaPlus-Mods-vX.Y.Z-macOS-arm64.zip` | Complete versioned toolkit, bridge, locked JS dependencies, patchers, file inventory, compatibility metadata and compatible precompiled native helpers; no Node distribution duplication |
 | `release-manifest.json` + `.sig` | Ed25519-signed exact bytes: mod version/tag/commit, protocol, arm64/macOS requirements, separately versioned installer requirements, exact audited official Dia archive/signature, compatibility results and mod/engine hashes |
 | `SHA256SUMS.txt` + `SHA256SUMS.sig` | Ed25519-authenticated transfer checksums, including the full manual installer; the signed manifest remains the in-app update trust anchor |
 | `DiaPlus-vX.Y.Z-macOS-arm64.zip` | Fresh manual installer composed from the stable engine, this release's mod ZIP, signed manifest, signature and instructions |
-| `DiaPlus-Installer-vA.B.C-macOS-arm64.zip` | Separately versioned stable engine, pinned Node runtime and verification code; also retained in its `installer-vA.B.C` release for reuse |
+
+The standalone `DiaPlus-Installer-vA.B.C-macOS-arm64.zip` lives **only** in the separate `installer-vA.B.C` release. It is a build component (stable engine, pinned Node runtime and verification code), not the complete end-user installer. Build/QA artifacts retain it for verification and composition, but mod releases do not duplicate it or list it in their transfer checksums. Its hash remains in the signed manifest. For manual installation, download the full `DiaPlus-vX.Y.Z-macOS-arm64.zip` from the mod release; it already contains the engine and that release's mods.
 
 No official/patched Dia browser, Codex executable, credentials, developer profile, research captures or local data enter these assets. The installer verifies its included bundle and obtains official Dia directly from its publisher, using the pinned signature and publisher identity. “Self-contained” means it does not fetch private release assets; the official Dia download may require internet access.
 

@@ -51,6 +51,20 @@ test('Stable/Beta ignore drafts and engine tags; select the newest signed versio
   assert.equal((await releases.latest('stable', { build: '1' })).manifest.version, 'v0.1.1');
   assert.equal(await releases.latest('beta', { build: '9' }), null);
 });
+test('updater accepts a signed mod release without a standalone installer engine asset', async () => {
+  const b = bundle(), bytes = Buffer.from(b.manifestBytes, 'base64');
+  const signature = Buffer.from(b.signature);
+  const releases = new GitHubModReleases({ auth: { api: async path => new Response(path.endsWith('/1') ? bytes : signature) }, config, source });
+  const release = { id: 10, tag_name: b.manifest.tag, assets: [
+    { id: 1, name: 'release-manifest.json', size: bytes.length },
+    { id: 2, name: 'release-manifest.sig', size: signature.length },
+    { id: 3, name: b.manifest.assets.mods.name, size: b.manifest.assets.mods.length },
+  ] };
+  const result = await releases.manifest(release);
+  assert.equal(result.manifest.version, b.manifest.version);
+  assert.equal(result.asset.id, 3);
+  assert.deepEqual(result.manifest.assets.engine, b.manifest.assets.engine);
+});
 test('private asset authorization stays on GitHub API and never reaches redirect hosts', async () => {
   const calls = [];
   const releases = new GitHubModReleases({ auth: { api: async (path, options) => { calls.push({ path, options }); return new Response(null, { status: 302, headers: { location: 'https://release-assets.githubusercontent.com/test?temporary=1' } }); } }, config, source,
