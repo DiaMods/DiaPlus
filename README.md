@@ -8,14 +8,15 @@ The installed release is **Dia 1.51.0, build 87864, on Apple silicon**. **19 Mod
 
 For another Mac, use the **Dia+ modifier ZIP**: extract it and open **Install Dia+.command**. It includes Node and precompiled helpers and obtains official Dia on that Mac when needed. Codex uses the recipient's local installation. See [installer instructions](docs/RELEASE-INSTALL.md).
 
-To build a modifier release locally (requires Node, Xcode 27, and the supported official Dia source):
+Private releases are hosted in **DiaMods/DiaPlus**. Repository read access gates only the updater; manually shared installer ZIPs need no GitHub login. See [private release setup and owner workflow](docs/PRIVATE-RELEASES.md).
+
+To test release packaging locally (requires Node, Xcode 27 and the audited official Dia source; uses a temporary signing key):
 
 ```sh
-node scripts/package-release.js v0.1.0 /Applications/Dia.app
-node scripts/verify-release.js .build/releases/v0.1.0 --install
+node scripts/test-private-release.js /path/to/audited/official/Dia.app
 ```
 
-The ZIP, checksums and inventory are written under `.build/releases/v0.1.0`. Only these three files are release assets; no official or modified Dia browser is uploaded. The [release workflow](.github/workflows/release.yml) runs on version tags or manual dispatch using an existing tag, validates the packaged installer, and creates a **draft** by default. Select the manual **publish** option to publish immediately. CI needs the GitHub `xcode-27` Apple Silicon runner with Xcode 27; availability depends on the repository's runner access. The workflow itself has not yet run for this checkout.
+The [manual release workflow](.github/workflows/release.yml) validates the latest configured official feed and audited native mods, creates a signed versioned mod bundle, reuses the independently versioned installer engine, and assembles a fresh full installer ZIP. Signing secrets stay outside build/test jobs. After isolated compiler-free installer QA, it creates new tags and **draft releases only**. Publish a private prerelease for opt-in Beta testing, then promote the same tested assets to Stable. GitHub App/repository/signing setup and publication require explicit owner actions; the workflow has not yet run in the private repository. Test-key local assets must not be published.
 
 For development, a first install or rebuild from the official application:
 
@@ -87,7 +88,7 @@ Schedules start disabled and run only after being explicitly enabled, while the 
 
 The **custom-updater** Mod is **on by default** and is separate from the required **update-blocker** Mod. The blocker prevents stock Sparkle replacement. The custom updater redirects native update controls to local settings, checks the official release feed, verifies the signed archive and publisher, validates every configured Mod, and builds a staged custom app. Background checks only announce availability; preparation and installation are explicit actions.
 
-The updater uses the toolkit bundled in the app, so the development checkout is not required. Preparation still requires installed Apple command-line build tools and a usable signing configuration. Required compatibility failures stop preparation. Optional failures are listed with their reasons and require explicit confirmation before the in-app updater resumes with those Mods disabled for that Dia build; they can reactivate automatically after a later compatible update. A remote Mods repository is deferred and is not configured.
+New release clients obtain signed mod bundles from private `DiaMods/DiaPlus` releases using their own GitHub authorization entered only in Updates settings. Tokens are stored in macOS Keychain. Repository read access is required for checks/preparation/installation, not for browser or AI use. Stable ignores prereleases; Beta is opt-in. Compatible precompiled helpers and a pinned bundled runtime remove compiler/Node/npm requirements. Required compatibility failures stop preparation; optional failures require confirmation before temporary omission, retaining stored choices for later compatible updates. Older clients require the new manual installer once. See [setup and rollout](docs/PRIVATE-RELEASES.md).
 
 Installation snapshots the complete closed profile, preflights the candidate against a disposable copy, and retains the previous app with its matching profile snapshot. Launch and preflight use the custom app's existing macOS Keychain encryption, preserving protected preferences and extension registrations. Replacement and launch-health failures have a rollback path. The CLI supports the same optional compatibility exclusions with an explicit choice or `--allow-disable-incompatible`; critical identity, network, updater and routing checks always fail closed. Known build numbers never bypass validation of the candidate's actual contents.
 

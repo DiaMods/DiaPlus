@@ -48,6 +48,21 @@ static NSUInteger dock_incognito_requests;
 
 int main(void) {
     @autoreleasepool {
+        DiaCustomModsPaneContext *context = [[DiaCustomModsPaneContext alloc] init];
+        assert([context conformsToProtocol:@protocol(WKUIDelegate)]);
+        __block BOOL confirmed = YES;
+        __block NSUInteger completions = 0;
+        [context webView:nil runJavaScriptConfirmPanelWithMessage:@"untrusted"
+            initiatedByFrame:nil completionHandler:^(BOOL result) {
+            confirmed = result; completions += 1;
+        }];
+        assert(!confirmed && completions == 1);
+        assert([context webView:nil createWebViewWithConfiguration:nil
+            forNavigationAction:nil windowFeatures:nil] == nil);
+        [context release];
+        puts("ok    Settings owns WebKit confirmations and denies untrusted dialogs/popups");
+    }
+    @autoreleasepool {
         setenv("DIA_CUSTOM_MODS", "developer-tools", 1);
         unsetenv("DIA_CUSTOM_RUNTIME_LOG");
         int originalCount = *_NSGetArgc();

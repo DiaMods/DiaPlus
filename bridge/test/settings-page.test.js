@@ -36,6 +36,7 @@ test("updater settings show download progress and name incompatible mods before 
   const field = (id) => elements.get(id);
   const document = { querySelector: (selector) => field(selector.slice(1)) };
   let state = {
+    github: { configured: true, signedIn: true, access: 'authorized' },
     phase: "downloading", supported: true, enabled: true, currentBuild: "1",
     release: { version: "2.0", build: "2" },
     download: { receivedBytes: 25, totalBytes: 100, percent: 25, startedAt: new Date(Date.now() - 1000).toISOString() },
@@ -74,6 +75,21 @@ test("updater settings show download progress and name incompatible mods before 
   await field("continueUpdate").fire("click");
   assert.ok(requests.some((item) => item.path === "/api/updater/continue" && item.method === "POST"));
   assert.equal(field("installUpdate").disabled, false);
+});
+
+test('Updates keeps GitHub optional, gates install on access, and honors restart cancellation', async () => {
+  const html = renderSettingsPage('test-token');
+  const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], new Element()]));
+  const field = id => elements.get(id);
+  let state = { phase: 'ready', supported: true, enabled: true, channel: 'stable', github: { configured: true, signedIn: true, access: 'denied' } };
+  const requests = [];
+  const updater = initializeUpdaterSettings({ document: { querySelector: selector => field(selector.slice(1)) }, request: async (path, options) => { requests.push({ path, options }); return state; }, confirmInstall: () => false });
+  await updater.ready; assert.equal(field('installUpdate').disabled, true); assert.match(field('githubUpdateStatus').textContent, /cannot read/);
+  state = { ...state, github: { configured: true, signedIn: true, access: 'authorized', login: 'friend' } };
+  await updater.refresh(); assert.equal(field('installUpdate').disabled, false);
+  await field('installUpdate').fire('click'); assert(!requests.some(request => request.path.endsWith('/install')));
+  assert(!requests.some(request => request.path.endsWith('/github/start')));
+  assert.match(html, /Without repository access, Dia\+ still works/);
 });
 
 class Element {

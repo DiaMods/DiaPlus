@@ -5,5 +5,10 @@
   "publicKey": "PuVxvsbwitqWEvMPriVhNzmiMiVp2AqD8psqG/qcS98=",
   "teamID": "S6N382Y83G",
   "bundleID": "company.thebrowser.dia",
-  "modRepository": null
+  "modRepository": {
+    "repository": "DiaMods/DiaPlus",
+    "clientID": null,
+    "publicKey": null,
+    "protocolVersion": 1
+  }
 }

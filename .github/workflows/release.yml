@@ -1,99 +1,177 @@
-name: Build Dia+ modifier release
+name: Prepare private Dia+ release
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing version tag (for example v0.1.0)
+      version:
+        description: New mod version (v0.1.0); a new mods-version tag is created after validation
         required: true
         type: string
-      publish:
-        description: Publish immediately (otherwise create a draft)
+      channel:
+        description: Draft release channel; publish Beta manually, then promote the same assets to Stable
+        default: beta
+        type: choice
+        options: [beta, stable]
+      rebuild_installer:
+        description: Build a NEW installer engine version (required for the first release)
         default: false
         type: boolean
-  push:
-    tags: ['v*']
 permissions:
   contents: read
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: private-dia-plus-release
   cancel-in-progress: false
 jobs:
   build:
     runs-on: xcode-27
-    timeout-minutes: 60
+    timeout-minutes: 90
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.identity.outputs.commit }}
+      installer: ${{ steps.identity.outputs.installer }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Validate version and checkout
-        id: version
-        env:
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
-        run: |
-          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
-          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.20.0
+      - name: Validate private repository, default branch and new version
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REBUILD_INSTALLER: ${{ inputs.rebuild_installer }}
+        run: |
+          test "$GITHUB_REPOSITORY" = DiaMods/DiaPlus
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = true
+          node --input-type=module -e 'import {versionParts} from "./bridge/src/release-verification.js"; versionParts(process.env.RELEASE_VERSION)'
+          if git show-ref --verify --quiet "refs/tags/mods-$RELEASE_VERSION"; then echo 'Mod version already exists' >&2; exit 1; fi
+          installer="$(node -p 'JSON.parse(require("fs").readFileSync("src/config/installer-release.json")).version')"
+          if [[ "$REBUILD_INSTALLER" == true ]]; then
+            if git show-ref --verify --quiet "refs/tags/installer-$installer"; then echo 'Bump the installer engine version before rebuilding' >&2; exit 1; fi
+          else
+            mkdir -p "$RUNNER_TEMP/engine"
+            gh release download "installer-$installer" --repo "$GITHUB_REPOSITORY" --pattern "DiaPlus-Installer-$installer-macOS-arm64.zip" --dir "$RUNNER_TEMP/engine"
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
+      - name: Fail closed if official Dia needs a new audit
+        run: node scripts/check-release-feed.js
       - name: Install locked JavaScript dependencies
         run: npm ci --omit=dev --omit=optional --prefix bridge
-      - name: Obtain official build for private validation only
+      - name: Obtain official Dia for private validation only
         run: |
           node scripts/download-official.js "$RUNNER_TEMP/official" > "$RUNNER_TEMP/dia-source"
           echo "DIA_CUSTOM_SOURCE_APP=$(cat "$RUNNER_TEMP/dia-source")" >> "$GITHUB_ENV"
           echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
-      - name: Test mods and release safeguards
+          node scripts/compatibility.js "$(cat "$RUNNER_TEMP/dia-source")" --json > "$RUNNER_TEMP/compatibility.json"
+          node --input-type=module -e 'import fs from "node:fs"; const c=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/compatibility.json")); if(c.buildStatus!=="audited" || c.perMod.some(m=>!m.compatible&&(m.required||m.criticality==="critical"))) throw Error("Required compatibility failed"); const mods=c.effectiveMods.join(","); fs.appendFileSync(process.env.GITHUB_ENV, "DIA_CUSTOM_EFFECTIVE_MODS="+mods+"\nDIA_CUSTOM_MODS="+mods+"\nDIA_CUSTOM_STAGING=1\n");'
+      - name: Test native mods, authentication and update safeguards (no signing secrets)
         run: ./dia-custom test
-      - name: Package modifier only
+      - name: Package coherent mod bundle and stable installer engine
         env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: node scripts/package-release.js "$RELEASE_TAG" "$DIA_CUSTOM_SOURCE_APP"
-      - name: Verify packaged installer in isolation
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: node scripts/verify-release.js ".build/releases/$RELEASE_TAG" --install
+          RELEASE_VERSION: ${{ inputs.version }}
+          INSTALLER_VERSION: ${{ steps.identity.outputs.installer }}
+          REBUILD_INSTALLER: ${{ inputs.rebuild_installer }}
+          DIA_PLUS_GITHUB_CLIENT_ID: ${{ vars.DIA_PLUS_GITHUB_CLIENT_ID }}
+          DIA_PLUS_RELEASE_PUBLIC_KEY: ${{ vars.DIA_PLUS_RELEASE_PUBLIC_KEY }}
+        run: |
+          args=()
+          if [[ "$REBUILD_INSTALLER" != true ]]; then args=("$RUNNER_TEMP/engine/DiaPlus-Installer-$INSTALLER_VERSION-macOS-arm64.zip"); fi
+          node scripts/package-release.js "$RELEASE_VERSION" "$DIA_CUSTOM_SOURCE_APP" "${args[@]}"
+          node scripts/verify-release.js ".build/releases/$RELEASE_VERSION" --unsigned
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: modifier-release
+          name: unsigned-release
           path: |
-            .build/releases/${{ steps.version.outputs.tag }}/DiaPlus-*.zip
-            .build/releases/${{ steps.version.outputs.tag }}/SHA256SUMS.txt
-            .build/releases/${{ steps.version.outputs.tag }}/release-manifest.json
+            .build/releases/${{ inputs.version }}/DiaPlus-Mods-*.zip
+            .build/releases/${{ inputs.version }}/DiaPlus-Installer-*.zip
+            .build/releases/${{ inputs.version }}/release-manifest.json
           if-no-files-found: error
-          include-hidden-files: true
           retention-days: 7
-  release:
+  sign:
     needs: build
+    runs-on: ubuntu-latest
+    environment: release-signing
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.20.0
+      - name: Download validated inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name unsigned-release --dir release
+      - name: Sign manifest and compose manual installer (never run bundle code)
+        env:
+          DIA_PLUS_GITHUB_CLIENT_ID: ${{ vars.DIA_PLUS_GITHUB_CLIENT_ID }}
+          DIA_PLUS_RELEASE_SIGNING_KEY: ${{ secrets.DIA_PLUS_RELEASE_SIGNING_KEY }}
+          DIA_PLUS_RELEASE_PUBLIC_KEY: ${{ vars.DIA_PLUS_RELEASE_PUBLIC_KEY }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: node scripts/sign-release.js release
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: signed-release
+          path: release/*
+          if-no-files-found: error
+          retention-days: 7
+  installer_qa:
+    needs: [build, sign]
+    runs-on: xcode-27
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.20.0
+      - name: Download signed assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name signed-release --dir release
+      - name: Manual install without GitHub credentials or compiler access
+        env:
+          DIA_PLUS_RELEASE_PUBLIC_KEY: ${{ vars.DIA_PLUS_RELEASE_PUBLIC_KEY }}
+        run: node scripts/verify-release.js release --install
+  release:
+    needs: [build, sign, installer_qa]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: read
     steps:
-      - name: Download verified build artifact
+      - name: Download tested signed assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name signed-release --dir release
+      - name: Create new tags and draft releases only
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: gh run download "$RUN_ID" --name modifier-release --dir release
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.build.outputs.tag }}
-          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+          INSTALLER_VERSION: ${{ needs.build.outputs.installer }}
+          CHANNEL: ${{ inputs.channel }}
+          REBUILD_INSTALLER: ${{ inputs.rebuild_installer }}
         run: |
-          args=(--draft)
-          if [[ "$PUBLISH" == true ]]; then args=(); fi
-          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
-          Dia+ modifier installer for Apple Silicon Macs. Extract the ZIP and open Install Dia+.command.
-
-          This release contains only the installer, mod sources, Node runtime, JavaScript dependencies, and our precompiled helpers. It downloads official Dia directly on the recipient Mac when needed; no Dia browser or Codex executable is redistributed. Use your locally installed Codex and your own provider accounts.
-
-          macOS 14+; optional Apple model/media helper requires macOS 27. Ad-hoc signed, not notarized. See the included README for installation, verification, and update limitations.
-          NOTES
-          gh release create "$RELEASE_TAG" release/* --verify-tag --title "Dia+ $RELEASE_TAG" --notes-file "$RUNNER_TEMP/notes.md" "${args[@]}"
+          args=()
+          if [[ "$CHANNEL" == beta ]]; then args=(--prerelease); fi
+          gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/mods-$RELEASE_VERSION" -f sha="$RELEASE_COMMIT" >/dev/null
+          gh release create "mods-$RELEASE_VERSION" release/* --verify-tag --draft "${args[@]}" --title "Dia+ mods $RELEASE_VERSION" --notes 'Signed mod bundle and self-contained manual installer. Publish this draft as a private prerelease for Beta testing; promote the same tested assets to Stable. See the included README. Repository access is required only for the updater.'
+          if [[ "$REBUILD_INSTALLER" == true ]]; then
+            gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/installer-$INSTALLER_VERSION" -f sha="$RELEASE_COMMIT" >/dev/null
+            gh release create "installer-$INSTALLER_VERSION" "release/DiaPlus-Installer-$INSTALLER_VERSION-macOS-arm64.zip" --verify-tag --draft --title "Dia+ installer engine $INSTALLER_VERSION" --notes 'Separately versioned stable engine. Publish after manual-installer QA and owner review so subsequent workflows can reuse this exact engine asset.'
+          fi

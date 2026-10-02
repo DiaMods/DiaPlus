@@ -32,7 +32,7 @@ export async function acquireOfficial(cache, installed = '/Applications/Dia.app'
     await rm(partial, { force: true });
     process.stderr.write(`Downloading Dia ${release.version} from its official publisher…\n`);
     try {
-      await run('/usr/bin/curl', ['--fail', '--silent', '--show-error', '--proto', '=https',
+      await run('/usr/bin/curl', ['--disable', '--fail', '--silent', '--show-error', '--proto', '=https',
         '--max-time', '1200', '--max-filesize', String(release.length),
         '--output', partial, allowedDownload(release.url, source)], { timeout: 1250000 });
       verifyArchive(await readFile(partial), release, source);

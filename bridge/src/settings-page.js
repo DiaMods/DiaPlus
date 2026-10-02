@@ -270,11 +270,16 @@ export function renderSettingsPage(adminToken) {
   <h2 id="custom-updater">Custom updater</h2>
   <div class="muted">Official releases are downloaded and rebuilt with every enabled mod. Installation restarts Dia+ and preserves an app and profile rollback point.</div>
   <div class="card">
+    <div id="githubUpdateStatus" role="status">GitHub sign-in is optional. Repository access is required only for updates.</div>
+    <div class="actions" style="margin:10px 0"><button id="githubUpdateSignIn" class="secondary">Sign in with GitHub</button><button id="githubUpdateSignOut" class="secondary" hidden>Sign out</button><button id="githubUpdateCancel" class="secondary" hidden>Cancel sign-in</button></div>
+    <div id="githubUpdateChallenge" hidden><a id="githubUpdateLink" href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">Open GitHub to authorize</a> · Enter code <code id="githubUpdateCode"></code>. Credentials are entered only on GitHub.</div>
+    <label for="updateChannel">Update channel</label> <select id="updateChannel"><option value="stable">Stable</option><option value="beta">Beta — includes prereleases</option></select>
+    <p class="muted">Without repository access, Dia+ still works. Use a self-contained installer ZIP shared by the owner for manual updates.</p>
     <div id="updaterStatus" role="status">Loading updater…</div>
     <div id="updaterDetail" class="muted" style="margin:10px 0"></div>
     <div id="updaterProgress" class="update-progress" hidden><progress id="updaterProgressBar" max="100" value="0" aria-label="Update download progress"></progress><div id="updaterProgressText" class="muted"></div></div>
     <div id="updaterCompatibility" class="update-review" hidden></div>
-    <div class="actions"><button id="checkUpdate">Check for updates</button><button id="prepareUpdate" class="secondary" disabled>Download &amp; validate</button><button id="continueUpdate" class="secondary" hidden disabled>Continue and disable incompatible mods</button><button id="installUpdate" disabled>Install &amp; restart</button></div>
+    <div class="actions"><button id="checkUpdate">Check for updates</button><button id="prepareUpdate" class="secondary" disabled>Update mods — download &amp; validate</button><button id="prepareDiaUpdate" class="secondary" disabled>Update Dia + mods — download &amp; validate</button><button id="continueUpdate" class="secondary" hidden disabled>Continue and disable incompatible mods</button><button id="installUpdate" disabled>Install &amp; restart</button></div>
   </div>
 
   </section>
@@ -1203,7 +1208,7 @@ export function renderModsPage(adminToken) {
 </html>`;
 }
 
-export function initializeUpdaterSettings({ document, request }) {
+export function initializeUpdaterSettings({ document, request, confirmInstall = message => globalThis.confirm(message) }) {
   const field = id => document.querySelector('#' + id);
   let timer;
   const bytes = value => {
@@ -1212,17 +1217,39 @@ export function initializeUpdaterSettings({ document, request }) {
     while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
     return value.toFixed(unit ? 1 : 0) + ' ' + units[unit];
   };
+  let authTimer;
+  function renderGitHub(github, busy = false) {
+    const allowed = github?.access === 'authorized';
+    const problem = { denied: 'This account cannot read DiaMods/DiaPlus. Ask the owner for read access or authorize the organization’s required policy.', 'sign-in-required': 'GitHub authorization is missing, expired or revoked. Sign in to use the updater.', 'rate-limited': 'GitHub rate limit reached. Try again later.', network: 'GitHub could not be reached. Try again later.' }[github?.access];
+    field('githubUpdateStatus').textContent = github?.error || (!github?.configured ? 'GitHub App setup is required before the private updater can be used.' : allowed ? 'GitHub access verified' + (github.login ? ' for ' + github.login : '') + ': DiaMods/DiaPlus.' : github?.pending ? 'Authorize this sign-in on GitHub using the code below.' : problem || (github.signedIn ? 'Signed in; repository access must be verified.' : 'Sign in with GitHub to check private mod releases. Manual installers do not require sign-in.'));
+    field('githubUpdateSignIn').disabled = busy || !github?.configured || Boolean(github?.pending);
+    field('githubUpdateSignOut').hidden = !github?.signedIn;
+    field('githubUpdateSignOut').disabled = busy;
+    field('githubUpdateCancel').hidden = !github?.pending;
+    field('githubUpdateChallenge').hidden = !github?.pending;
+    field('githubUpdateCode').textContent = github?.pending ? github.userCode : '';
+    clearTimeout(authTimer);
+    if (github?.pending) authTimer = setTimeout(pollGitHub, Math.max(5, github.interval || 5) * 1000);
+  }
+  async function pollGitHub() {
+    try { const github = await request('/api/updater/github/poll', { method: 'POST', body: '{}' }); renderGitHub(github); if (!github.pending) await refresh(); }
+    catch (error) { field('githubUpdateStatus').textContent = error.message; field('githubUpdateSignIn').disabled = false; }
+  }
   async function refresh() {
     try {
       const state = await request('/api/updater');
       const busy = ['checking','downloading','verifying','validating','building','installing','closing'].includes(state.phase);
+      renderGitHub(state.github, busy);
+      field('updateChannel').value = state.channel ?? 'stable';
+      field('updateChannel').disabled = busy || !state.enabled;
+      const allowed = state.github?.access === 'authorized';
       const progress = state.phase === 'downloading' ? state.download : null;
       const percent = Number.isFinite(progress?.percent) ? Math.max(0, Math.min(100, progress.percent)) : null;
       const phase = state.phase === 'compatibility-review' ? 'waiting for confirmation' : state.phase;
       const showCompatibility = Array.isArray(state.compatibility?.perMod) &&
         ['validating','building','compatibility-review','ready','installing','closing','installed','failed','recovery-required'].includes(state.phase);
       field('updaterStatus').textContent = !state.supported ? 'Available after rebuilding the installed app.' : !state.enabled ? 'Custom updater is disabled.' : 'Build ' + state.currentBuild + ' · ' + phase + (percent === null ? '' : ' · ' + percent + '%');
-      field('updaterDetail').textContent = [state.release ? 'Latest release: ' + state.release.version + ' (' + state.release.build + ')' : '', state.error || '', state.rollbackError || '', showCompatibility ? state.compatibility.perMod.filter(m => m.compatible).length + ' mods passed compatibility checks.' : '', state.modRepository || ''].filter(Boolean).join(' ');
+      field('updaterDetail').textContent = [state.diaRelease || state.release ? 'Latest Dia release: ' + (state.diaRelease || state.release).version + ' (' + (state.diaRelease || state.release).build + ')' : '', state.currentModVersion ? 'Installed mods: ' + state.currentModVersion + '.' : '', state.bundle ? 'Available mods: ' + state.bundle.manifest.version + '.' : '', state.error || '', state.rollbackError || '', showCompatibility ? state.compatibility.perMod.filter(m => m.compatible).length + ' mods passed compatibility checks.' : '', state.modRepository || ''].filter(Boolean).join(' ');
       field('updaterProgress').hidden = !progress;
       if (progress) {
         field('updaterProgressBar').value = percent ?? 0;
@@ -1244,21 +1271,34 @@ export function initializeUpdaterSettings({ document, request }) {
           (!requiredFailures.length && state.phase === 'compatibility-review' ? '\n\nThey will be re-enabled automatically when a later compatible update is installed.' : '');
       }
       field('checkUpdate').disabled = busy || !state.supported || !state.enabled;
-      field('prepareUpdate').disabled = busy || !state.supported || !state.enabled || !['available','failed'].includes(state.phase) || !state.release || Number(state.release.build) <= Number(state.currentBuild);
+      field('prepareUpdate').disabled = busy || !state.supported || !state.enabled || !allowed || !['available','failed'].includes(state.phase) || !state.options?.some(option => option.kind === 'mods');
+      field('prepareDiaUpdate').disabled = busy || !state.supported || !state.enabled || !allowed || !['available','failed'].includes(state.phase) || !state.options?.some(option => option.kind === 'dia-and-mods');
       field('continueUpdate').hidden = state.phase !== 'compatibility-review' || requiredFailures.length > 0;
-      field('continueUpdate').disabled = state.phase !== 'compatibility-review' || requiredFailures.length > 0;
-      field('installUpdate').disabled = state.phase !== 'ready' || !state.enabled;
+      field('continueUpdate').disabled = state.phase !== 'compatibility-review' || requiredFailures.length > 0 || !allowed;
+      field('installUpdate').disabled = state.phase !== 'ready' || !state.enabled || !allowed;
       clearTimeout(timer); if (busy) timer = setTimeout(refresh, 2000);
     } catch (error) { field('updaterStatus').textContent = error.message; }
   }
-  for (const [id, action] of [['checkUpdate','check'],['prepareUpdate','prepare'],['installUpdate','install']]) {
+  for (const [id, action, kind] of [['checkUpdate','check'],['prepareUpdate','prepare','mods'],['prepareDiaUpdate','prepare','dia-and-mods'],['installUpdate','install']]) {
     field(id).addEventListener('click', async () => {
+      if (action === 'install' && !confirmInstall('Install this verified update and restart Dia+? Your profile and provider choices will be retained. Cancelling the browser’s quit will cancel installation.')) return;
       field(id).disabled = true;
       field('updaterStatus').textContent = action === 'install' ? 'Restarting Dia+. This page will close during installation.' : 'Working…';
-      try { await request('/api/updater/' + action, { method: 'POST', body: '{}' }); await refresh(); }
+      try { await request('/api/updater/' + action, { method: 'POST', body: JSON.stringify(kind ? { kind } : {}) }); await refresh(); }
       catch (error) { field('updaterStatus').textContent = error.message; field(id).disabled = false; }
     });
   }
+  for (const [id, action] of [['githubUpdateSignIn','start'], ['githubUpdateSignOut','sign-out'], ['githubUpdateCancel','cancel']]) {
+    field(id).addEventListener('click', async () => {
+      clearTimeout(authTimer);
+      try { const github = await request('/api/updater/github/' + action, { method: 'POST', body: '{}' }); renderGitHub(github); if (!github.pending) await refresh(); }
+      catch (error) { field('githubUpdateStatus').textContent = error.message; }
+    });
+  }
+  field('updateChannel').addEventListener('change', async () => {
+    try { await request('/api/updater/channel', { method: 'POST', body: JSON.stringify({ channel: field('updateChannel').value }) }); await refresh(); }
+    catch (error) { field('updaterStatus').textContent = error.message; }
+  });
   field('continueUpdate').addEventListener('click', async () => {
     field('continueUpdate').disabled = true;
     field('updaterStatus').textContent = 'Disabling incompatible mods and continuing…';

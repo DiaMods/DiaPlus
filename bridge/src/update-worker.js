@@ -2,10 +2,21 @@ import { cp, mkdir, rename, rm, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadJSON, plist, run, saveJSON } from './updater-common.js';
+import { GitHubUpdateAuth, GitHubKeychain } from './github-update-auth.js';
+import { verifyModManifest } from './release-verification.js';
+import { verifyPreparedToolkit } from './release-inventory.js';
+
+async function authorize(t) {
+  const source = await loadJSON(join(t.app, 'Contents/Resources/DiaCustomUpdater/src/config/updater-source.json'));
+  const manifest = verifyModManifest(Buffer.from(t.bundle?.manifestBytes ?? '', 'base64'), t.bundle?.signature, source.modRepository, source);
+  await verifyPreparedToolkit(t.job, manifest);
+  const auth = new GitHubUpdateAuth({ clientID: source.modRepository.clientID, store: new GitHubKeychain(join(t.app, 'Contents/Helpers/DiaCustomGitHubKeychain')) });
+  await auth.verifyAccess();
+}
 
 // Kept separate from HTTP lifetime: this executable lives outside the app it replaces.
 export async function installTransaction(t, overrides = {}) {
-  const io = { cp, mkdir, rename, rm, stat, plist, run, saveJSON, ...overrides };
+  const io = { cp, mkdir, rename, rm, stat, plist, run, saveJSON, authorize, ...overrides };
   const script = name => join(t.toolkit, 'scripts', name);
   const env = { ...t.env, DIA_CUSTOM_PROFILE: t.profile, DIA_CUSTOM_APP: t.app, DIA_CUSTOM_MODS: t.mods.join(','), DIA_CUSTOM_EFFECTIVE_MODS: t.mods.join(',') };
   const state = async patch => io.saveJSON(t.statePath, { ...(await loadJSON(t.statePath, {})), ...patch, updatedAt: new Date().toISOString() });
@@ -24,6 +35,7 @@ export async function installTransaction(t, overrides = {}) {
   try {
     if (!t.app.endsWith('.app') || !t.profile || t.app.includes('/Dia.app') || await io.plist(t.app, 'CFBundleIdentifier') !== 'local.rttm.dia') throw new Error('Refusing to replace a non-custom app');
     if (await io.plist(t.candidate, 'CFBundleIdentifier') !== 'local.rttm.dia' || await io.plist(t.candidate, 'DiaCustomBridgeRuntimeID') !== t.runtimeID) throw new Error('Prepared app identity changed');
+    await io.authorize(t);
     await assertModConfiguration();
     await io.run('/bin/zsh', [script('verify-staged.sh'), t.candidate, t.mods.join(',')], { env });
     await io.cp(t.candidate, staged, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
@@ -43,6 +55,7 @@ export async function installTransaction(t, overrides = {}) {
     }
     await assertModConfiguration();
     await io.run(t.node, [script('browser-process-guard.js'), 'assert-stopped', t.app, t.profile], { env });
+    await io.authorize(t);
     await io.saveJSON(join(t.job, 'rollback.json'), { version: 1, installedApp: t.app, backupApp, profile: t.profile, profileSnapshot: snapshot, createdAt: new Date().toISOString() });
     await io.mkdir(dirname(backupApp), { recursive: true, mode: 0o700 });
     await io.rename(t.app, backupApp); preservedApp = true;

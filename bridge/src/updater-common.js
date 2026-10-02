@@ -1,3 +1,5 @@
+import { allowedDownload } from './download-origin.js';
+export { allowedDownload } from './download-origin.js';
 import { spawn } from 'node:child_process';
 import { createPublicKey, randomBytes, verify } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
@@ -48,14 +50,6 @@ export function run(command, args, { env = process.env, cwd, timeout = 120000, m
 }
 export async function plist(app, key) {
   return run('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, `${app}/Contents/Info.plist`]);
-}
-export function allowedDownload(value, source) {
-  const url = new URL(value), prefix = new URL(source.distributionPrefix);
-  if (url.protocol !== 'https:' || url.origin !== prefix.origin || !url.pathname.startsWith(prefix.pathname) ||
-      url.username || url.password || url.search || url.hash || /%2f|%5c|%2e/i.test(url.pathname)) {
-    throw new Error('Update URL is outside the pinned official distribution');
-  }
-  return url.toString();
 }
 export function parseAppcast(xml, source) {
   if (xml.length > 2 * 1024 * 1024 || /<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error('Unsafe update feed');

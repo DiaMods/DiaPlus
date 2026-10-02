@@ -37,6 +37,8 @@ bridge_target="$app/Contents/Resources/DiaCustomBridge"
 mkdir -p "${node_target:h}" "$bridge_target"
 /usr/bin/ditto "$extracted_dir/bin/node" "$node_target"
 /bin/chmod 755 "$node_target"
+github_helper="$(/bin/zsh "$script_dir/build-github-keychain.sh")"
+/usr/bin/ditto "$github_helper" "$app/Contents/Helpers/DiaCustomGitHubKeychain"
 /usr/bin/rsync -a --delete \
   --exclude .state \
   --exclude test \
@@ -69,6 +71,18 @@ info="$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :DiaCustomBridgeRuntimeID string '$runtime_id'" \
   "$info" 2>/dev/null || \
   /usr/libexec/PlistBuddy -c "Set :DiaCustomBridgeRuntimeID '$runtime_id'" "$info"
+if [[ -f "$project_dir/src/config/mod-release.json" ]]; then
+  for release_key in version installerVersion protocolVersion; do
+    case "$release_key" in
+      version) plist_key=DiaCustomModVersion ;;
+      installerVersion) plist_key=DiaCustomInstallerVersion ;;
+      protocolVersion) plist_key=DiaCustomUpdateProtocol ;;
+    esac
+    release_value="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1]))[process.argv[2]])' "$project_dir/src/config/mod-release.json" "$release_key")"
+    /usr/libexec/PlistBuddy -c "Add :$plist_key string '$release_value'" "$info" 2>/dev/null || \
+      /usr/libexec/PlistBuddy -c "Set :$plist_key '$release_value'" "$info"
+  done
+fi
 
 "$node_target" -e 'import("node:sqlite")' >/dev/null
 print "Bundled the local AI bridge and Node $node_version inside $app"

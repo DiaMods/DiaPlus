@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { CustomUpdater } from "../src/custom-updater.js";
 import { loadJSON, run, saveJSON } from "../src/updater-common.js";
+import { bundle, prepared, config, source } from './release-fixtures.js';
 
 async function fixture(t) {
   const directory = await mkdtemp(resolve(tmpdir(), "dia-updater-races-"));
@@ -14,13 +15,16 @@ async function fixture(t) {
   await mkdir(resolve(updater.app, "Contents"), { recursive: true });
   await writeFile(resolve(updater.app, "Contents/Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleVersion</key><string>1</string></dict></plist>');
   updater.assertEnabled = async () => {};
+  updater.requireAccess = async () => {};
+  updater.source = async () => source;
+  updater.services = async () => ({ config, source, auth: { status: async () => ({ access: 'authorized' }) }, releases: { latest: async () => null } });
   t.after(async () => { await updater.preparation; await rm(directory, { recursive: true, force: true }); });
   return { updater, directory };
 }
 
 test("concurrent update preparation requests reserve one operation before reading state", async (t) => {
   const { updater } = await fixture(t);
-  await saveJSON(updater.statePath, { phase: "available", release: { build: "2" } });
+  await saveJSON(updater.statePath, { phase: "available", bundle: bundle(), options: [{ kind: 'dia-and-mods' }], diaRelease: { build: "2" } });
   let releases;
   let started = 0;
   updater.prepareJob = async () => { started += 1; await new Promise((resolve) => { releases = resolve; }); };
@@ -41,6 +45,8 @@ test("double install requests cannot spawn two workers and blocked checks preser
   await mkdir(resolve(toolkit, "bridge/src"), { recursive: true });
   await writeFile(resolve(toolkit, "bridge/src/update-worker.js"), `require('node:fs').appendFileSync(${JSON.stringify(marker)}, 'started\\n');`);
   await saveJSON(resolve(job, "transaction.json"), { node: process.execPath, toolkit, env: {} });
+  // This test isolates dispatch serialization; signed transaction validation is tested separately.
+  updater.validatePreparedTransaction = async () => {};
   await saveJSON(updater.statePath, { phase: "ready", job, preparedMods: ["custom-updater"] });
   const results = await Promise.allSettled([updater.install(), updater.install()]);
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
@@ -100,7 +106,7 @@ test("confirmed optional failures are excluded temporarily when the existing job
     ],
   };
   await mkdir(job, { recursive: true });
-  await saveJSON(updater.statePath, { phase: "compatibility-review", job, release: { build: "2" }, compatibility });
+  await saveJSON(updater.statePath, { phase: "compatibility-review", job, release: { build: "2" }, compatibility, bundle: await prepared(job) });
   updater.configuredMods = async () => ["custom-updater", "optional"];
   let resumed;
   let finishBuild;

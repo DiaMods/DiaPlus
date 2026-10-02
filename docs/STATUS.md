@@ -20,7 +20,16 @@ The final bridge suite contains **230 tests: 229 passed, one explicit Apple nati
 | Updates | Default-on optional custom updater alongside required stock-update blocker; verified preparation, staged installation and linked app/profile rollback |
 | Launch and compatibility | Runtime/profile/Mod-aware bridge health; candidate content validation even under audited metadata; official-app and path-overlap guards |
 
-The local settings page configures these integrations. Native **Settings → Mods**, **Memory** and **Apps** remain attached to their respective local integration state. Remote Mod distribution is deferred; the updater uses the local toolkit bundled inside the app.
+The local settings page configures these integrations. Native **Settings → Mods**, **Memory** and **Apps** remain attached to their respective local integration state. Private remote mod distribution is implemented for `DiaMods/DiaPlus`, pending owner repository/App/signing setup and real-account rollout. The currently installed older client must use a new manual installer once. See [private releases](PRIVATE-RELEASES.md).
+
+### Private release implementation validation — October 1, 2026
+
+- Bridge regression suite: 256 passed, zero failures, one existing Apple native-image runtime skip.
+- Native macOS Keychain add/read/rotation/deletion passed in a unique test-only namespace; no real updater credentials were accessed.
+- Ephemeral-key release QA verified signed manifests and checksums, bounded/inventoried archives, byte-for-byte installer-engine reuse across mod versions, and a self-contained manual installation into an isolated app/profile with GitHub credentials removed and compiler access disabled. Test-key assets are not production releases.
+- Final native WebKit integration added guarded confirmation dialogs and browser-opening for the GitHub device link; native startup/delegate smoke tests passed. The subsequent complete installer rerun was interrupted during isolated installation, so final post-WebKit end-to-end completion remains to be rerun.
+- The configured official feed still matches audited Dia 1.51.0 (87864). The native suite stopped at its preflight guard while the user's live Dia+ instance was running; the installed browser/profile were left untouched. Existing quit/profile/rollback fixtures passed in the bridge suite.
+- GitHub Actions execution, actual read-only/nonmember accounts, organization policies, revoked access and real token refresh remain owner-setup/live-rollout checks. No repository creation, membership changes or publication was performed.
 
 ## Focused verification completed
 

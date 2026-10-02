@@ -72,6 +72,7 @@ async function fixture(fail) {
   const t = { job, toolkit: join(job, 'toolkit'), node: '/node', app: '/Applications/Dia Custom QA.app', candidate: join(job, 'candidate.app'), profile: join(job, 'profile'), env: {}, mods: ['a'], runtimeID: 'runtime', statePath: join(job, 'status.json') };
   const calls = [], moves = [], removals = [];
   const io = {
+    authorize: async () => {},
     plist: async (_, key) => key === 'CFBundleIdentifier' ? 'local.rttm.dia' : 'runtime',
     mkdir: async () => {}, cp: async () => {}, stat: async () => ({}),
     rename: async (a,b) => { moves.push([a,b]); },
@@ -146,4 +147,15 @@ test('a partial staged install compares the profile with requested rather than e
     : run(command, args);
   await installTransaction(f.t, f.io);
   assert.equal(JSON.parse(await readFile(f.t.statePath)).phase, 'installed');
+});
+test('worker rechecks access before closing and before replacement; revocation never swaps the app', async () => {
+  for (const failAt of [1, 2]) {
+    const f = await fixture(() => false); let checks = 0;
+    f.io.authorize = async () => { if (++checks === failAt) throw new Error('Repository access revoked'); };
+    await assert.rejects(installTransaction(f.t, f.io), /revoked/);
+    assert.equal(f.moves.length, 0);
+    if (failAt === 1) assert.equal(f.calls.some(([cmd]) => cmd.endsWith('/quit-app')), false);
+    else assert(f.calls.some(([cmd, args]) => cmd === '/bin/zsh' && args[0].endsWith('/launch.sh')));
+    assert.equal(JSON.parse(await readFile(f.t.statePath)).phase, 'failed');
+  }
 });

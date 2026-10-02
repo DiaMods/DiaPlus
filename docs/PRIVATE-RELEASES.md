@@ -1,0 +1,58 @@
+# Private releases and authenticated updates
+
+Releases belong in **DiaMods/DiaPlus**, a private repository. Read access controls only the updater. GitHub sign-out, expired authorization, organization restrictions or revoked repository access never disable browsing, AI providers or local data. A manually shared installer ZIP works without a GitHub account or repository access. Older clients must run a new manual installer once to acquire this updater protocol and trust anchor.
+
+## Owner setup (explicit owner actions)
+
+1. Create the private `DiaMods/DiaPlus` repository, push this implementation to its default branch, and enable Actions. Grant friends repository **read** access manually; do not grant write access merely to use updates. This implementation does not create repositories, manage members or change permissions.
+2. Register a GitHub App owned by **DiaMods**. Enable device flow and expiring user access tokens. Grant only **Repository permissions → Contents: read-only** (GitHub's mandatory Metadata permission remains implicit). No write or organization-membership permissions are needed. Install it only on `DiaPlus`. Satisfy the organization's app/SSO authorization policies. The App does not grant users repository access: effective access is the intersection of the App and the signing-in user.
+3. Add the App's **client ID**, not its App ID, as repository Actions variable `DIA_PLUS_GITHUB_CLIENT_ID`. Never distribute an App private key, client secret, owner PAT or installation token to clients. [GitHub documents](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens) that refreshing a device-flow user token does not require a client secret.
+4. Generate a dedicated Ed25519 release-signing key outside this checkout. For example, `openssl genpkey -algorithm ED25519 -out /secure/location/dia-plus-release.pem`. Keep an offline backup. Derive the raw public key with Node's `createPublicKey(...).export({format:'der',type:'spki'}).subarray(-32).toString('base64')`; set it as repository variable `DIA_PLUS_RELEASE_PUBLIC_KEY`.
+5. Create a protected Actions environment named `release-signing`, require owner approval, restrict it to the default branch, and place the PEM private key in its secret `DIA_PLUS_RELEASE_SIGNING_KEY`. The signing secret is referenced only by the isolated signing step, never native compilation, dependency installation or test jobs. Treat workflow/source edits as security-sensitive and protect the default branch.
+6. Enable access to GitHub's Apple Silicon **`xcode-27`** runner, including the applicable private-repository runner billing/access policy. The build and isolated installer-QA jobs need macOS/arm64 and Xcode 27 for compilation; recipients need neither Xcode nor Node/npm. Signing and release creation use Ubuntu. Give the final release job Contents write permission; all build/signing/QA jobs have read-only repository permissions.
+
+The checked-in updater configuration intentionally has no client ID or release public key. Release packaging injects those public values. Until configured, in-app updating fails closed and directs users to a manual installer. Changing the signing trust anchor or App client ID requires a new installer engine and a manually installed upgrade; a downloaded bundle cannot silently replace either.
+
+## Release contents and versioning
+
+| Asset | Contents |
+| --- | --- |
+| `DiaPlus-Mods-vX.Y.Z-macOS-arm64.zip` | Complete versioned toolkit, bridge, locked JS dependencies, patchers, file inventory, compatibility metadata and compatible precompiled native helpers; no Node distribution duplication |
+| `release-manifest.json` + `.sig` | Ed25519-signed exact bytes: mod version/tag/commit, protocol, arm64/macOS requirements, separately versioned installer requirements, exact audited official Dia archive/signature, compatibility results and mod/engine hashes |
+| `SHA256SUMS.txt` + `SHA256SUMS.sig` | Ed25519-authenticated transfer checksums, including the full manual installer; the signed manifest remains the in-app update trust anchor |
+| `DiaPlus-vX.Y.Z-macOS-arm64.zip` | Fresh manual installer composed from the stable engine, this release's mod ZIP, signed manifest, signature and instructions |
+| `DiaPlus-Installer-vA.B.C-macOS-arm64.zip` | Separately versioned stable engine, pinned Node runtime and verification code; also retained in its `installer-vA.B.C` release for reuse |
+
+No official/patched Dia browser, Codex executable, credentials, developer profile, research captures or local data enter these assets. The installer verifies its included bundle and obtains official Dia directly from its publisher, using the pinned signature and publisher identity. “Self-contained” means it does not fetch private release assets; the official Dia download may require internet access.
+
+Mod versions use strict `vX.Y.Z` values with `mods-vX.Y.Z` tags. Installer versions live in `src/config/installer-release.json`, independently of mod versions, with `installer-vA.B.C` tags. Keep the engine version unchanged for ordinary mod updates. If engine sources/runtime/trust configuration change, bump the engine version and rebuild it; reuse verifies its inputs match and refuses silent engine changes.
+
+## Owner release button
+
+Open **Actions → Prepare private Dia+ release → Run workflow** on the default branch. Enter a new mod version and select Beta (recommended for testing) or Stable. Select **rebuild_installer** for the first engine release or after an explicit engine-version bump; otherwise the workflow retrieves the existing published engine asset.
+
+The workflow first compares the latest configured official Dia feed with `release-build.json`. Any mismatch blocks release creation until native patches and the exact build have been audited and pinned. Publishing is not a native-compatibility repair mechanism. All required mods must pass; optional unavailable mods are recorded and installers/updaters require confirmation before temporarily omitting configured ones.
+
+Build and test → verify unsigned artifact boundaries/inventories → isolated owner-approved signing and composition → verify the signed manual installer with GitHub credentials removed and compiler access disabled → create new version tags and **draft releases**. Failed validation never creates a mod release. Reusing an existing mod tag/version is rejected. The workflow has no immediate-publish input and does not run on tag pushes.
+
+For a newly rebuilt engine, review and publish its separate engine draft after QA so later builds can retrieve it. Review the mod draft, then **publish it as a private prerelease** for authorized Beta users, or share the manual ZIP directly. Read-only friends cannot see drafts. Beta is opt-in in Updates settings; Stable ignores prereleases. After testing, clear the prerelease flag on that same release to promote the **same tag, manifest and assets** to Stable. Do not rebuild or replace assets during promotion. GitHub membership and publication remain owner actions.
+
+## Client behavior and protections
+
+Only **Updates** contains Sign in with GitHub, the verification link/code, account/access status and Sign out. Passwords stay on GitHub. Sign-in start/poll/status/cancel/sign-out and all updater routes require the existing local administration token. Device codes remain in memory; access/refresh tokens go only through pipes to a bundled native helper and macOS Keychain. Keychain failure has no plaintext fallback. Tokens are never returned through local APIs, stored in profile JSON, passed in subprocess arguments or shared with AI providers.
+
+Checks read the official Dia feed before the authenticated private catalog. Background checks never open a login flow. Missing authentication/access still shows Dia availability but blocks updater actions. Errors distinguish expired/revoked authentication, repository/organization access denial, rate limits, networking and owner configuration. Each user's own expiring access token is refreshed as needed; no owner or installation token bypasses individual permissions.
+
+Stable/Beta ignore drafts. A newer compatible bundle for the installed build offers **Update mods**; an audited bundle for the newer official build offers **Update Dia + mods**. Either path obtains verified official source and rebuilds a staged app. Unsupported Dia builds remain blocked. No downgrade or force quit is used. Signed manifests, hashes, archive boundaries, inventory, publisher signatures and native compatibility are checked before downloaded code runs, and preparations are revalidated before installation. Authorization is checked at check/prepare/install and again in the worker before closing and replacing the app, including cached preparations.
+
+Private assets use authenticated GitHub API URLs. Redirect requests go only to allowed GitHub asset hosts with **no Authorization header**; official Dia requests also receive no GitHub credentials. Trust-anchor changes require a manual installer. Installation confirmation and graceful quit/restart retain mod/provider/profile choices and existing preflight/paired app-profile rollback safeguards. Cancellation preserves the working installation; failed post-swap health checks restore the paired app and profile.
+
+## Testing and rollout
+
+`./dia-custom test` includes device-flow cancellation/expiry/refresh/sign-out races, read-only/nonmember/organization-denied access, rate limits, redaction, redirect credential isolation, channel filtering, separate upgrade kinds, signed-asset/archive tampering, revoked cached access, quit cancellation, profile preservation and rollback fixtures. These are deterministic API fixtures—not a claim that real GitHub accounts have been provisioned or tested.
+
+`node scripts/test-private-release.js /path/to/audited/official/Dia.app` packages, verifies byte-for-byte engine reuse for another mod version, signs with an ephemeral in-memory test key, and installs only into a temporary app/profile with compiler access disabled and GitHub credentials removed. Assets under `.build/releases/v0.0.999` and `v0.0.998` use a **test key and must never be published**. Production signing refuses dirty checkouts; the local QA script explicitly marks test signing. Production build jobs use public configuration only; production signing happens in the protected job. `node scripts/test-github-keychain.js` also exercises native encrypted Keychain add/read/rotation/deletion in a unique test-only namespace without accessing a user's real updater record.
+
+Before owner publication, test actual organization policies with one manually granted read-only account and one nonmember: sign in/out, refresh, Beta/Stable access, revoke read access after preparation, and confirm browser/AI/data keep working while installation is blocked. Confirm Keychain prompts and restart persistence on a recipient Mac. These real-account/Actions checks require owner setup; the local tests do not grant or change anyone's access.
+
+Manual sharing: send the full `DiaPlus-vX.Y.Z-macOS-arm64.zip` plus `SHA256SUMS.txt` and `SHA256SUMS.sig` over your trusted channel. Recipients extract it and open `Install Dia+.command`, review the confirmation, and follow the README. Do not share a bare mod ZIP as the installer. Sign-in is unnecessary unless they later choose to use the in-app updater.

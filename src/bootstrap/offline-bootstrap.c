@@ -1272,7 +1272,7 @@ static const void *dia_custom_mods_table_context_key =
     &dia_custom_mods_table_context_key;
 static id dia_custom_mods_window_close_observer;
 
-@interface DiaCustomModsPaneContext : NSObject {
+@interface DiaCustomModsPaneContext : NSObject <WKUIDelegate> {
 @public
     NSWindow *settingsWindow;
     NSView *contentHost;
@@ -1313,6 +1313,45 @@ static void dia_custom_install_mods_window_close_observer(void) {
 }
 
 @implementation DiaCustomModsPaneContext
+- (void)webView:(WKWebView *)webView
+    runJavaScriptConfirmPanelWithMessage:(NSString *)message
+    initiatedByFrame:(WKFrameInfo *)frame
+    completionHandler:(void (^)(BOOL))completionHandler {
+    WKSecurityOrigin *origin = frame.securityOrigin;
+    BOOL local = [origin.protocol isEqualToString:@"http"] &&
+        ([origin.host isEqualToString:@"127.0.0.1"] ||
+         [origin.host isEqualToString:@"localhost"]) &&
+        origin.port == webView.URL.port.integerValue;
+    if (!local || settingsWindow == nil) {
+        completionHandler(NO);
+        return;
+    }
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Confirm Dia+ action";
+    alert.informativeText = message ?: @"";
+    [alert addButtonWithTitle:@"Continue"];
+    [alert addButtonWithTitle:@"Cancel"];
+    [alert beginSheetModalForWindow:settingsWindow
+        completionHandler:^(NSModalResponse response) {
+        completionHandler(response == NSAlertFirstButtonReturn);
+        [alert release];
+    }];
+}
+- (WKWebView *)webView:(WKWebView *)webView
+    createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration
+    forNavigationAction:(WKNavigationAction *)navigationAction
+    windowFeatures:(WKWindowFeatures *)windowFeatures {
+    (void)webView; (void)configuration; (void)windowFeatures;
+    NSURL *url = navigationAction.request.URL;
+    // Only an explicit click on the fixed public device-authorization page can
+    // leave Settings. Never navigate this privileged WebView to GitHub/login.
+    if (navigationAction.navigationType == WKNavigationTypeLinkActivated &&
+        navigationAction.targetFrame == nil &&
+        [url.absoluteString isEqualToString:@"https://github.com/login/device"]) {
+        [NSWorkspace.sharedWorkspace openURL:url];
+    }
+    return nil;
+}
 - (void)dealloc {
     if (nativeTable != nil &&
         objc_getAssociatedObject(nativeTable,
@@ -1324,6 +1363,7 @@ static void dia_custom_install_mods_window_close_observer(void) {
     }
     [contentHost release];
     [nativeTable release];
+    contentView.UIDelegate = nil;
     [contentView release];
     [previousWindowTitle release];
     [toolbarTitle release];
@@ -1553,6 +1593,7 @@ static void dia_custom_show_mods_pane(
         context->contentView.autoresizingMask =
             NSViewWidthSizable | NSViewHeightSizable;
         context->contentView.accessibilityLabel = @"Dia Mods";
+        context->contentView.UIDelegate = context;
         [context->contentHost addSubview:context->contentView
                               positioned:NSWindowAbove
                               relativeTo:nil];
