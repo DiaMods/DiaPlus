@@ -12,6 +12,8 @@ struct OCRCompatibilityTests {
         precondition(isOCRReaderCompatibilityError(NSError(domain: "Vision", code: 1,
             userInfo: [NSUnderlyingErrorKey: readerError])))
         precondition(!isOCRReaderCompatibilityError(unrelated))
+        let nilNSError = NSError(domain: "Foundation._GenericObjCError", code: 0)
+        precondition(isOCRReaderCompatibilityError(nilNSError))
 
         var calls = 0
         let primary = try recognizeTextWithCompatibilityFallback { request in
@@ -42,7 +44,8 @@ struct OCRCompatibilityTests {
         calls = 0
         let fast = try recognizeTextWithCompatibilityFallback { request in
             calls += 1
-            if request.recognitionLevel == .accurate { throw readerError }
+            if request.recognitionLevel == .accurate { throw nilNSError }
+            precondition(request.usesCPUOnly)
         }
         precondition(calls > 2 && fast.compatibility && fast.request.recognitionLevel == .fast)
 
@@ -66,10 +69,22 @@ struct OCRCompatibilityTests {
         let realFallback = try recognizeTextWithCompatibilityFallback { request in
             calls += 1
             if calls == 1 { throw readerError }
-            try handler.perform([request])
+            do { try handler.perform([request]) }
+            catch {
+                let failure = error as NSError
+                // Fixture-only diagnostics contain no user document data.
+                print("OCR revision \(request.revision), fast=\(request.recognitionLevel == .fast), CPU=\(request.usesCPUOnly): \(failure.domain)/\(failure.code)")
+                throw error
+            }
         }
         let text = (realFallback.request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
         precondition(realFallback.compatibility && text.contains("MEDIA FIXTURE"), "Fallback must recognize real fixture text")
+        let cpuFallback = try recognizeTextWithCompatibilityFallback { request in
+            if request.recognitionLevel == .accurate { throw readerError }
+            try handler.perform([request])
+        }
+        let cpuText = (cpuFallback.request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+        precondition(cpuFallback.compatibility && cpuText.contains("MEDIA FIXTURE"), "CPU fallback must recognize real fixture text")
         print("OCR primary, specific-error fallback, fast/legacy fallback and failure propagation passed")
     }
 }

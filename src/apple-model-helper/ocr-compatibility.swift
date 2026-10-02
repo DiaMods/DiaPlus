@@ -2,11 +2,13 @@ import Foundation
 import Vision
 
 // Some macOS preview/hosted images cannot initialize the automatic-language
-// recognizer. Retry only that precise native failure, never arbitrary OCR errors.
+// recognizer. Retry the native reader error and its preview-runtime nil-NSError
+// variant, never arbitrary OCR errors.
 func isOCRReaderCompatibilityError(_ error: Error) -> Bool {
     var current = error as NSError
     for _ in 0..<8 {
         if current.domain == "TextRecognition.CRImageReaderError", current.code == 9 { return true }
+        if current.domain == "Foundation._GenericObjCError", current.code == 0 { return true }
         guard let underlying = current.userInfo[NSUnderlyingErrorKey] as? NSError else { return false }
         current = underlying
     }
@@ -33,6 +35,10 @@ func recognizeTextWithCompatibilityFallback(
                 request.revision = revision
                 request.recognitionLevel = level
                 request.automaticallyDetectsLanguage = false
+                // Fast recognition has a CPU-backed path for hosted Macs that
+                // cannot initialize the accelerated recognizer. Older revisions
+                // retain this compatibility property despite its deprecation.
+                if level == .fast { request.usesCPUOnly = true }
                 // Query each revision/level; do not assume they support the same languages.
                 // Preview runtimes can fail this capability query without an
                 // NSError (Swift nilError), including on supported revisions.
