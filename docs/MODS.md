@@ -21,6 +21,10 @@
 | `live-connectors` | `connectors/registry.js`, native state observation, OAuth/MCP APIs | PKCE, one-use state, allowlist, discovery, execution, and secret-store tests |
 | `morning-brief` | native Morning Brief feature gates/scheduler callback, `apps-state.js` | Profile exclusivity, daily idempotency, catch-up, and retry-state tests |
 | `apple-models` | Swift helper and Apple provider adapter | Helper build/status/structured tool fixtures |
+| `browser-use-tasks` | Research reference: native Browser Use & Tasks UI | Not a usable mod; default-off, activation blocked |
+| `workspaces-spaces` | Research reference: native workspace/Spaces gates | Not a usable mod; default-off, activation blocked |
+| `chat-controls` | Research reference: reasoning/personalization gates | Not a usable mod; default-off, activation blocked |
+| `split-view-refinements` | Research reference: split toolbar/hover/drag gates | Not a usable mod; default-off, activation blocked |
 
 ## Commands
 
@@ -43,5 +47,11 @@ Runtime and bridge mods take effect after restarting Dia Custom. Build mods must
 5. Audit any unavailable Mod independently. It reactivates automatically when a later Dia build passes its validator.
 
 This makes incompatibility explicit. A failed Report audit, for example, does not imply that Memory or the model picker needs to be rewritten.
+
+## Research-only reference placeholders
+
+As of October 6, 2026, these four entries are parked research references, **not real, usable mods**. They preserve information and isolated investigation tools in case we explicitly choose to develop these features later; they are not an active implementation roadmap or a promise of future support. `researchOnly: true` records this intent. The existing `availability: pending-audit` gate keeps them inactive and disables their toggles with an explicit reason; both the CLI and local Mods API reject activation. Stale saved preferences and forced bridge environment selections do not bypass that gate. Registering a flag is not evidence that its implementation works. These references do not re-enable Dia cloud services or change Codex's own browser-use feature settings.
+
+All four groups were investigated independently in disposable profiles, with flags-off comparisons. Run `node research/tools/audit-browser-use-tasks.js /path/to/official/Dia.app` for reproducible static evidence: publisher verification, native flag/surface strings, source identity hashes and the shipped `browser_use` tool's sandbox contract. Build 87864 includes the native task access/execution types, but its old Home extension is only a compatibility stub with no entry point; do not try to restore that removed extension. This report deliberately sets `runtimeVerified` and `activationApproved` to false. If development resumes, native UI, local-provider dispatch, sandbox restrictions, confirmations, cancellation, disable/restart behavior and rollback must pass isolated testing before a mod becomes activatable. See `research/NATIVE-FEATURES-87864.md` for observed behavior and remaining failures. No release publication or live installation is implied by retaining this research.
 
 `dia-import` repurposes Dia's bundled Arc importer as an official-Dia source. A guarded binary patch points that importer at an owner-only sanitized staging directory; a runtime hook supplies the Dia name and app icon. The staging builder retains browser profiles, bookmarks, history, favicons, extensions, and local tab/group data while excluding account state, cookies, passwords, sessions, chats, Memory, Reports, extension site data, and Keychain material. The native import view and callbacks remain Dia's.

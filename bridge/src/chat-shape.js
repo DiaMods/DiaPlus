@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { basename, dirname, resolve } from "node:path";
+import { nativeFeatureToolAllowed } from './native-feature-tools.js';
 
 const diaOwnedProductKnowledgeTools = new Set([
   "fetch_dia_product_knowledge",
@@ -16,7 +17,7 @@ export function normalizeAnthropicTools(payload, { includeBlocked = false } = {}
   if (!Array.isArray(payload?.tools)) return [];
   return payload.tools
     .filter((tool) => typeof tool?.name === "string")
-    .filter((tool) => includeBlocked || !isDiaOwnedProductKnowledgeTool(tool.name))
+    .filter((tool) => includeBlocked || (!isDiaOwnedProductKnowledgeTool(tool.name) && nativeFeatureToolAllowed(tool.name)))
     .map((tool) => ({
       name: tool.name,
       description: typeof tool.description === "string" ? tool.description : "",
@@ -70,7 +71,7 @@ export function deferredAnthropicTools(payload) {
         name,
         description: "Schema is loaded on demand by Dia's native ToolSearch harness.",
         input_schema: { type: "object", properties: {} },
-        source: isDiaOwnedProductKnowledgeTool(name) ? "blocked" : "deferred",
+        source: isDiaOwnedProductKnowledgeTool(name) || !nativeFeatureToolAllowed(name) ? "blocked" : "deferred",
       });
     }
   }

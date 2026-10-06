@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { currentAgentContextID } from "./artifact-safety.js";
+import { nativeFeatureToolAllowed } from './native-feature-tools.js';
 import {
   normalizeAnthropicTools,
   appendToolResults,
@@ -1201,6 +1202,7 @@ export class ProviderManager {
     for (const tool of observedNativeTools) observedForCoverage.set(tool.name, tool);
     const nativeTools = (readOnlyLocalOnly ? [] : observedNativeTools).filter((tool) =>
       !isDiaOwnedProductKnowledgeTool(tool.name) &&
+      nativeFeatureToolAllowed(tool.name) &&
       (modEnabled("reports") || !isReportUploadTool(tool.name)));
     const toolSearch = readOnlyLocalOnly ? null : nativeToolSearchTool(payload);
     if (toolSearch && !nativeTools.some((tool) => tool.name === toolSearch.name)) {

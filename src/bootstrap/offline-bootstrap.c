@@ -35,6 +35,7 @@ extern char *dia_custom_swift_native_apps_selected_profile_id(
 extern int32_t dia_custom_swift_native_apps_morning_brief_state(
     const void *object);
 extern BOOL dia_custom_swift_invoke_native_apps_enable(const void *view);
+extern BOOL dia_custom_swift_toolbar_uses_response_commands(const void *toolbar);
 extern BOOL dia_custom_swift_invoke_morning_brief(
     const void *applicationController, const void *platformWindow, const void *implementation);
 extern void dia_custom_call_swift_void_method(const void *implementation, const void *object);
@@ -353,7 +354,8 @@ static NSString *dia_custom_resolved_startup_mods(NSString *state,
         BOOL selected = [mod[@"required"] boolValue] ||
             (override != nil ? override.boolValue
                              : ![mod[@"defaultEnabled"] isEqual:@NO]);
-        if (selected && ![unavailable containsObject:identifier]) {
+        if (selected && ![mod[@"availability"] isEqual:@"pending-audit"] &&
+            ![unavailable containsObject:identifier]) {
             [enabled addObject:identifier];
         }
     }
@@ -2975,6 +2977,19 @@ static void dia_custom_position_model_picker(id toolbar,
     }
 }
 
+static void dia_custom_update_model_picker_visibility(id toolbar,
+                                                       NSPopUpButton *popup) {
+    // Fast/Stop uses a separate response-command group. Dia collapses the
+    // standard toolbar in that state; forcing our extra arranged subview
+    // visible puts it at the composer's origin, over the placeholder.
+    // Swift fields have empty Objective-C type encodings in build 87864.
+    // Use typed, read-only reflection rather than guessing storage offsets.
+    BOOL responseCommands = dia_custom_swift_toolbar_uses_response_commands(
+        (__bridge const void *)toolbar);
+    [popup setHidden:responseCommands];
+    [popup setAlphaValue:responseCommands ? 0.0 : 1.0];
+}
+
 static void dia_custom_install_custom_model_picker(id target, SEL action) {
     if (!dia_custom_mod_enabled("model-picker") || target == nil) {
         return;
@@ -3010,8 +3025,7 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
                     dia_custom_populate_model_popup(installedPopup);
                 }
                 dia_custom_position_model_picker(toolbar, stack, installedPopup);
-                [installedPopup setHidden:NO];
-                [installedPopup setAlphaValue:1.0];
+                dia_custom_update_model_picker_visibility(toolbar, installedPopup);
                 continue;
             }
             NSPopUpButton *popup = [[NSPopUpButton alloc]
@@ -3044,7 +3058,7 @@ static void dia_custom_install_custom_model_picker(id target, SEL action) {
             [[window contentView] layoutSubtreeIfNeeded];
             dispatch_async(dispatch_get_main_queue(), ^{
                 [[window contentView] layoutSubtreeIfNeeded];
-                [popup setAlphaValue:1.0];
+                dia_custom_update_model_picker_visibility(toolbar, popup);
             });
             dia_custom_log_status(@"model-picker-installed");
         }

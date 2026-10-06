@@ -139,6 +139,21 @@ private func unwrappedValue(_ value: Any) -> Any? {
     return value
 }
 
+@_cdecl("dia_custom_swift_toolbar_uses_response_commands")
+public func toolbarUsesResponseCommands(_ pointer: UnsafeRawPointer?) -> Bool {
+    guard let pointer else { return false }
+    let toolbar = Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue()
+    if directReflectedValue(in: toolbar, named: "configuredUsesResponseCommandGroup") as? Bool == true {
+        return true
+    }
+    // Compact layouts use Stop directly, without the command-group Boolean.
+    guard let rawStop = directReflectedValue(in: toolbar, named: "stopButton"),
+          let stop = unwrappedValue(rawStop) as? NSView,
+          let rawPrimary = directReflectedValue(in: toolbar, named: "activePrimaryCTA"),
+          let primary = unwrappedValue(rawPrimary) as? NSView else { return false }
+    return stop === primary
+}
+
 private func nativeWindowControllers(in value: Any, depth: Int = 0) -> [AnyObject] {
     guard depth < 6, let value = unwrappedValue(value) else { return [] }
     if String(reflecting: Swift.type(of: value)) == "Window.WindowController" {

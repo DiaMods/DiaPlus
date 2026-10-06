@@ -81,8 +81,8 @@ function resolveMods(mods, state) {
         : mod.defaultEnabled !== false);
     return {
       ...mod,
-      enabled,
-      source: mod.required
+      enabled: mod.availability === "pending-audit" ? false : enabled,
+      source: mod.availability === "pending-audit" ? "pending-audit" : mod.required
         ? "required"
         : environment
           ? "environment"
@@ -162,6 +162,9 @@ if (["enable", "disable"].includes(command)) {
   const id = positional[0];
   const mod = byID.get(id);
   if (!mod) throw new Error(`unknown Dia Mod: ${id ?? "<missing>"}`);
+  if (command === "enable" && mod.availability === "pending-audit") {
+    throw new Error(`${mod.label}: ${mod.availabilityReason ?? "Native feature audit is pending"}`);
+  }
   if (command === "disable" && mod.required) {
     throw new Error(`${id} is a required safety/core mod and cannot be disabled`);
   }

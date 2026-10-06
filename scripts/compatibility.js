@@ -60,7 +60,7 @@ function containsEvery(buffer, values) {
   return values.every((value) => buffer.includes(Buffer.from(value)));
 }
 
-async function validate(name, app, context) {
+async function validate(name, app, context, mod) {
   const { executable, handler, schema } = context;
   switch (name) {
     case "app-bundle":
@@ -154,6 +154,8 @@ async function validate(name, app, context) {
     case "bridge-owned":
     case "apple-helper":
       return { compatible: true };
+    case "native-feature-experiment":
+      return { compatible: false, reason: mod.availabilityReason ?? "Native feature audit is pending" };
     default:
       return { compatible: false, reason: `unknown compatibility validator ${name}` };
   }
@@ -192,7 +194,7 @@ for (const mod of manifest.mods.filter((candidate) => requested.has(candidate.id
   // A build number is metadata, not proof that this candidate still contains
   // the audited code. Always validate the actual downloaded/staged content.
   const outcome = {
-    ...(await validate(mod.compatibilityValidator, app, context)),
+    ...(await validate(mod.compatibilityValidator, app, context, mod)),
     source: audited ? "audited-build-and-structural-validator" : "structural-validator",
   };
   perMod.push({

@@ -83,14 +83,16 @@ export class ModConfigStore {
         ? configuredEnabled
         : this.activeModIDs.has(mod.id);
       const modCompatibility = compatibilityByID.get(mod.id);
-      const unavailable = modCompatibility?.compatible === false;
+      const auditPending = mod.availability === "pending-audit";
+      const unavailable = auditPending || modCompatibility?.compatible === false;
       return {
         ...mod,
         configuredEnabled,
-        active,
+        active: !auditPending && active,
         pending: !unavailable && active !== configuredEnabled,
         unavailable,
-        compatibilityReason: unavailable ? modCompatibility.reason ?? "Incompatible with this Dia build" : null,
+        compatibilityReason: auditPending ? mod.availabilityReason ?? "Native feature audit is pending" :
+          unavailable ? modCompatibility.reason ?? "Incompatible with this Dia build" : null,
         source: mod.required ? "required" :
           typeof override === "boolean" ? "profile" : "default",
         apply: mod.rebuildOnChange ? "rebuild" : "restart",
@@ -124,6 +126,9 @@ export class ModConfigStore {
     const manifest = await this.loadManifest();
     const mod = manifest.mods.find((candidate) => candidate.id === id);
     if (!mod) throw new Error(`unknown Dia Mod: ${id}`);
+    if (enabled && mod.availability === "pending-audit") {
+      throw new Error(`${mod.label}: ${mod.availabilityReason ?? "Native feature audit is pending"}`);
+    }
     if (mod.required && !enabled) {
       throw new Error(`${id} is a required safety/core mod and cannot be disabled`);
     }

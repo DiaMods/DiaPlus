@@ -3,6 +3,7 @@ import { basename, dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { contentAsText, systemAsText } from "./chat-shape.js";
 import { assertPublicWebURL } from "./local-tools/web.js";
+import { nativeFeatureToolAllowed } from './native-feature-tools.js';
 
 const contextIDPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const artifactFolderPattern = /^[a-z0-9][a-z0-9._-]{0,199}$/i;
@@ -380,6 +381,10 @@ export async function authorizeNativeToolCalls(toolCalls, profileDirectory, opti
   const allowed = [];
   const blocked = [];
   for (const call of toolCalls ?? []) {
+    if (!nativeFeatureToolAllowed(call?.name)) {
+      blocked.push({ call, reason: 'Browser Use & Tasks UI is disabled or awaiting its native audit' });
+      continue;
+    }
     const authorization = await authorizeArtifactUpload(call, profileDirectory, options);
     if (authorization.allowed) allowed.push(call);
     else blocked.push({ call, reason: authorization.reason });
