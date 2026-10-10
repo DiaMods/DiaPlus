@@ -254,6 +254,11 @@ export function renderSettingsPage(adminToken) {
   <h2 id="local-memory">Local memory</h2>
   <div class="muted">Browsing, chat evidence, and derived Memories stay in an owner-only SQLite database on this Mac. The selected model derives durable context; semantic matching uses Apple's on-device sentence embeddings when available. Nothing is sent to Dia.</div>
   <div class="card">
+    <div class="row"><label><input id="memoryEnabled" type="checkbox" role="switch" disabled> Enable local Memory</label></div>
+    <p class="muted">Disabling stops Memory recall, activity import, chat capture and model-based derivation without deleting saved entries. These controls do not require Dia's native Memory settings pane.</p>
+    <div class="row" style="margin:14px 0"><label for="memoryRetention">Default activity retention (days)</label><input id="memoryRetention" type="number" min="1" max="3650" disabled><button id="saveMemoryRetention" class="secondary" disabled>Save retention</button></div>
+    <p class="muted">Existing per-profile retention overrides are preserved. Saving applies retention immediately and may delete older activity.</p>
+    <div id="memoryControlsStatus" class="muted" role="status" style="margin:10px 0"></div>
     <div id="memoryStats" class="memory-grid"></div>
     <div class="actions">
       <button id="exportMemory" class="secondary">Export JSON</button>
@@ -548,6 +553,7 @@ export function renderSettingsPage(adminToken) {
           });
           label.append(select); wrapper.append(title, label, feedback); providerList.append(wrapper);
         }
+        await memoryControls.refresh();
       } catch (error) {
         status.textContent = error.message;
         status.className = 'error';
@@ -685,6 +691,7 @@ export function renderSettingsPage(adminToken) {
       });
     }
     (${initializeUpdaterSettings.toString()})({ document, request });
+    const memoryControls = (${initializeMemorySettings.toString()})({ document, request, onChange: () => load() });
     (${initializeMediaSettings.toString()})({ document, request });
     (${initializeSettingsNavigation.toString()})({ document, window });
     const profiles = (${initializeProfileSettings.toString()})({ document, request, window });
@@ -700,6 +707,63 @@ export function renderSettingsPage(adminToken) {
 }
 
 // These controllers are embedded in the page; keep them self-contained.
+export function initializeMemorySettings({ document, request, onChange = async () => {}, confirmRetention = message => globalThis.confirm(message) }) {
+  const enabled = document.querySelector('#memoryEnabled');
+  const retention = document.querySelector('#memoryRetention');
+  const save = document.querySelector('#saveMemoryRetention');
+  const status = document.querySelector('#memoryControlsStatus');
+  let state = null;
+  let busy = false;
+  function render() {
+    enabled.checked = state?.enabled === true;
+    retention.value = state ? String(state.retentionDays) : '';
+    for (const control of [enabled, retention, save]) control.disabled = busy || state?.modEnabled !== true;
+  }
+  async function refresh() {
+    if (busy) return;
+    busy = true; render();
+    try {
+      state = await request('/api/memory/enabled');
+      status.textContent = state.modEnabled === true
+        ? (state.enabled ? 'Local Memory is enabled.' : 'Local Memory is paused; saved entries are retained.')
+        : 'Enable the Local Memory mod and restart Dia+ to use these controls.';
+      status.className = 'muted';
+    } catch (error) {
+      state = null;
+      status.textContent = error.message;
+      status.className = 'error';
+    } finally { busy = false; render(); }
+  }
+  async function mutate(path, body, retentionChange = false) {
+    if (busy || state?.modEnabled !== true) { render(); return; }
+    busy = true;
+    for (const control of [enabled, retention, save]) control.disabled = true;
+    let succeeded = false;
+    try {
+      const result = await request(path, { method: 'PUT', body: JSON.stringify(body) });
+      state = { ...state, ...(retentionChange ? result.localMemory : result) };
+      status.textContent = retentionChange ? 'Retention saved and applied.'
+        : state.enabled ? 'Local Memory is enabled.' : 'Local Memory is paused; saved entries are retained.';
+      status.className = 'muted';
+      succeeded = true;
+    } catch (error) { status.textContent = error.message; status.className = 'error'; }
+    finally { busy = false; render(); }
+    if (succeeded) await onChange();
+  }
+  enabled.addEventListener('change', () => mutate('/api/memory/enabled', { enabled: enabled.checked }));
+  save.addEventListener('click', async () => {
+    if (busy || state?.modEnabled !== true) return;
+    const days = Number(retention.value);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) {
+      status.textContent = 'Enter a whole number of days from 1 to 3650.'; status.className = 'error'; return;
+    }
+    if (!confirmRetention('Apply this retention period now? Older activity may be permanently deleted. Per-profile overrides will be kept.')) return;
+    await mutate('/api/memory/retention', { retentionDays: days }, true);
+  });
+  render();
+  return { refresh };
+}
+
 export function initializeSettingsNavigation({ document, window }) {
   const tabs = [...document.querySelectorAll('[data-settings-tab]')];
   const panels = [...document.querySelectorAll('[role="tabpanel"]')];

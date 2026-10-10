@@ -739,7 +739,9 @@ export class ProviderManager {
         config.localMemory.enabled && config.localMemory.importBrowserHistory) {
       this.historyImportTimer = setTimeout(() => {
         this.historyImportTimer = null;
-        this.historyImportPromise = this.refreshLocalMemory(config)
+        // Read the current privacy choice, not the startup snapshot: settings
+        // may have paused Memory before this delayed import begins.
+        this.historyImportPromise = this.configStore.load().then(current => this.refreshLocalMemory(current))
           .then((count) => {
             if (count > 0) {
               process.stdout.write(`Imported ${count} local browsing history entries\n`);
@@ -895,7 +897,8 @@ export class ProviderManager {
         const profileID = this.memoryDerivationProfiles.values().next().value;
         this.memoryDerivationProfiles.delete(profileID);
         const { config, provider, model } = await this.selectedProvider();
-        if (!config.localMemory.enabled || !config.localMemory.deriveMemories) continue;
+        if (!modEnabled("native-memory") ||
+            !config.localMemory.enabled || !config.localMemory.deriveMemories) continue;
         const apiKey = provider.type === "openai-compatible"
           ? await this.credentialStore.get(provider)
           : null;

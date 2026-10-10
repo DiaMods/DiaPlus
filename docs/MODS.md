@@ -13,7 +13,7 @@
 | `model-picker` | native bootstrap model catalog/toolbar functions | Runtime-discovered toolbar plus View-menu fallback |
 | `developer-tools` | native bootstrap, local routing/tool pages, browser inspector | Native inspector is webpage-only; local diagnostics fail closed |
 | `mod-manager` | native Settings sidebar/content view, authenticated Mods API | Optional mods can be toggled; required safety/core mods remain locked |
-| `native-memory` | native Memory reflection shim, `memory.js`, `provider-manager.js` | Memory derivation/profile/privacy/migration tests |
+| `native-memory` (Local Memory) | bridge-owned `memory.js`, `provider-manager.js`, local settings; optional native reflection shim | Core remains compatible without a native pane; history/capture/derivation/recall, pause, profile/privacy/migration tests |
 | `reports` | Report controller/uploader patches, `chat-shape.js`, `artifact-safety.js` | Structural patch checks and staged Report test suite |
 | `local-web` | `local-tools/web.js`, `network-policy.js` | Public/private/Dia destination and parsing tests |
 | `connectors` | `local-tools/connectors.js`, shared Memory index | Entry-type boundary and connector import/search tests |
@@ -47,6 +47,14 @@ Runtime and bridge mods take effect after restarting Dia Custom. Build mods must
 5. Audit any unavailable Mod independently. It reactivates automatically when a later Dia build passes its validator.
 
 This makes incompatibility explicit. A failed Report audit, for example, does not imply that Memory or the model picker needs to be rewritten.
+
+## Local Memory without native settings
+
+The legacy `native-memory` ID is deliberately retained so existing enabled/disabled overrides and stored data carry forward unchanged. The mod is now labeled **Local Memory** and its compatibility validator checks the bridge-owned capability independently of Dia's native settings pane. Removing that pane (as in Dia 1.53 build 88564) no longer excludes Memory from the updater's effective mod set. `nativeSettingsDetected` is informational, not native ABI approval.
+
+Use **Dia+ settings → Memory** to enable/pause Memory or change the default activity retention. Pausing stops automatic recall, history import, chat capture and new derivation without deleting saved entries. Enabling does not bypass a disabled mod: enable Local Memory under Mods and restart first. Existing per-profile retention overrides remain intact; changing retention requires confirmation because it immediately prunes older activity. The selected provider receives filtered evidence when deriving Memories, under that provider's own privacy boundary; this does not contact Dia's Memory service.
+
+On older builds, a visible native Memory pane remains an optional control mirror with guarded reflected state. If no matching pane is present, the bootstrap does not fetch or apply native Memory state. Its absence or rejected state layout never disables the local engine. This change does not restore Dia's removed pane or enable hosted Dia Memory.
 
 ## Research-only reference placeholders
 

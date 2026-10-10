@@ -150,7 +150,7 @@
     },
     {
       "id": "native-memory",
-      "label": "Local native Memory",
+      "label": "Local Memory",
       "scope": [
         "runtime",
         "bridge"
@@ -158,9 +158,9 @@
       "defaultEnabled": true,
       "required": false,
       "criticality": "optional",
-      "compatibilityValidator": "native-memory",
+      "compatibilityValidator": "local-memory",
       "rebuildOnChange": false,
-      "description": "Redirects Dia's native Memory settings and recall behavior to the local profile-aware memory store."
+      "description": "Provides profile-aware local Memory, history import, chat capture and recall. Manage it in Dia+ settings; mirrors Dia's native Memory controls only when that pane exists."
     },
     {
       "id": "reports",

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
@@ -65,4 +65,26 @@ test("Dia Mods read legacy module overrides until new state is saved", async () 
   await store.setEnabled("feature", true);
   const saved = JSON.parse(await readFile(statePath, "utf8"));
   assert.equal(saved.overrides.feature, true);
+});
+
+test("Local Memory keeps its legacy ID and enabled/disabled preference without a native pane", async t => {
+  const root = await mkdtemp(resolve(tmpdir(), 'dia-memory-preferences-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const manifestPath = new URL('../config/dia-mods.json', import.meta.url);
+  const memoryMod = JSON.parse(await readFile(manifestPath)).mods.find(mod => mod.id === 'native-memory');
+  assert.equal(memoryMod.compatibilityValidator, 'local-memory');
+  const statePath = resolve(root, 'mods.json');
+  const legacyStatePath = resolve(root, 'modules.json');
+  const compatibilityPath = resolve(root, 'compatibility.json');
+  await writeFile(compatibilityPath, JSON.stringify({ build: '88564', perMod: [{ id: 'native-memory', compatible: true, nativeSettingsDetected: false }] }));
+  for (const enabled of [true, false]) {
+    await writeFile(legacyStatePath, JSON.stringify({ version: 1, overrides: { 'native-memory': enabled } }));
+    const store = new ModConfigStore({ manifestPath, statePath, legacyStatePath, compatibilityPath, activeModIDs: enabled ? ['native-memory'] : [] });
+    const mod = (await store.publicState()).mods.find(mod => mod.id === 'native-memory');
+    assert.equal(mod.configuredEnabled, enabled);
+    assert.equal(mod.active, enabled);
+    assert.equal(mod.unavailable, false);
+    assert.equal(mod.pending, false);
+    assert.equal((await store.publicState()).unavailableMods.includes('native-memory'), false);
+  }
 });

@@ -176,6 +176,39 @@ try {
   }
   process.stdout.write("ok    audited build metadata cannot bypass a changed native Morning Brief ABI\n");
 
+  // Memory's legacy ID/settings survive removal of an optional native pane.
+  // Its bridge engine must stay selectable even when no pane strings exist.
+  const memoryBytes = Buffer.from(patched);
+  const paneMarker = Buffer.from("MemoryPreferencePane");
+  for (let offset = memoryBytes.indexOf(paneMarker); offset >= 0;
+       offset = memoryBytes.indexOf(paneMarker, offset + paneMarker.length)) {
+    memoryBytes.fill(0x78, offset, offset + paneMarker.length);
+  }
+  await writeFile(patchedPath, memoryBytes);
+  const memoryReport = JSON.parse(execFileSync(process.execPath, [
+    join(scriptDirectory, "compatibility.js"), fixtureApp,
+    "--mods", "native-memory", "--json",
+  ], { encoding: "utf8" }));
+  assert.equal(memoryReport.compatible, true);
+  assert.deepEqual(memoryReport.effectiveMods, ["native-memory"]);
+  assert.equal(memoryReport.perMod[0].nativeSettingsDetected, false);
+  if (registry.builds[sourceBuild]?.mods.includes("native-memory")) {
+    const memoryCheck = JSON.parse(execFileSync(process.execPath, [
+      join(scriptDirectory, "check-dia-build.js"), fixtureApp,
+      "--mods", "native-memory", "--json",
+    ], { encoding: "utf8" }));
+    assert.equal(memoryCheck.status, "audited");
+  }
+  await writeFile(patchedPath, Buffer.concat([memoryBytes, paneMarker]));
+  const withPane = JSON.parse(execFileSync(process.execPath, [
+    join(scriptDirectory, "compatibility.js"), fixtureApp,
+    "--mods", "native-memory", "--json",
+  ], { encoding: "utf8" }));
+  assert.equal(withPane.compatible, true);
+  assert.equal(withPane.perMod[0].nativeSettingsDetected, true);
+  await writeFile(patchedPath, patched);
+  process.stdout.write("ok    local Memory stays compatible with or without the optional native settings pane\n");
+
   const appearance = JSON.parse(execFileSync(process.execPath, [
     join(scriptDirectory, "../src/bootstrap/check-new-tab-state.js"), join(sourceContents, "MacOS/Dia"),
   ], { encoding: "utf8" }));

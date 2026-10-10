@@ -117,10 +117,14 @@ async function validate(name, app, context, mod) {
       return executable.includes(Buffer.from("Preferences"))
         ? { compatible: true }
         : { compatible: false, reason: "native Settings host changed" };
-    case "native-memory":
-      return executable.includes(Buffer.from("MemoryPreferencePane"))
-        ? { compatible: true }
-        : { compatible: false, reason: "native Memory pane layout changed" };
+    case "local-memory":
+      // The existing ID/preferences belong to the bridge-owned Memory engine.
+      // Native settings are an optional mirror, never a requirement for recall,
+      // capture, history import or the authenticated local settings controls.
+      // Detection is not ABI approval: the runtime still validates reflected
+      // native state before publishing it when a matching pane is present.
+      return { compatible: true,
+        nativeSettingsDetected: executable.includes(Buffer.from("MemoryPreferencePane")) };
     case "native-apps":
       return containsEvery(executable, ["AppsPreferencePaneView", "onEnableMorningBriefTapped"])
         ? runNodeCheck("src/bootstrap/check-new-tab-state.js", [resolve(app, "Contents/MacOS/Dia")])

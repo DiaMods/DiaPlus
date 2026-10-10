@@ -749,6 +749,7 @@ async function handleRequest(request, response) {
     const config = await providerManager.configStore.load();
     jsonResponse(response, 200, {
       ...config.localMemory,
+      modEnabled: modEnabled("native-memory"),
       stats: await providerManager.memoryStore.stats(),
     });
     return;

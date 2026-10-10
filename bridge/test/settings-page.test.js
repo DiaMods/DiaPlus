@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { initializeConnectorSettings, initializeProfileSettings, initializeSettingsNavigation, initializeUpdaterSettings, renderModsPage, renderSettingsPage } from "../src/settings-page.js";
+import { initializeConnectorSettings, initializeMemorySettings, initializeProfileSettings, initializeSettingsNavigation, initializeUpdaterSettings, renderModsPage, renderSettingsPage } from "../src/settings-page.js";
 
 test("local settings page keeps provider, memory, connector, and tool controls parseable", () => {
   const html = renderSettingsPage("local-test-token");
@@ -116,6 +116,63 @@ class Element {
   reportValidity() { return true; }
   all() { return [this, ...this.children.flatMap((item) => item.all())]; }
 }
+
+test("Memory settings work without the native pane, preserve pause state and confirm retention", async () => {
+  const html = renderSettingsPage("test-token");
+  assert.match(html, /do not require Dia's native Memory settings pane/);
+  const fields = new Map(['memoryEnabled', 'memoryRetention', 'saveMemoryRetention', 'memoryControlsStatus'].map(id => [id, new Element()]));
+  const field = id => fields.get(id);
+  const document = { querySelector: selector => field(selector.slice(1)) };
+  let state = { modEnabled: true, enabled: false, retentionDays: 7, profileRetentionDays: { Work: 30 } };
+  let failure = null, confirm = false, changes = 0;
+  const requests = [];
+  const request = async (path, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    requests.push({ path, method: options.method ?? 'GET', body });
+    if (failure) throw new Error(failure);
+    if (options.method === 'PUT') state = { ...state, ...body };
+    return path.endsWith('/retention') ? { localMemory: { ...state } } : { ...state };
+  };
+  const ui = initializeMemorySettings({ document, request, confirmRetention: () => confirm, onChange: async () => { changes++; } });
+  assert.equal(field('memoryEnabled').disabled, true);
+  await ui.refresh();
+  assert.equal(field('memoryEnabled').checked, false);
+  assert.equal(field('memoryEnabled').disabled, false);
+  assert.equal(requests.filter(r => r.method === 'PUT').length, 0, 'opening settings must not enable Memory');
+  field('memoryEnabled').checked = true;
+  await field('memoryEnabled').fire('change');
+  assert.equal(state.enabled, true);
+  assert.equal(changes, 1);
+  failure = 'Save failed';
+  field('memoryEnabled').checked = false;
+  await field('memoryEnabled').fire('change');
+  assert.equal(field('memoryEnabled').checked, true, 'a failed pause restores actual state');
+  assert.match(field('memoryControlsStatus').textContent, /Save failed/);
+  failure = null;
+  field('memoryRetention').value = '14';
+  const before = requests.length;
+  await field('saveMemoryRetention').fire('click');
+  assert.equal(requests.length, before, 'cancelled retention does not mutate data');
+  confirm = true;
+  field('memoryRetention').value = '0';
+  await field('saveMemoryRetention').fire('click');
+  assert.equal(requests.length, before, 'invalid default retention is rejected locally');
+  field('memoryRetention').value = '14';
+  await field('saveMemoryRetention').fire('click');
+  assert.deepEqual(requests.at(-1), { path: '/api/memory/retention', method: 'PUT', body: { retentionDays: 14 } });
+  assert.deepEqual(state.profileRetentionDays, { Work: 30 });
+  state.modEnabled = false;
+  await ui.refresh();
+  assert.equal(field('memoryEnabled').disabled, true);
+  const disabledCount = requests.length;
+  field('memoryEnabled').checked = false;
+  await field('memoryEnabled').fire('change');
+  assert.equal(requests.length, disabledCount, 'disabled mod cannot be enabled by a stale UI event');
+  failure = 'Network unavailable';
+  await ui.refresh();
+  assert.equal(field('memoryEnabled').disabled, true);
+  assert.match(field('memoryControlsStatus').textContent, /Network unavailable/);
+});
 
 function connectorHarness({ connectors = [], error = null, liveConnectorsEnabled = true } = {}) {
   const html = renderSettingsPage("test-token");

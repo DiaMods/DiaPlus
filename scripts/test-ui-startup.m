@@ -46,6 +46,11 @@ static NSUInteger dock_incognito_requests;
 @implementation DiaCustomInheritedDockFixture
 @end
 
+@interface MemoryPreferencePaneContentViewFixture : NSView
+@end
+@implementation MemoryPreferencePaneContentViewFixture
+@end
+
 int main(void) {
     @autoreleasepool {
         DiaCustomModsPaneContext *context = [[DiaCustomModsPaneContext alloc] init];
@@ -104,6 +109,28 @@ int main(void) {
         assert(!dia_custom_swift_invoke_morning_brief(NULL, NULL, NULL));
         puts("ok    Finder bridge health validates runtime, profile, mods and readiness");
         [NSApplication sharedApplication];
+        setenv("DIA_CUSTOM_MODS", "native-memory", 1);
+        dia_custom_local_memory_state = -1;
+        dia_custom_local_memory_request_in_flight = NO;
+        dia_custom_set_memory_last_refresh(nil);
+        dia_custom_install_local_memory_controls(NSApp, @selector(toggleLocalMemory:));
+        assert(!dia_custom_local_memory_request_in_flight);
+        assert(dia_custom_local_memory_last_refresh == nil);
+        assert(dia_custom_local_memory_state == -1);
+        puts("ok    absent native Memory settings do not poll or mutate bridge-owned Memory state");
+        MemoryPreferencePaneContentViewFixture *memoryPane = [[[MemoryPreferencePaneContentViewFixture alloc] init] autorelease];
+        NSButton *memoryToggle = [[[NSButton alloc] init] autorelease];
+        memoryToggle.title = @"Enable Memory";
+        [memoryPane addSubview:memoryToggle];
+        NSView *otherPane = [[[NSView alloc] init] autorelease];
+        dia_custom_local_memory_state = 0;
+        assert(!dia_custom_apply_native_memory_state_in_view(otherPane, NSApp));
+        assert(dia_custom_apply_native_memory_state_in_view(memoryPane, NSApp));
+        assert(memoryToggle.target == NSApp);
+        assert(memoryToggle.action == @selector(toggleLocalMemory:));
+        assert(memoryToggle.enabled);
+        puts("ok    existing native Memory panes retain their optional local control mirror");
+        setenv("DIA_CUSTOM_MODS", "developer-tools", 1);
         id originalDelegate = NSApp.delegate;
         DiaCustomInheritedDockFixture *dockDelegate = [[[DiaCustomInheritedDockFixture alloc] init] autorelease];
         IMP originalBaseDockMethod = class_getMethodImplementation([DiaCustomDockFixture class], @selector(applicationDockMenu:));

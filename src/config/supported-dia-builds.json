@@ -200,11 +200,11 @@
     "88564": {
       "status": "audited",
       "version": "1.53.0",
-      "notes": "Signed official archive/publisher verified. Re-audited AIService URL resolver, account/capability sites, no-auth request continuation, token-error frame and Clia closures; AuthClientImpl stream ownership is retained. Exact agent-handler guards preserve native tool context, browser-use rich results, user questions and sandbox boundaries. Morning Brief's synchronous self-register ABI and changed stack frame are guarded. A disposable signed candidate passed all 18 selected post-patch validators, two fresh-profile native launches and native encrypted chat returning 42 through a credential-free loopback provider. Native Memory settings pane is absent, so native-memory remains unavailable without deleting stored data; developer surfaces and the four research placeholders remain unavailable. Broader native UI and Windows parity are not established. Every candidate is revalidated from its actual contents.",
+      "notes": "Signed official archive/publisher verified. Re-audited AIService URL resolver, account/capability sites, no-auth request continuation, token-error frame and Clia closures; AuthClientImpl stream ownership is retained. Exact agent-handler guards preserve native tool context, browser-use rich results, user questions and sandbox boundaries. Morning Brief's synchronous self-register ABI and changed stack frame are guarded. Disposable signed candidates passed all 19 selected post-patch validators and fresh-profile native launches. Credential-free loopback native chat verified captured Local Memory recall in a separate chat without the removed native settings pane. The bridge-owned engine retains the native-memory ID, stored choices and databases; Dia+ settings controls it independently. Full native and bridge suites passed. Developer surfaces and the four research placeholders remain unavailable. Broader native UI and Windows parity are not established. Every candidate is revalidated from its actual contents.",
       "mods": [
         "identity-isolation", "network-isolation", "update-blocker", "custom-updater",
         "local-ai-routing", "account-bypass", "dia-import", "model-picker",
-        "mod-manager", "reports", "local-web", "connectors", "native-apps",
+        "mod-manager", "native-memory", "reports", "local-web", "connectors", "native-apps",
         "live-connectors", "morning-brief", "apple-models", "local-knowledge",
         "local-workflows"
       ],

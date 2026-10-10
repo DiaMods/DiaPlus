@@ -2151,17 +2151,14 @@ static void dia_custom_install_local_memory_controls(id target, SEL action) {
     if (!dia_custom_mod_enabled("native-memory")) {
         return;
     }
-    static BOOL didInitialMemoryRefresh = NO;
     BOOL found = dia_custom_refresh_memory_controls(target, action);
-    if (!didInitialMemoryRefresh) {
-        didInitialMemoryRefresh = YES;
-        dia_custom_fetch_local_memory_state(target, action, YES);
-    } else if (found) {
-        // Window update notifications can arrive every frame. Only reconcile
-        // while the native Memory pane is actually visible; the fetch helper
-        // supplies the five-second ceiling and mutations still force refresh.
-        dia_custom_fetch_local_memory_state(target, action, NO);
-    }
+    // Local Memory is bridge-owned. A removed/hidden native settings pane must
+    // neither disable it nor cause native-state work or background UI polling.
+    if (!found) return;
+    // The first visible pane fetches immediately because its refresh date is
+    // nil. Subsequent window updates use the five-second ceiling; mutations
+    // still force refresh. Dia+ web settings work without this mirror.
+    dia_custom_fetch_local_memory_state(target, action, NO);
 }
 
 // Apps is a native Dia pane. This cache changes the pane's shipped state value
