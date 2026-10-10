@@ -86,7 +86,9 @@ const offset = candidates[0];
 // Synchronous zero-argument WindowController Swift method. Its only input is
 // self in x20; changing this prologue invalidates the private ABI contract.
 const signature = [0xa9ba6ffc, 0xa90167fa, 0xa9025ff8, 0xa90357f6, 0xa9044ff4,
-  0xa9057bfd, 0x910143fd, 0xd105c3ff, 0x910003f3, 0xd2800000];
+  // 1.53 retains the synchronous self-in-x20 ABI, with a larger local frame.
+  // Scope this exact prologue to the audited build, not all future releases.
+  0xa9057bfd, 0x910143fd, build === "88564" ? 0xd10783ff : 0xd105c3ff, 0x910003f3, 0xd2800000];
 if (!signature.every((word, index) => bytes.readUInt32LE(offset + index * 4) === word)) {
   throw new Error("native Morning Brief synchronous method ABI changed");
 }

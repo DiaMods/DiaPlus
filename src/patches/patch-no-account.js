@@ -245,6 +245,42 @@ const layouts = {
       { offset: 0x0f785d0, expected: "8885ffd008412891", replacement: "6885ffb008f10b91" },
     ],
   },
+  "88564": {
+    accountStateGuard: 0x076d4c4,
+    accountStateGuardExpected: "c0f24439",
+    capabilityGateOne: 0x08041a4,
+    capabilityGateOneExpected: "33210036",
+    capabilityGateTwo: 0x0817da8,
+    capabilityGateTwoExpected: "f6170036",
+    accountState: 0x2f951a8,
+    accountStateExpected: "fc6fbaa9",
+    accountStateNextExpected: "fa6701a9",
+    authenticationMethod: 0x076ee24,
+    modelTokenFailure: {
+      offset: 0x5150948,
+      expected: "00000090",
+      codeCave: 0x5150b2c,
+      codeCaveExpected: "bd0344b2ff8301d1fae701a9f8df02a9f5cf03a9fd7b05a9",
+      returnOffset: 0x5150954,
+      releaseStub: 0x5c19584,
+      // 1.53 enlarged this callback's async frame: the error is now at 0x1d0.
+      clearError: "ffea00f9",
+    },
+    keyVerification: 0x2eee180,
+    keyVerificationExpected: "20090036",
+    localRequestAuthentication: [
+      { offset: 0xf73b9c, expected: "bd0344b2f70f1df8f5cf00a9fd7b02a9f60f00f9fd830091", replacement: "bd0344b2f70f1df8f5cf00a9fd7b02a9f60f00f9fd830091" },
+      { offset: 0xf73bb4, expected: "e1020036", replacement: "17000014" },
+      { offset: 0xf73c10, expected: "c00640f9140080d2fd7b42a9f5cf40a9f70743f8bdfb439200001fd6", replacement: "c00640f9140080d2fd7b42a9f5cf40a9f70743f8bdfb439200001fd6" },
+    ],
+    // Keep AuthClientImpl, including independent async subscribers.
+    authClientConstructor: { offset: 0x2f7ac70, expected: "b1feff97", replacement: "b1feff97" },
+    cliaClosures: [
+      { offset: 0xfc1880, expected: "4883ffb008d13391", replacement: "2883ff9008811791" },
+      { offset: 0xfc1898, expected: "4883ffb008d13391", replacement: "2883ff9008811791" },
+      { offset: 0xfc18b0, expected: "4883ffb008d13391", replacement: "2883ff9008811791" },
+    ],
+  },
 };
 
 const layout = layouts[build];
@@ -272,7 +308,7 @@ function dia150TokenPatches(site) {
   const trampoline = Buffer.concat([
     bytes("e00314aa"), // mov x0, x20: release the discarded error.
     branch(codeCave + 4, releaseStub, true),
-    bytes("ff5a00f9"), // str xzr, [x23, #0xb0]: clear the async frame.
+    bytes(site.clearError ?? "ff5a00f9"), // Clear this build's guarded async error slot.
     bytes("150080d2"), // mov x21, #0
     bytes("1300fcd2"), // mov x19, #empty Swift String tag
     branch(codeCave + 20, returnOffset),
@@ -392,21 +428,32 @@ const selectedPatches = patches.filter((patch) =>
   anonymousOnly && patch.scope === "anonymous");
 const data = fs.readFileSync(executable);
 
-if (build === "87864") {
-  for (const [offset, expected, label] of [
+if (["87864", "88564"].includes(build)) {
+  const guards = build === "87864" ? [
     [0x45b360c, "f45a00f917705694940000b4", "token error selector"],
     [0x45b361c, "00f01f9104000014f3d60ba90000009000301991", "token continuations"],
     [0x45b366c, "fd430191d3824ba9d55240f9", "success continuation frame"],
     [0x252fc, "20008052c0035fd6", "constant-true Clia closure"],
     [0x5b4f24c, "708900f010f244f900021fd6", "Swift error release stub"],
-  ]) {
+  ] : [
+    [0x515093c, "f4ea00f913242b94940000b4", "token error selector"],
+    [0x515094c, "00b02c9104000014f3d61da90000009000f02591", "token continuations"],
+    [0x515099c, "fd430191d3825da9d5e240f9", "success continuation frame"],
+    [0x255e0, "20008052c0035fd6", "constant-true Clia closure"],
+    [0x5c19584, "d08900b010e241f900021fd6", "Swift error release stub"],
+    [0xfc1810, "f44fbea9fd7b01a9fd430091ff8317d1f30308aa", "Clia dependency initializer"],
+    [0xfc1888, "e87f08a9280000b0", "first Clia closure storage"],
+    [0xfc18a0, "e87f0aa9280000b0", "second Clia closure storage"],
+    [0xfc18b8, "e87f0ca9280000b0", "third Clia closure storage"],
+  ];
+  for (const [offset, expected, label] of guards) {
     if (!data.subarray(offset, offset + expected.length / 2).equals(bytes(expected))) {
-      throw new Error(`Dia 87864 ${label} layout changed at 0x${offset.toString(16)}`);
+      throw new Error(`Dia ${build} ${label} layout changed at 0x${offset.toString(16)}`);
     }
   }
   const token = layout.modelTokenFailure;
   const sign = (value, bits) => value & (1 << (bits - 1)) ? value - 2 ** bits : value;
-  for (let offset = 0x3200; offset < 0x5b41638; offset += 4) {
+  for (let offset = 0x3200; offset < (build === "87864" ? 0x5b41638 : 0x5c0bcd0); offset += 4) {
     const word = data.readUInt32LE(offset);
     let target = null;
     if (((word & 0x7c000000) >>> 0) === 0x14000000) {
@@ -427,7 +474,7 @@ if (build === "87864") {
     }
     if (target !== null && target >= token.codeCave && target < token.codeCave + 24 &&
         !(offset === token.offset && target === token.codeCave)) {
-      throw new Error(`Dia 87864 token error continuation gained a reference from 0x${offset.toString(16)}`);
+      throw new Error(`Dia ${build} token error continuation gained a reference from 0x${offset.toString(16)}`);
     }
   }
 }

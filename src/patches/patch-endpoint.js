@@ -17,6 +17,7 @@ const executable = resolve(app, "Contents/MacOS/Dia");
 const build = execFileSync("/usr/libexec/PlistBuddy", [
   "-c", "Print :CFBundleVersion", resolve(app, "Contents/Info.plist"),
 ], { encoding: "utf8" }).trim();
+const dynamicAIService = ["87864", "88564"].includes(build);
 const mappings = [
   {
     source: Buffer.from("https://tools-cache.diabrowser.engineering"),
@@ -36,7 +37,7 @@ const mappings = [
   },
   {
     source: Buffer.from("https://ai-service.diabrowser.engineering/aiproxy"),
-    replacement: Buffer.from(build === "87864"
+    replacement: Buffer.from(dynamicAIService
       ? "http://localhost:8765/ai-service-local-v1/native0"
       : "http://localhost:8765/aiproxy/custom-provider-v1x"),
   },
@@ -68,7 +69,7 @@ const data = await readFile(executable);
 let patchedCount = 0;
 // Dia 1.50 removed the legacy tools-cache endpoint. Keep the other eight
 // endpoints guarded, and reject a reappearance or a partially patched copy.
-const isDia150 = ["87561", "87864"].includes(build);
+const isDia150 = ["87561", "87864", "88564"].includes(build);
 
 function countOccurrences(haystack, needle) {
   let count = 0;
@@ -85,6 +86,12 @@ function countOccurrences(haystack, needle) {
 for (const { source, replacement } of mappings) {
   const sourceCount = countOccurrences(data, source);
   const replacementCount = countOccurrences(data, replacement);
+  if (build === "88564" && source.toString() === "https://model-server.browserinternalstaging.com") {
+    if (sourceCount !== 0 || replacementCount !== 0) {
+      throw new Error("Dia 1.53 unexpectedly contains the removed model-server endpoint");
+    }
+    continue;
+  }
   if (isDia150 && source.toString() === "https://tools-cache.diabrowser.engineering") {
     if (sourceCount !== 0 || replacementCount !== 0) {
       throw new Error("Dia 1.50 unexpectedly contains the removed tools-cache endpoint");
@@ -94,7 +101,7 @@ for (const { source, replacement } of mappings) {
   if (isDia150 && source.toString() === "https://ai-service.diabrowser.engineering") {
     // In 1.50 this prefix occurs only inside the /aiproxy URL, already
     // validated and rewritten by the preceding mapping.
-    if (sourceCount !== 0 || replacementCount !== Number(build === "87864")) {
+    if (sourceCount !== 0 || replacementCount !== Number(dynamicAIService)) {
       throw new Error("Dia 1.50 unexpectedly contains a standalone ai-service endpoint");
     }
     continue;
@@ -114,8 +121,8 @@ for (const { source, replacement } of mappings) {
   patchedCount += 1;
 }
 
-if (build === "87864") {
-  // BackendServices constructs AIService URLs dynamically in 1.51. Redirect
+if (dynamicAIService) {
+  // BackendServices constructs AIService URLs dynamically in 1.51/1.53. Redirect
   // only enum 1, retaining native path construction and the indirect URL ABI.
   // Other services tail-call the original resolver. The adjacent context
   // destructor tail-shares an independently audited, identical destructor;
@@ -125,29 +132,48 @@ if (build === "87864") {
     value.writeUInt32LE((0x14000000 | ((to - from) / 4 & 0x03ffffff)) >>> 0);
     return value;
   };
-  for (const [guardOffset, guard] of [
-    [0x8cac8, "fd7bbfa9fd030091800a40f97e096b95e00314aa01038052e2008052fd7bc1a8a6096b15"],
-    [0x5b4243c, "90890090103647f900021fd6"],
-    [0xf6734c, "fc0f1af8fb6b01a9f96302a9f75b03a9f44f04a9fd7b05a9"],
-    [0x2ce6674, "74820691e80318aa20008052e10316aaf50317aabb018a97f70315aa60d640f9"],
-  ]) {
+  const layout = build === "87864" ? {
+    resolver: 0xf68794, destructor: 0xf687b0, sharedDestructor: 0x8cac8,
+    literal: 0x60cee90, textEnd: 0x5b41638,
+    destructorBody: "fd030091800a40f9449a2f95e00314aa01038052e2008052fd7bc1a86c9a2f15",
+    localContinuation: "200680d20000faf2218b02d021c03991210041b21d672f151f2003d51f2003d5",
+    guards: [
+      [0x8cac8, "fd7bbfa9fd030091800a40f97e096b95e00314aa01038052e2008052fd7bc1a8a6096b15"],
+      [0x5b4243c, "90890090103647f900021fd6"],
+      [0xf6734c, "fc0f1af8fb6b01a9f96302a9f75b03a9f44f04a9fd7b05a9"],
+      [0x2ce6674, "74820691e80318aa20008052e10316aaf50317aabb018a97f70315aa60d640f9"],
+    ],
+  } : {
+    resolver: 0xfb09bc, destructor: 0xfb09d8, sharedDestructor: 0x8c040,
+    literal: 0x60f7520, textEnd: 0x5c0bcd0,
+    destructorBody: "fd030091800a40f988a23195e00314aa01038052e2008052fd7bc1a8b0a23115",
+    // The native String representation still uses the literal's 32-byte bias;
+    // URL(string:) keeps its indirect return ABI. Only enum 1 is redirected.
+    localContinuation: "200680d20000faf2218a02f021001491210041b2337031151f2003d51f2003d5",
+    guards: [
+      [0x8c040, "fd7bbfa9fd030091800a40f9ee346e95e00314aa01038052e2008052fd7bc1a816356e15"],
+      [0x5c0cabc, "d08900d010ea45f900021fd6"],
+      [0xfaf574, "fc0f1af8fb6b01a9f96302a9f75b03a9f44f04a9fd7b05a9"],
+      [0x2ef0144, "74820691e80318aa20008052e10316aaf50317aa91fb8297f70315aa60d640f9"],
+    ],
+  };
+  for (const [guardOffset, guard] of layout.guards) {
     if (!data.subarray(guardOffset, guardOffset + guard.length / 2).equals(Buffer.from(guard, "hex"))) {
-      throw new Error(`Dia 87864 AI service URL ABI changed at 0x${guardOffset.toString(16)}`);
+      throw new Error(`Dia ${build} AI service URL ABI changed at 0x${guardOffset.toString(16)}`);
     }
   }
   const localURL = Buffer.from("http://localhost:8765/ai-service-local-v1/native0\0");
-  if (!data.subarray(0x60cee90, 0x60cee90 + localURL.length).equals(localURL)) {
-    throw new Error("Dia 87864 AI service base URL literal moved");
+  if (!data.subarray(layout.literal, layout.literal + localURL.length).equals(localURL)) {
+    throw new Error(`Dia ${build} AI service base URL literal moved`);
   }
   const patches = [
-    [0xf68794, "fd7bbfa9fd030091810a40f982624039eafaff97fd7bc1a8c0035fd6",
+    [layout.resolver, "fd7bbfa9fd030091810a40f982624039eafaff97fd7bc1a8c0035fd6",
       Buffer.from("1f040071e0000054810a40f982624039eafaff171f2003d51f2003d5", "hex")],
-    [0xf687b0, "fd7bbfa9", branch(0xf687b0, 0x8cac8)],
-    [0xf687b4, "fd030091800a40f9449a2f95e00314aa01038052e2008052fd7bc1a86c9a2f15",
-      Buffer.from("200680d20000faf2218b02d021c03991210041b21d672f151f2003d51f2003d5", "hex")],
+    [layout.destructor, "fd7bbfa9", branch(layout.destructor, layout.sharedDestructor)],
+    [layout.destructor + 4, layout.destructorBody, Buffer.from(layout.localContinuation, "hex")],
   ];
   const sign = (value, bits) => value & (1 << (bits - 1)) ? value - 2 ** bits : value;
-  for (let offset = 0x3200; offset < 0x5b41638; offset += 4) {
+  for (let offset = 0x3200; offset < layout.textEnd; offset += 4) {
     const word = data.readUInt32LE(offset);
     let target = null;
     if (((word & 0x7c000000) >>> 0) === 0x14000000) {
@@ -167,16 +193,16 @@ if (build === "87864") {
     } else if (((word & 0x9f000000) >>> 0) === 0x10000000) {
       target = offset + sign(((word >>> 5) & 0x7ffff) * 4 + ((word >>> 29) & 3), 21);
     }
-    if (target !== null && target >= 0xf687b4 && target < 0xf687d4 &&
-        !(offset === 0xf68798 && target === 0xf687b4)) {
-      throw new Error(`Dia 87864 AI service URL continuation gained a reference from 0x${offset.toString(16)}`);
+    if (target !== null && target >= layout.destructor + 4 && target < layout.destructor + 36 &&
+        !(offset === layout.resolver + 4 && target === layout.destructor + 4)) {
+      throw new Error(`Dia ${build} AI service URL continuation gained a reference from 0x${offset.toString(16)}`);
     }
   }
   for (const [offset, original, replacement] of patches) {
     const current = data.subarray(offset, offset + replacement.length);
     if (!current.equals(replacement)) {
       if (requirePatched || !current.equals(Buffer.from(original, "hex"))) {
-        throw new Error(`Dia 87864 AI service URL redirect is missing or changed at 0x${offset.toString(16)}`);
+        throw new Error(`Dia ${build} AI service URL redirect is missing or changed at 0x${offset.toString(16)}`);
       }
       replacement.copy(data, offset);
       patchedCount += 1;
@@ -189,7 +215,7 @@ if (build === "87864") {
 // Both original and fully patched candidates must satisfy the exact byte/count
 // checks above; inspecting an official or signed app must never modify it.
 if (checkOnly) {
-  process.stdout.write(`Validated ${mappings.length - 2 * Number(isDia150) + Number(build === "87864")} native AI endpoint(s) in ${executable}\n`);
+  process.stdout.write(`Validated ${mappings.length - 2 * Number(isDia150) - Number(build === "88564") + Number(dynamicAIService)} native AI endpoint(s) in ${executable}\n`);
 } else {
   await writeFile(executable, data);
   process.stdout.write(`Patched ${patchedCount} native AI endpoint(s) in ${executable}\n`);

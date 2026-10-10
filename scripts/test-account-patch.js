@@ -10,7 +10,7 @@ const scripts = dirname(fileURLToPath(import.meta.url));
 const source = resolve(process.argv[2]);
 const info = join(source, 'Contents/Info.plist');
 const build = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleVersion', info], { encoding: 'utf8' }).trim();
-const constructor = { '87561': 0x2dbbd08, '87864': 0x2dfa1c8 }[build];
+const constructor = { '87561': 0x2dbbd08, '87864': 0x2dfa1c8, '88564': 0x2f7ac70 }[build];
 if (!constructor) throw new Error('This regression covers the 1.50+ concurrent-stream constructor change.');
 const root = await mkdtemp(join(tmpdir(), 'dia-account-regression-'));
 const app = join(root, 'Dia Custom Account Fixture.app');
@@ -61,6 +61,27 @@ try {
     referenced.writeUInt32LE((0x14000000 | ((target - from) / 4)) >>> 0, from);
     await writeFile(executable, referenced);
     assert.throws(() => run('--check', '--capabilities-only'), /token error continuation gained a reference/);
+  }
+  if (build === '88564') {
+    assert.equal(patched.readUInt32LE(0xf73bb4), 0x14000017,
+      'local authentication must use the independently audited no-auth continuation');
+    assert.equal(patched.readUInt32LE(0x5150b34), 0xf900eaff,
+      'clear the new 0x1d0 error slot, not the obsolete 0xb0 slot');
+    for (const offset of [0xf73b9c, 0xf73bb4, 0xf73c10, 0x515093c, 0x515094c,
+      0x515099c, 0x255e0, 0x5c19584, 0xfc1810, 0xfc1888, 0xfc18a0, 0xfc18b8]) {
+      const invalid = Buffer.from(patched);
+      invalid[offset] ^= 1;
+      await writeFile(executable, invalid);
+      assert.throws(() => run('--capabilities-only'), /unexpected instruction|layout changed/);
+      assert.deepEqual(await readFile(executable), invalid, 'reject changed 1.53 ABI without partial writes');
+    }
+    const referenced = Buffer.from(patched);
+    const from = 0x3268, target = 0x5150b2c;
+    referenced.writeUInt32LE((0x14000000 | ((target - from) / 4)) >>> 0, from);
+    await writeFile(executable, referenced);
+    assert.throws(() => run('--check', '--capabilities-only'), /token error continuation gained a reference/);
+    assert.throws(() => run('--capabilities-only'), /token error continuation gained a reference/);
+    assert.deepEqual(await readFile(executable), referenced, 'reject an unexpected token continuation caller without writing');
   }
   process.stdout.write(`ok    Dia ${build} preserves async stream ownership, rejects unsafe constructors and guards token fallback\n`);
 } finally {

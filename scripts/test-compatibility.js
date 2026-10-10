@@ -91,8 +91,13 @@ try {
     join(scriptDirectory, "../src/patches/patch-endpoint.js"), "--check", fixtureApp,
   ], { encoding: "utf8" });
   assert.equal(digest(await readFile(patchedPath)), digest(patched), "checking must not modify the executable");
-  if (sourceBuild === "87864") {
-    for (const offset of [0xf68794, 0xf687b0, 0xf687b4, 0x8cac8, 0xf6734c, 0x2ce6674, 0x5b4243c, 0x60cee90]) {
+  if (["87864", "88564"].includes(sourceBuild)) {
+    const resolver = sourceBuild === "87864" ? 0xf68794 : 0xfb09bc;
+    const destructor = sourceBuild === "87864" ? 0xf687b0 : 0xfb09d8;
+    const guards = sourceBuild === "87864"
+      ? [0x8cac8, 0xf6734c, 0x2ce6674, 0x5b4243c, 0x60cee90]
+      : [0x8c040, 0xfaf574, 0x2ef0144, 0x5c0cabc, 0x60f7520];
+    for (const offset of [resolver, destructor, destructor + 4, ...guards]) {
       const invalid = Buffer.from(patched);
       invalid[offset] ^= 1;
       await writeFile(patchedPath, invalid);
@@ -102,7 +107,7 @@ try {
       assert.equal(digest(await readFile(patchedPath)), digest(invalid), "reject changed AI service ABI without a partial write");
     }
     const referenced = Buffer.from(patched);
-    referenced.writeUInt32LE((0x14000000 | ((0xf687b8 - 0x3200) / 4 & 0x03ffffff)) >>> 0, 0x3200);
+    referenced.writeUInt32LE((0x14000000 | ((destructor + 8 - 0x3200) / 4 & 0x03ffffff)) >>> 0, 0x3200);
     await writeFile(patchedPath, referenced);
     assert.throws(() => execFileSync(process.execPath, [
       join(scriptDirectory, "../src/patches/patch-endpoint.js"), fixtureApp,
@@ -111,7 +116,24 @@ try {
       "reject an unexpected native continuation caller without writing");
     await writeFile(patchedPath, patched);
   }
-  const endpoint = Buffer.from(["87561", "87864"].includes(sourceBuild)
+  if (sourceBuild === "88564") {
+    // Removed URLs are an audited absence, not optional patch sites. Neither
+    // their hosted form nor a stale local replacement may silently reappear.
+    for (const endpoint of [
+      "https://model-server.browserinternalstaging.com",
+      "http://localhost:8765/model-registry-local-xxxx",
+    ]) {
+      const invalid = Buffer.concat([patched, Buffer.from(endpoint)]);
+      await writeFile(patchedPath, invalid);
+      assert.throws(() => execFileSync(process.execPath, [
+        join(scriptDirectory, "../src/patches/patch-endpoint.js"), fixtureApp,
+      ], { stdio: "pipe" }), /removed model-server endpoint/);
+      assert.equal(digest(await readFile(patchedPath)), digest(invalid),
+        "reject a reintroduced endpoint without a partial write");
+    }
+    await writeFile(patchedPath, patched);
+  }
+  const endpoint = Buffer.from(["87561", "87864", "88564"].includes(sourceBuild)
     ? "http://localhost:8765/aiproxy/dia-claude-stream-local-testxx"
     : "http://localhost:8765/tools-cache-local-xx");
   const endpointOffset = patched.indexOf(endpoint);

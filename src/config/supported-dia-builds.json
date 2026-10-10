@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-01",
+  "updatedAt": "2026-10-10",
   "builds": {
     "85660": {
       "status": "audited",
@@ -196,6 +196,19 @@
         "local-knowledge", "local-workflows"
       ],
       "mainExecutableSHA256": "7686865a6a688912df875b738c729f49b246869e3f775f71e93c09af931493f9"
+    },
+    "88564": {
+      "status": "audited",
+      "version": "1.53.0",
+      "notes": "Signed official archive/publisher verified. Re-audited AIService URL resolver, account/capability sites, no-auth request continuation, token-error frame and Clia closures; AuthClientImpl stream ownership is retained. Exact agent-handler guards preserve native tool context, browser-use rich results, user questions and sandbox boundaries. Morning Brief's synchronous self-register ABI and changed stack frame are guarded. A disposable signed candidate passed all 18 selected post-patch validators, two fresh-profile native launches and native encrypted chat returning 42 through a credential-free loopback provider. Native Memory settings pane is absent, so native-memory remains unavailable without deleting stored data; developer surfaces and the four research placeholders remain unavailable. Broader native UI and Windows parity are not established. Every candidate is revalidated from its actual contents.",
+      "mods": [
+        "identity-isolation", "network-isolation", "update-blocker", "custom-updater",
+        "local-ai-routing", "account-bypass", "dia-import", "model-picker",
+        "mod-manager", "reports", "local-web", "connectors", "native-apps",
+        "live-connectors", "morning-brief", "apple-models", "local-knowledge",
+        "local-workflows"
+      ],
+      "mainExecutableSHA256": "5280d8466a7fca11a8c7013da29a31e49312edb9aafa55d38094e16a2abeebcf"
     }
   }
 }
