@@ -29,15 +29,26 @@ test('downloaded worker quits its native app parent and survives Dock cleanup wi
   });
   const source = join(root, 'parent.m');
   await writeFile(source, `#import <AppKit/AppKit.h>
-int main(int argc, const char **argv) { @autoreleasepool {
-  [NSApplication sharedApplication];
-  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+static const char **launchArguments;
+@interface FixtureDelegate : NSObject <NSApplicationDelegate>
+@end
+@implementation FixtureDelegate
+- (void)applicationDidFinishLaunching:(NSNotification *)notification {
+  const char **argv = launchArguments;
   NSString *pid = [NSString stringWithFormat:@"%d", getpid()];
   [pid writeToFile:[NSString stringWithUTF8String:argv[4]] atomically:YES encoding:NSUTF8StringEncoding error:nil];
   NSTask *child = [[NSTask alloc] init];
   child.executableURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:argv[1]]];
   child.arguments = @[[NSString stringWithUTF8String:argv[2]], [NSString stringWithUTF8String:argv[3]]];
-  if (![child launchAndReturnError:nil]) return 2;
+  if (![child launchAndReturnError:nil]) exit(2);
+}
+@end
+int main(int argc, const char **argv) { @autoreleasepool {
+  launchArguments = argv;
+  [NSApplication sharedApplication];
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  FixtureDelegate *delegate = [[FixtureDelegate alloc] init];
+  [NSApp setDelegate:delegate];
   [NSApp run];
 } return 0; }
 `);
