@@ -2,11 +2,16 @@ import { lstat, open, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { run } from './updater-common.js';
 
 export const installationPhases = ['installing', 'closing', 'snapshotting', 'preflight', 'replacing', 'restarting'];
 const environmentKeys = ['PATH', 'HOME', 'TMPDIR', 'DIA_CUSTOM_WORK_DIR', 'DIA_CUSTOM_STAGING'];
 const xml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
+async function installerBootstrap(t) {
+  const { prebuiltHelper } = await import(pathToFileURL(join(t.toolkit, 'scripts/prebuilt.js')));
+  return prebuiltHelper('installer-bootstrap', [], t.toolkit);
+}
 
 export function installerService(job, uid = process.getuid()) {
   if (typeof job !== 'string' || resolve(job) !== job || !Number.isInteger(uid) || uid < 0) throw new Error('Invalid installer service identity');
@@ -22,7 +27,7 @@ export function installerArguments(t, independent = true) {
 // A detached POSIX child still belongs to its macOS launchd application/job.
 // Loading a one-shot GUI-domain service gives it a separate lifetime. This is
 // also invoked by the NEW downloaded worker when an OLD client dispatches it.
-export async function handoffInstaller(t, { runImpl = run, uid = process.getuid() } = {}) {
+export async function handoffInstaller(t, { runImpl = run, uid = process.getuid(), helperImpl = installerBootstrap } = {}) {
   const service = installerService(t.job, uid);
   const args = installerArguments(t);
   const environment = Object.entries(t.env ?? {}).filter(([key, value]) => environmentKeys.includes(key) && typeof value === 'string');
@@ -44,8 +49,20 @@ export async function handoffInstaller(t, { runImpl = run, uid = process.getuid(
 <key>ProcessType</key><string>Interactive</string>
 </dict></plist>`;
   await writeFile(service.path, data, { flag: 'wx', mode: 0o600 });
-  await runImpl('/bin/launchctl', ['bootstrap', service.domain, service.path], { timeout: 15000 });
+  const helper = await helperImpl(t);
+  if (!helper) throw new Error('The verified independent installer helper is missing');
+  await runImpl(helper, [service.path], { timeout: 15000 });
   return service;
+}
+
+// A separately submitted job can still inherit the submitting app's
+// responsibility/coalition. Dock then treats the installer as the quitting
+// browser and removes it. Require macOS to acknowledge the explicit disclaimer
+// before any quit or replacement; an unsupported OS must fail closed.
+export async function assertIndependentInstaller(t, { runImpl = run, helperImpl = installerBootstrap } = {}) {
+  const helper = await helperImpl(t);
+  if (!helper) throw new Error('The verified independent installer helper is missing');
+  await runImpl(helper, ['check'], { timeout: 10000 });
 }
 
 export async function installerIsRunning(t, { runImpl = run, platform = process.platform, uid = process.getuid?.() } = {}) {

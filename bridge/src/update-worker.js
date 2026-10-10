@@ -5,7 +5,7 @@ import { loadJSON, plist, run, saveJSON } from './updater-common.js';
 import { GitHubUpdateAuth, GitHubKeychain } from './github-update-auth.js';
 import { verifyModManifest } from './release-verification.js';
 import { verifyPreparedToolkit } from './release-inventory.js';
-import { handoffInstaller } from './installer-handoff.js';
+import { assertIndependentInstaller, handoffInstaller } from './installer-handoff.js';
 
 async function authorize(t) {
   const source = await loadJSON(join(t.app, 'Contents/Resources/DiaCustomUpdater/src/config/updater-source.json'));
@@ -116,6 +116,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       process.stdout.write('Installer handed off to an independent macOS service.\n');
     } else {
       process.stdout.write('Independent installer started.\n');
+      if (process.platform === 'darwin') await assertIndependentInstaller(t);
       await installTransaction(t);
     }
   }

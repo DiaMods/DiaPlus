@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { handoffInstaller, installerArguments, installerIsRunning, installerService } from '../src/installer-handoff.js';
+import { assertIndependentInstaller, handoffInstaller, installerArguments, installerIsRunning, installerService } from '../src/installer-handoff.js';
 
 test('macOS installer is a one-shot independent service with escaped paths and no credentials', async t => {
   const root = await mkdtemp(join(tmpdir(), 'dia-installer-handoff-'));
@@ -13,8 +13,9 @@ test('macOS installer is a one-shot independent service with escaped paths and n
     OPENAI_API_KEY: 'must-not-leak', DIA_CUSTOM_CONFIG_PATH: '/private/config',
   } };
   const calls = [];
-  const service = await handoffInstaller(transaction, { uid: 501, runImpl: async (...args) => calls.push(args) });
-  assert.deepEqual(calls[0].slice(0, 2), ['/bin/launchctl', ['bootstrap', 'gui/501', service.path]]);
+  const helperImpl = async () => '/verified/installer-bootstrap';
+  const service = await handoffInstaller(transaction, { uid: 501, helperImpl, runImpl: async (...args) => calls.push(args) });
+  assert.deepEqual(calls[0].slice(0, 2), ['/verified/installer-bootstrap', [service.path]]);
   const xml = await readFile(service.path, 'utf8');
   assert.match(xml, /<key>RunAtLoad<\/key><true\/>/);
   assert.match(xml, /<key>KeepAlive<\/key><false\/>/);
@@ -25,6 +26,14 @@ test('macOS installer is a one-shot independent service with escaped paths and n
   assert.equal((await stat(join(root, 'install.log'))).mode & 0o777, 0o600);
   assert.notEqual(installerService(root, 501).label, installerService(root + '-other', 501).label);
   await assert.rejects(handoffInstaller(transaction, { uid: 501, runImpl: async () => {} }), /EEXIST/);
+});
+
+test('installer verifies responsibility separation before quitting and fails closed', async () => {
+  const t = { job: '/tmp/independent-job' };
+  const helperImpl = async () => '/verified/helper';
+  await assertIndependentInstaller(t, { helperImpl, runImpl: async (command, args) => { assert.equal(command, '/verified/helper'); assert.deepEqual(args, ['check']); } });
+  await assert.rejects(assertIndependentInstaller(t, { helperImpl: async () => null }), /helper is missing/);
+  await assert.rejects(assertIndependentInstaller(t, { helperImpl, runImpl: async () => { throw Error('inspection denied'); } }), /inspection denied/);
 });
 
 test('queued services without a PID remain active and completed services are recoverable', async t => {

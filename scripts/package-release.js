@@ -69,7 +69,7 @@ for (const developer of enabled.includes('developer-tools') ? [true, false] : [f
 }
 await helper('apple-model', 'DiaCustomAppleModel', run('/bin/zsh', [join(root, 'scripts/build-apple-model-helper.sh')], buildEnv));
 await helper('github-keychain', 'DiaCustomGitHubKeychain', run('/bin/zsh', [join(root, 'scripts/build-github-keychain.sh')], buildEnv));
-for (const [name, language, input] of [['process-info', 'clang', 'scripts/browser-process-info.c'], ['quit-app', 'swiftc', 'src/updater/quit-app.swift']]) {
+for (const [name, language, input] of [['process-info', 'clang', 'scripts/browser-process-info.c'], ['quit-app', 'swiftc', 'src/updater/quit-app.swift'], ['installer-bootstrap', 'clang', 'src/updater/installer-bootstrap.c']]) {
   const binary = join(output, name);
   run('/usr/bin/xcrun', [language, '-target', 'arm64-apple-macos14.0', '-O2', join(root, input), '-o', binary].filter(arg => language !== 'swiftc' || arg !== '-O2'));
   run('/usr/bin/codesign', ['--force', '--sign', '-', binary]);
