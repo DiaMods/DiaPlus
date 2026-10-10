@@ -16,8 +16,9 @@ extern char **environ;
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "check") == 0) {
         pid_t (*responsible)(pid_t) = dlsym(RTLD_DEFAULT, "responsibility_get_pid_responsible_for_pid");
-        if (!responsible || responsible(getpid()) != getppid()) {
-            fputs("Installer responsibility is not independent.\n", stderr);
+        pid_t owner = responsible ? responsible(getpid()) : -1;
+        if (!responsible || owner != getppid()) {
+            fprintf(stderr, "Installer responsibility is not independent (self=%d parent=%d responsible=%d).\n", getpid(), getppid(), owner);
             return 1;
         }
         return 0;

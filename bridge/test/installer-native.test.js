@@ -86,7 +86,7 @@ await new Promise(resolve=>setTimeout(resolve,45000)); fs.writeFileSync(${JSON.s
     if (quitCompleted) break;
     await delay(50);
   }
-  assert(quitCompleted, 'real quit helper must observe the original browser PID exiting promptly');
+  assert(quitCompleted, 'real quit helper must observe the original browser PID exiting promptly; fixture log: ' + await readFile(join(job, 'install.log'), 'utf8').catch(() => '(missing)'));
   assert.throws(() => process.kill(pid, 0), /ESRCH/, 'native parent must have actually quit');
   let completed = false;
   for (let n = 0; n < 1000; n++) {
