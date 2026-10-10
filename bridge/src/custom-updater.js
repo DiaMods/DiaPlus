@@ -1,11 +1,12 @@
 import { createWriteStream } from 'node:fs';
-import { access, copyFile, cp, mkdir, readFile, realpath } from 'node:fs/promises';
+import { access, copyFile, cp, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { GitHubKeychain, GitHubUpdateAuth, GitHubUpdateError } from './github-update-auth.js';
 import { GitHubModReleases, verifyModManifest, compareVersions, nodeArchive, nodeArchiveHash, sha256 } from './mod-release.js';
 import { verifyPreparedToolkit } from './release-inventory.js';
+import { handoffInstaller, installerIsRunning, installationPhases } from './installer-handoff.js';
 import { allowedDownload, loadJSON, parseAppcast, plist, requireAllMods, run, saveJSON, validateArchivePaths, verifyArchive } from './updater-common.js';
 
 export class CustomUpdater {
@@ -53,13 +54,13 @@ export class CustomUpdater {
     await this.assertEnabled();
     if (this.busy) throw new Error('An update operation is already running');
     if (!['stable', 'beta'].includes(value)) throw new Error('Invalid update channel');
-    const state = await loadJSON(this.statePath, {});
-    if (['installing', 'closing', 'recovery-required'].includes(state.phase)) throw new Error('Resolve the current installation before changing channels');
+    const state = await this.reconcileInstallation();
+    if ([...installationPhases, 'recovery-required'].includes(state.phase)) throw new Error('Resolve the current installation before changing channels');
     await this.setState({ channel: value, phase: 'idle', options: [], bundle: null, job: null, compatibility: null, error: null });
     return this.status();
   }
   async status() {
-    let state = await loadJSON(this.statePath, { phase: 'idle' });
+    let state = this.busy ? await loadJSON(this.statePath, { phase: 'idle' }) : await this.reconcileInstallation();
     if (!this.busy && ['checking','downloading','verifying','validating','building'].includes(state.phase)) {
       state = { ...state, phase: 'failed', error: 'Update preparation was interrupted. Check and prepare the update again.' };
       await this.setState(state);
@@ -72,6 +73,36 @@ export class CustomUpdater {
       currentBuild: this.app ? await plist(this.app, 'CFBundleVersion') : null,
       currentModVersion: this.app ? await plist(this.app, 'DiaCustomModVersion').catch(() => 'v0.0.0') : null,
       modRepository: 'Private releases from DiaMods/DiaPlus. GitHub read access is required only for the updater.' };
+  }
+  async installerRunning(transaction) { return installerIsRunning(transaction); }
+  async reconcileInstallation() {
+    const state = await loadJSON(this.statePath, { phase: 'idle' });
+    if (!installationPhases.includes(state.phase)) return state;
+    // Give dispatch a bounded grace period before inspecting its first process.
+    if (Date.now() - (Date.parse(state.updatedAt) || 0) < 20000) return state;
+    try {
+      if (typeof state.job !== 'string' || resolve(state.job) !== state.job ||
+          !state.job.startsWith(`${this.root}/jobs/`) || !/^[a-zA-Z0-9_-]+$/.test(state.job.slice(`${this.root}/jobs/`.length))) throw new Error('Invalid installation job');
+      const transaction = await loadJSON(join(state.job, 'transaction.json'));
+      if (!transaction || transaction.job !== state.job || transaction.app !== this.app ||
+          transaction.statePath !== this.statePath) throw new Error('Installation identity cannot be confirmed');
+      if (await this.installerRunning(transaction)) return state;
+      const journal = await stat(join(state.job, 'rollback.json')).then(() => true, error => {
+        if (error.code === 'ENOENT') return false;
+        throw error;
+      });
+      const current = await loadJSON(this.statePath, {});
+      if (current.job !== state.job || current.phase !== state.phase || current.updatedAt !== state.updatedAt) return current;
+      const needsRecovery = journal || ['replacing', 'restarting'].includes(state.phase);
+      await this.setState({ phase: needsRecovery ? 'recovery-required' : 'failed',
+        error: needsRecovery ? 'The installer stopped during replacement. App/profile recovery must be reviewed before another update.'
+          : 'The installer stopped before app replacement. Your installation was not replaced; check and prepare the update again.' });
+      return loadJSON(this.statePath, {});
+    } catch (error) {
+      // Unknown liveness is not a dead installer. Keep actions locked and do
+      // not rename, delete, resume, or otherwise mutate any app/profile data.
+      return { ...state, error: `Cannot safely determine installer status: ${error.message}` };
+    }
   }
   async setState(patch) {
     const pending = this.stateWrites.then(async () => {
@@ -104,8 +135,8 @@ export class CustomUpdater {
     this.busy = true;
     let checking = false;
     try {
-      const previous = await loadJSON(this.statePath, {});
-      if (['installing','closing','recovery-required'].includes(previous.phase)) throw new Error('An installation is running or needs recovery; inspect its status first');
+      const previous = await this.reconcileInstallation();
+      if ([...installationPhases, 'recovery-required'].includes(previous.phase)) throw new Error('An installation is running or needs recovery; inspect its status first');
       checking = true;
       await this.setState({ phase: 'checking', error: null });
       const source = await this.source();
@@ -354,7 +385,7 @@ export class CustomUpdater {
     await this.assertEnabled();
     if (this.busy) throw new Error('An update operation is already running');
     this.busy = true;
-    let log = null, launching = false, dispatched = false;
+    let launching = false, dispatched = false;
     try {
       const state = await loadJSON(this.statePath, {});
       if (state.phase !== 'ready' || typeof state.job !== 'string' || resolve(state.job) !== state.job ||
@@ -366,10 +397,7 @@ export class CustomUpdater {
       await this.validatePreparedTransaction(state, transaction, expectedConfigured);
       launching = true;
       await this.setState({ phase: 'installing', error: null });
-      log = await import('node:fs').then(fs => fs.openSync(join(state.job, 'install.log'), 'a', 0o600));
-      const worker = spawn(transaction.node, [join(transaction.toolkit, 'bridge/src/update-worker.js'), join(state.job, 'transaction.json')], { detached: true, stdio: ['ignore', log, log], env: transaction.env });
-      await new Promise((resolve, reject) => { worker.once('spawn', resolve); worker.once('error', reject); });
-      worker.unref();
+      await this.dispatchInstaller(transaction);
       dispatched = true;
       return { ok: true, phase: 'installing' };
     } catch (error) {
@@ -377,8 +405,16 @@ export class CustomUpdater {
       throw error;
     } finally {
       this.busy = false;
-      if (log !== null) await import('node:fs').then(fs => fs.closeSync(log));
     }
+  }
+  async dispatchInstaller(transaction) {
+    if (process.platform === 'darwin') return handoffInstaller(transaction);
+    const log = await import('node:fs').then(fs => fs.openSync(join(transaction.job, 'install.log'), 'a', 0o600));
+    try {
+      const worker = spawn(transaction.node, [join(transaction.toolkit, 'bridge/src/update-worker.js'), join(transaction.job, 'transaction.json')], { detached: true, stdio: ['ignore', log, log], env: transaction.env });
+      await new Promise((resolve, reject) => { worker.once('spawn', resolve); worker.once('error', reject); });
+      worker.unref();
+    } finally { await import('node:fs').then(fs => fs.closeSync(log)); }
   }
   start() {
     if (!this.app || !this.profileDirectory || !this.isEnabled() || process.env.DIA_CUSTOM_STAGING === '1' || process.env.DIA_CUSTOM_BRIDGE_PORT && process.env.DIA_CUSTOM_BRIDGE_PORT !== '8765') return;

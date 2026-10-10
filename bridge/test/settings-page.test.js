@@ -92,6 +92,25 @@ test('Updates keeps GitHub optional, gates install on access, and honors restart
   assert.match(html, /Without repository access, Dia\+ still works/);
 });
 
+test('Updates shows installer progress while keeping every install action locked', async () => {
+  const html = renderSettingsPage('test-token');
+  const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(match => [match[1], new Element()]));
+  const field = id => elements.get(id);
+  let state = { phase: 'snapshotting', supported: true, enabled: true, currentBuild: '1',
+    github: { configured: true, signedIn: true, access: 'authorized' } };
+  const updater = initializeUpdaterSettings({ document: { querySelector: selector => field(selector.slice(1)) }, request: async () => state });
+  await updater.ready;
+  for (const [phase, label] of [['snapshotting', 'backing up profile'], ['preflight', 'checking profile'], ['replacing', 'installing update'], ['restarting', 'reopening Dia+']]) {
+    state = { ...state, phase }; await updater.refresh();
+    assert.match(field('updaterStatus').textContent, new RegExp(label.replace('+', '\\+')));
+    for (const id of ['checkUpdate', 'prepareUpdate', 'prepareDiaUpdate', 'installUpdate', 'updateChannel', 'githubUpdateSignOut']) assert.equal(field(id).disabled, true);
+  }
+  state = { ...state, phase: 'failed', error: 'Installer stopped before replacement' };
+  await updater.refresh();
+  assert.equal(field('checkUpdate').disabled, false);
+  assert.match(field('updaterDetail').textContent, /before replacement/);
+});
+
 class Element {
   constructor(tagName = "div") {
     this.tagName = tagName;

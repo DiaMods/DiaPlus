@@ -26,6 +26,14 @@ To test the installed updater, push the reviewed commit, run the existing manual
 
 ## Implemented in this version
 
+### Installer shutdown handoff fix — October 10, 2026
+
+- The first v0.1.1 in-app installation stopped at “closing” when its background worker disappeared as the browser quit. The original 87864 app remained installed; no profile snapshot, rollback journal or replacement had begun. This exposed a real native lifetime gap not covered by the earlier mocked worker tests or manual-installer QA.
+- The new client and the downloaded worker both support an independent one-shot macOS launchd handoff, including dispatch from older clients. Only an explicit Install action starts it; token checks, signed bundle verification, normal quit cancellation, closed-profile preflight and paired rollback remain enforced. Installer progress now distinguishes backup, profile preflight, replacement and restart.
+- Dead pre-replacement installers become retryable without touching app/profile data. Live or queued services remain locked; inspection errors fail closed; an existing rollback journal or interrupted replacement requires recovery review rather than automatic retry/restore.
+- A real disposable AppKit parent normally quit while the downloaded-worker entry point's independent service continued and finished. The complete bridge suite passed **282 tests: 281 passed, one existing Apple native-image runtime skip, zero failures**. Tests cover exact-process/argv decoys, queued services, no plaintext credentials in launchd configuration, symlink log rejection, dispatch failure, stale state and locked progress controls.
+- The user's stuck updater status was backed up and reset to failed only after confirming the worker was dead and no snapshot or rollback journal existed. No installed app, profile, provider choice or prepared signed bundle was replaced or edited. The fix is intended for the next Beta mod release; installer engine v1.0.0 is unchanged.
+
 | Area | Current behavior |
 | --- | --- |
 | Native chat and tools | Dynamic native schemas and ToolSearch; local public-web, people and Memory tools; native tables, math, file tools and Reports |

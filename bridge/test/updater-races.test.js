@@ -47,6 +47,7 @@ test("double install requests cannot spawn two workers and blocked checks preser
   await saveJSON(resolve(job, "transaction.json"), { node: process.execPath, toolkit, env: {} });
   // This test isolates dispatch serialization; signed transaction validation is tested separately.
   updater.validatePreparedTransaction = async () => {};
+  updater.dispatchInstaller = async () => { await writeFile(marker, 'started'); };
   await saveJSON(updater.statePath, { phase: "ready", job, preparedMods: ["custom-updater"] });
   const results = await Promise.allSettled([updater.install(), updater.install()]);
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
@@ -57,6 +58,73 @@ test("double install requests cannot spawn two workers and blocked checks preser
   await assert.rejects(updater.check(), /needs recovery/);
   assert.equal((await loadJSON(updater.statePath)).phase, "recovery-required");
   assert.equal(updater.busy, false);
+});
+
+test('dead pre-replacement installers become retryable without touching an app or profile', async t => {
+  const { updater } = await fixture(t);
+  const job = resolve(updater.root, 'jobs/dead');
+  await mkdir(job, { recursive: true });
+  await saveJSON(resolve(job, 'transaction.json'), { job, toolkit: resolve(job, 'toolkit'), node: process.execPath,
+    app: updater.app, statePath: updater.statePath });
+  updater.installerRunning = async () => false;
+  for (const phase of ['installing', 'closing', 'snapshotting', 'preflight']) {
+    await saveJSON(updater.statePath, { phase, job, updatedAt: '2000-01-01T00:00:00Z', channel: 'beta' });
+    const result = await updater.status();
+    assert.equal(result.phase, 'failed');
+    assert.match(result.error, /before app replacement/);
+    assert.equal(result.job, job); assert.equal(result.channel, 'beta');
+  }
+});
+
+test('live installers, startup grace and unknown process inspection remain locked', async t => {
+  const { updater } = await fixture(t);
+  const job = resolve(updater.root, 'jobs/live');
+  await mkdir(job, { recursive: true });
+  await saveJSON(resolve(job, 'transaction.json'), { job, toolkit: resolve(job, 'toolkit'), node: process.execPath,
+    app: updater.app, statePath: updater.statePath });
+  updater.installerRunning = async () => true;
+  await saveJSON(updater.statePath, { phase: 'preflight', job, updatedAt: '2000-01-01T00:00:00Z' });
+  assert.equal((await updater.status()).phase, 'preflight');
+  await assert.rejects(updater.check(), /needs recovery/);
+  await assert.rejects(updater.channel('stable'), /Resolve/);
+  updater.installerRunning = async () => { throw Error('Process inspection unavailable'); };
+  await saveJSON(updater.statePath, { phase: 'closing', job, updatedAt: '2000-01-01T00:00:00Z' });
+  const result = await updater.status();
+  assert.equal(result.phase, 'closing'); assert.match(result.error, /Cannot safely determine/);
+  assert.equal((await loadJSON(updater.statePath)).error, undefined);
+  await saveJSON(updater.statePath, { phase: 'installing', job, updatedAt: new Date().toISOString() });
+  assert.equal((await updater.status()).phase, 'installing');
+});
+
+test('interrupted replacement or rollback journal never automatically retries or restores', async t => {
+  const { updater } = await fixture(t);
+  const job = resolve(updater.root, 'jobs/recovery');
+  await mkdir(job, { recursive: true });
+  await saveJSON(resolve(job, 'transaction.json'), { job, toolkit: resolve(job, 'toolkit'), node: process.execPath,
+    app: updater.app, statePath: updater.statePath });
+  updater.installerRunning = async () => false;
+  for (const phase of ['replacing', 'restarting']) {
+    await saveJSON(updater.statePath, { phase, job, updatedAt: '2000-01-01T00:00:00Z' });
+    assert.equal((await updater.status()).phase, 'recovery-required');
+  }
+  await writeFile(resolve(job, 'rollback.json'), '{}');
+  await saveJSON(updater.statePath, { phase: 'closing', job, updatedAt: '2000-01-01T00:00:00Z' });
+  assert.equal((await updater.status()).phase, 'recovery-required');
+  await assert.rejects(updater.check(), /needs recovery/);
+  await saveJSON(updater.statePath, { phase: 'closing', job: '/foreign/jobs/no', updatedAt: '2000-01-01T00:00:00Z' });
+  assert.equal((await updater.status()).phase, 'closing');
+});
+
+test('failed installer service dispatch reports failure without quitting the browser', async t => {
+  const { updater } = await fixture(t);
+  const job = resolve(updater.root, 'jobs/dispatch-failure');
+  await mkdir(job, { recursive: true });
+  await saveJSON(resolve(job, 'transaction.json'), {});
+  updater.validatePreparedTransaction = async () => {};
+  updater.dispatchInstaller = async () => { throw Error('launchd refused service'); };
+  await saveJSON(updater.statePath, { phase: 'ready', job, preparedMods: ['custom-updater'] });
+  await assert.rejects(updater.install(), /launchd refused/);
+  assert.equal((await loadJSON(updater.statePath)).phase, 'failed');
 });
 
 test("updater state patches serialize without losing independent fields", async (t) => {

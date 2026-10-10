@@ -1302,16 +1302,17 @@ export function initializeUpdaterSettings({ document, request, confirmInstall = 
   async function refresh() {
     try {
       const state = await request('/api/updater');
-      const busy = ['checking','downloading','verifying','validating','building','installing','closing'].includes(state.phase);
+      const busy = ['checking','downloading','verifying','validating','building','installing','closing','snapshotting','preflight','replacing','restarting'].includes(state.phase);
       renderGitHub(state.github, busy);
       field('updateChannel').value = state.channel ?? 'stable';
       field('updateChannel').disabled = busy || !state.enabled;
       const allowed = state.github?.access === 'authorized';
       const progress = state.phase === 'downloading' ? state.download : null;
       const percent = Number.isFinite(progress?.percent) ? Math.max(0, Math.min(100, progress.percent)) : null;
-      const phase = state.phase === 'compatibility-review' ? 'waiting for confirmation' : state.phase;
+      const phase = ({ 'compatibility-review': 'waiting for confirmation', snapshotting: 'backing up profile',
+        preflight: 'checking profile', replacing: 'installing update', restarting: 'reopening Dia+' })[state.phase] ?? state.phase;
       const showCompatibility = Array.isArray(state.compatibility?.perMod) &&
-        ['validating','building','compatibility-review','ready','installing','closing','installed','failed','recovery-required'].includes(state.phase);
+        ['validating','building','compatibility-review','ready','installing','closing','snapshotting','preflight','replacing','restarting','installed','failed','recovery-required'].includes(state.phase);
       field('updaterStatus').textContent = !state.supported ? 'Available after rebuilding the installed app.' : !state.enabled ? 'Custom updater is disabled.' : 'Build ' + state.currentBuild + ' · ' + phase + (percent === null ? '' : ' · ' + percent + '%');
       field('updaterDetail').textContent = [state.diaRelease || state.release ? 'Latest Dia release: ' + (state.diaRelease || state.release).version + ' (' + (state.diaRelease || state.release).build + ')' : '', state.currentModVersion ? 'Installed mods: ' + state.currentModVersion + '.' : '', state.bundle ? 'Available mods: ' + state.bundle.manifest.version + '.' : '', state.error || '', state.rollbackError || '', showCompatibility ? state.compatibility.perMod.filter(m => m.compatible).length + ' mods passed compatibility checks.' : '', state.modRepository || ''].filter(Boolean).join(' ');
       field('updaterProgress').hidden = !progress;

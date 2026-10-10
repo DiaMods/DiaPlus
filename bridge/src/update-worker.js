@@ -5,6 +5,7 @@ import { loadJSON, plist, run, saveJSON } from './updater-common.js';
 import { GitHubUpdateAuth, GitHubKeychain } from './github-update-auth.js';
 import { verifyModManifest } from './release-verification.js';
 import { verifyPreparedToolkit } from './release-inventory.js';
+import { handoffInstaller } from './installer-handoff.js';
 
 async function authorize(t) {
   const source = await loadJSON(join(t.app, 'Contents/Resources/DiaCustomUpdater/src/config/updater-source.json'));
@@ -46,8 +47,10 @@ export async function installTransaction(t, overrides = {}) {
     await io.run('/bin/launchctl', ['remove', 'local.rttm.dia.bridge'], { env }).catch(() => {});
     await io.run(t.node, [script('bridge-runtime.js'), 'stop', t.app], { env });
     await io.run(t.node, [script('browser-process-guard.js'), 'assert-stopped', t.app, t.profile], { env });
+    await state({ phase: 'snapshotting' });
     await io.run('/bin/cp', ['-cR', t.profile, snapshot], { env, timeout: 300000 });
     snapshotted = true;
+    await state({ phase: 'preflight' });
     if (await io.stat(join(snapshot, 'User Data/Local State')).then(() => true).catch(() => false)) {
       await io.run('/bin/zsh', [script('preflight-profile.sh'), staged, snapshot], { env, timeout: 180000 });
     } else {
@@ -57,6 +60,7 @@ export async function installTransaction(t, overrides = {}) {
     await io.run(t.node, [script('browser-process-guard.js'), 'assert-stopped', t.app, t.profile], { env });
     await io.authorize(t);
     await io.saveJSON(join(t.job, 'rollback.json'), { version: 1, installedApp: t.app, backupApp, profile: t.profile, profileSnapshot: snapshot, createdAt: new Date().toISOString() });
+    await state({ phase: 'replacing' });
     await io.mkdir(dirname(backupApp), { recursive: true, mode: 0o700 });
     await io.rename(t.app, backupApp); preservedApp = true;
     await io.rename(staged, t.app); swapped = true;
@@ -64,6 +68,7 @@ export async function installTransaction(t, overrides = {}) {
     await io.mkdir(join(t.profile, 'Bridge/.state'), { recursive: true, mode: 0o700 });
     await io.cp(join(t.job, 'compatibility.json'), join(t.profile, 'Bridge/.state/compatibility.json'));
     await io.cp(join(t.job, 'rollback.json'), join(t.profile, 'Bridge/.state/latest-install-transaction.json'));
+    await state({ phase: 'restarting' });
     await io.run('/bin/zsh', [script('launch.sh')], { env: { ...env, DIA_CUSTOM_STAGING: '0' }, timeout: 120000 });
     // launch.sh checks runtime, profile, mod identities; also require the browser to stay alive.
     await io.run('/bin/sleep', ['20']);
@@ -104,6 +109,15 @@ export async function installTransaction(t, overrides = {}) {
   }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { await installTransaction(await loadJSON(resolve(process.argv[2]))); }
+  try {
+    const t = await loadJSON(resolve(process.argv[2]));
+    if (process.platform === 'darwin' && !process.argv.includes('--launchd-worker')) {
+      await handoffInstaller(t);
+      process.stdout.write('Installer handed off to an independent macOS service.\n');
+    } else {
+      process.stdout.write('Independent installer started.\n');
+      await installTransaction(t);
+    }
+  }
   catch (error) { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; }
 }
