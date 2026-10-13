@@ -17,7 +17,8 @@ const executable = resolve(app, "Contents/MacOS/Dia");
 const build = execFileSync("/usr/libexec/PlistBuddy", [
   "-c", "Print :CFBundleVersion", resolve(app, "Contents/Info.plist"),
 ], { encoding: "utf8" }).trim();
-const dynamicAIService = ["87864", "88564"].includes(build);
+const dynamicAIService = ["87864", "88564", "88592"].includes(build);
+const isDia153 = ["88564", "88592"].includes(build);
 const mappings = [
   {
     source: Buffer.from("https://tools-cache.diabrowser.engineering"),
@@ -69,7 +70,7 @@ const data = await readFile(executable);
 let patchedCount = 0;
 // Dia 1.50 removed the legacy tools-cache endpoint. Keep the other eight
 // endpoints guarded, and reject a reappearance or a partially patched copy.
-const isDia150 = ["87561", "87864", "88564"].includes(build);
+const isDia150 = ["87561", "87864", "88564", "88592"].includes(build);
 
 function countOccurrences(haystack, needle) {
   let count = 0;
@@ -86,7 +87,7 @@ function countOccurrences(haystack, needle) {
 for (const { source, replacement } of mappings) {
   const sourceCount = countOccurrences(data, source);
   const replacementCount = countOccurrences(data, replacement);
-  if (build === "88564" && source.toString() === "https://model-server.browserinternalstaging.com") {
+  if (isDia153 && source.toString() === "https://model-server.browserinternalstaging.com") {
     if (sourceCount !== 0 || replacementCount !== 0) {
       throw new Error("Dia 1.53 unexpectedly contains the removed model-server endpoint");
     }
@@ -142,6 +143,17 @@ if (dynamicAIService) {
       [0x5b4243c, "90890090103647f900021fd6"],
       [0xf6734c, "fc0f1af8fb6b01a9f96302a9f75b03a9f44f04a9fd7b05a9"],
       [0x2ce6674, "74820691e80318aa20008052e10316aaf50317aabb018a97f70315aa60d640f9"],
+    ],
+  } : build === "88592" ? {
+    resolver: 0xfb160c, destructor: 0xfb1628, sharedDestructor: 0x8c040,
+    literal: 0x60f7e80, textEnd: 0x5c0c5fc,
+    destructorBody: "fd030091800a40f9bfa13195e00314aa01038052e2008052fd7bc1a8e7a13115",
+    localContinuation: "200680d20000faf2218a02d021803991210041b26a6f31151f2003d51f2003d5",
+    guards: [
+      [0x8c040, "fd7bbfa9fd030091800a40f939376e95e00314aa01038052e2008052fd7bc1a861376e15"],
+      [0x5c0d3e8, "d08900b010ea45f900021fd6"],
+      [0xfb01c4, "fc0f1af8fb6b01a9f96302a9f75b03a9f44f04a9fd7b05a9"],
+      [0x2ef0cd4, "74820691e80318aa20008052e10316aaf50317aac1fb8297f70315aa60d640f9"],
     ],
   } : {
     resolver: 0xfb09bc, destructor: 0xfb09d8, sharedDestructor: 0x8c040,
@@ -215,7 +227,7 @@ if (dynamicAIService) {
 // Both original and fully patched candidates must satisfy the exact byte/count
 // checks above; inspecting an official or signed app must never modify it.
 if (checkOnly) {
-  process.stdout.write(`Validated ${mappings.length - 2 * Number(isDia150) - Number(build === "88564") + Number(dynamicAIService)} native AI endpoint(s) in ${executable}\n`);
+  process.stdout.write(`Validated ${mappings.length - 2 * Number(isDia150) - Number(isDia153) + Number(dynamicAIService)} native AI endpoint(s) in ${executable}\n`);
 } else {
   await writeFile(executable, data);
   process.stdout.write(`Patched ${patchedCount} native AI endpoint(s) in ${executable}\n`);

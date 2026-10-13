@@ -19,7 +19,7 @@ node "$project_dir/src/patches/patch-dia-import.js" --check "$source_app"
 node "$project_dir/src/patches/patch-report-controller.js" --check "$source_app"
 node "$project_dir/src/patches/patch-report-upload.js" --check "$source_app"
 source_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$source_app/Contents/Info.plist")"
-if [[ "$source_build" == 87561 || "$source_build" == 87864 || "$source_build" == 88564 ]]; then
+if [[ "$source_build" == 87561 || "$source_build" == 87864 || "$source_build" == 88564 || "$source_build" == 88592 ]]; then
   node "$script_dir/test-account-patch.js" "$source_app"
 fi
 if mod_enabled developer-tools; then

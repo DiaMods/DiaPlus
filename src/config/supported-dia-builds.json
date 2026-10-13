@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-10",
+  "updatedAt": "2026-10-12",
   "builds": {
     "85660": {
       "status": "audited",
@@ -196,6 +196,19 @@
         "local-knowledge", "local-workflows"
       ],
       "mainExecutableSHA256": "7686865a6a688912df875b738c729f49b246869e3f775f71e93c09af931493f9"
+    },
+    "88592": {
+      "status": "audited",
+      "version": "1.53.0",
+      "notes": "Signed publisher archive and strict app signature verified. Independently relocated account/capability, local request, token continuation and AIService resolver sites with exact instruction guards. Preserves AuthClientImpl ownership and the 0x1d0 error frame. Reports, importer, Apps, Morning Brief, agent handler and unchanged tool schemas pass structural checks. Full native/source suite and 282 bridge tests passed, with one existing platform skip. A signed disposable candidate passed all 19 post-patch checks, two fresh-profile launches, native local-provider chat and cross-chat Local Memory recall. Developer surfaces and four research placeholders remain unavailable; broader UI and Windows parity are not established. Every candidate is revalidated from its actual contents.",
+      "mods": [
+        "identity-isolation", "network-isolation", "update-blocker", "custom-updater",
+        "local-ai-routing", "account-bypass", "dia-import", "model-picker",
+        "mod-manager", "native-memory", "reports", "local-web", "connectors", "native-apps",
+        "live-connectors", "morning-brief", "apple-models", "local-knowledge",
+        "local-workflows"
+      ],
+      "mainExecutableSHA256": "bc34d867bbb64a5d3b39245498c346f110ed67f421389a40ecab12f0781154f7"
     },
     "88564": {
       "status": "audited",

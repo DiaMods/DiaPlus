@@ -10,7 +10,7 @@ const scripts = dirname(fileURLToPath(import.meta.url));
 const source = resolve(process.argv[2]);
 const info = join(source, 'Contents/Info.plist');
 const build = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleVersion', info], { encoding: 'utf8' }).trim();
-const constructor = { '87561': 0x2dbbd08, '87864': 0x2dfa1c8, '88564': 0x2f7ac70 }[build];
+const constructor = { '87561': 0x2dbbd08, '87864': 0x2dfa1c8, '88564': 0x2f7ac70, '88592': 0x2f7b800 }[build];
 if (!constructor) throw new Error('This regression covers the 1.50+ concurrent-stream constructor change.');
 const root = await mkdtemp(join(tmpdir(), 'dia-account-regression-'));
 const app = join(root, 'Dia Custom Account Fixture.app');
@@ -62,13 +62,28 @@ try {
     await writeFile(executable, referenced);
     assert.throws(() => run('--check', '--capabilities-only'), /token error continuation gained a reference/);
   }
-  if (build === '88564') {
-    assert.equal(patched.readUInt32LE(0xf73bb4), 0x14000017,
+  if (['88564', '88592'].includes(build)) {
+    const current = build === '88592';
+    const request = current ? 0xf74804 : 0xf73bb4;
+    const cave = current ? 0x51515dc : 0x5150b2c;
+    assert.equal(patched.readUInt32LE(request), 0x14000017,
       'local authentication must use the independently audited no-auth continuation');
-    assert.equal(patched.readUInt32LE(0x5150b34), 0xf900eaff,
+    assert.equal(patched.readUInt32LE(cave + 8), 0xf900eaff,
       'clear the new 0x1d0 error slot, not the obsolete 0xb0 slot');
-    for (const offset of [0xf73b9c, 0xf73bb4, 0xf73c10, 0x515093c, 0x515094c,
-      0x515099c, 0x255e0, 0x5c19584, 0xfc1810, 0xfc1888, 0xfc18a0, 0xfc18b8]) {
+    // Decode each patched Clia closure and require the known constant-true
+    // function, so a wrong page relocation cannot pass as valid patch bytes.
+    for (const offset of current ? [0xfc24d0, 0xfc24e8, 0xfc2500] : [0xfc1880, 0xfc1898, 0xfc18b0]) {
+      const adrp = patched.readUInt32LE(offset), add = patched.readUInt32LE(offset + 4);
+      const immediate = ((adrp >>> 5 & 0x7ffff) << 2) | (adrp >>> 29 & 3);
+      const signed = immediate & 0x100000 ? immediate - 0x200000 : immediate;
+      assert.equal((offset & ~4095) + signed * 4096 + (add >>> 10 & 4095), 0x255e0);
+    }
+    const guards = current
+      ? [0xf747ec, 0xf74804, 0xf74860, 0x51513ec, 0x51513fc, 0x515144c,
+        0x255e0, 0x5c19eb0, 0xfc2460, 0xfc24d8, 0xfc24f0, 0xfc2508]
+      : [0xf73b9c, 0xf73bb4, 0xf73c10, 0x515093c, 0x515094c,
+        0x515099c, 0x255e0, 0x5c19584, 0xfc1810, 0xfc1888, 0xfc18a0, 0xfc18b8];
+    for (const offset of guards) {
       const invalid = Buffer.from(patched);
       invalid[offset] ^= 1;
       await writeFile(executable, invalid);
@@ -76,7 +91,7 @@ try {
       assert.deepEqual(await readFile(executable), invalid, 'reject changed 1.53 ABI without partial writes');
     }
     const referenced = Buffer.from(patched);
-    const from = 0x3268, target = 0x5150b2c;
+    const from = 0x3268, target = cave;
     referenced.writeUInt32LE((0x14000000 | ((target - from) / 4)) >>> 0, from);
     await writeFile(executable, referenced);
     assert.throws(() => run('--check', '--capabilities-only'), /token error continuation gained a reference/);

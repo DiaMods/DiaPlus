@@ -91,12 +91,25 @@ try {
     join(scriptDirectory, "../src/patches/patch-endpoint.js"), "--check", fixtureApp,
   ], { encoding: "utf8" });
   assert.equal(digest(await readFile(patchedPath)), digest(patched), "checking must not modify the executable");
-  if (["87864", "88564"].includes(sourceBuild)) {
-    const resolver = sourceBuild === "87864" ? 0xf68794 : 0xfb09bc;
-    const destructor = sourceBuild === "87864" ? 0xf687b0 : 0xfb09d8;
+  if (["87864", "88564", "88592"].includes(sourceBuild)) {
+    const resolver = { "87864": 0xf68794, "88564": 0xfb09bc, "88592": 0xfb160c }[sourceBuild];
+    const destructor = resolver + 28;
     const guards = sourceBuild === "87864"
       ? [0x8cac8, 0xf6734c, 0x2ce6674, 0x5b4243c, 0x60cee90]
-      : [0x8c040, 0xfaf574, 0x2ef0144, 0x5c0cabc, 0x60f7520];
+      : sourceBuild === "88592"
+        ? [0x8c040, 0xfb01c4, 0x2ef0cd4, 0x5c0d3e8, 0x60f7e80]
+        : [0x8c040, 0xfaf574, 0x2ef0144, 0x5c0cabc, 0x60f7520];
+    const continuation = destructor + 4;
+    const adrp = patched.readUInt32LE(continuation + 8), add = patched.readUInt32LE(continuation + 12);
+    const immediate = ((adrp >>> 5 & 0x7ffff) << 2) | (adrp >>> 29 & 3);
+    const signed = immediate & 0x100000 ? immediate - 0x200000 : immediate;
+    const literal = ((continuation + 8) & ~4095) + signed * 4096 + (add >>> 10 & 4095) + 32;
+    const localURL = "http://localhost:8765/ai-service-local-v1/native0\0";
+    assert.equal(patched.subarray(literal, literal + localURL.length).toString(), localURL,
+      "the relocated native String must resolve to the local URL literal");
+    const branchAt = continuation + 20, branch = patched.readUInt32LE(branchAt) & 0x3ffffff;
+    assert.equal(branchAt + (branch & 0x2000000 ? branch - 0x4000000 : branch) * 4,
+      guards[3], "the native continuation must tail-call the guarded URL constructor");
     for (const offset of [resolver, destructor, destructor + 4, ...guards]) {
       const invalid = Buffer.from(patched);
       invalid[offset] ^= 1;
@@ -116,7 +129,7 @@ try {
       "reject an unexpected native continuation caller without writing");
     await writeFile(patchedPath, patched);
   }
-  if (sourceBuild === "88564") {
+  if (["88564", "88592"].includes(sourceBuild)) {
     // Removed URLs are an audited absence, not optional patch sites. Neither
     // their hosted form nor a stale local replacement may silently reappear.
     for (const endpoint of [
@@ -133,7 +146,7 @@ try {
     }
     await writeFile(patchedPath, patched);
   }
-  const endpoint = Buffer.from(["87561", "87864", "88564"].includes(sourceBuild)
+  const endpoint = Buffer.from(["87561", "87864", "88564", "88592"].includes(sourceBuild)
     ? "http://localhost:8765/aiproxy/dia-claude-stream-local-testxx"
     : "http://localhost:8765/tools-cache-local-xx");
   const endpointOffset = patched.indexOf(endpoint);
