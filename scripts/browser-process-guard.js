@@ -66,7 +66,10 @@ export function createProcessProbe() {
   };
 }
 
-export async function stopProfileBrowser(probe, app, profile, { timeoutMs = 5000, intervalMs = 100 } = {}) {
+// Populated profiles can take more than five seconds to flush and release
+// their renderer/extension processes. Wait for all exact profile users; never
+// signal foreign helpers or escalate to SIGKILL to satisfy this deadline.
+export async function stopProfileBrowser(probe, app, profile, { timeoutMs = 30000, intervalMs = 100 } = {}) {
   const executable = normalizedPath(join(app, 'Contents/MacOS/Dia'));
   const userData = normalizedPath(join(profile, 'User Data'));
   const deadline = Date.now() + timeoutMs;

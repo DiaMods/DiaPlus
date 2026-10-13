@@ -64,10 +64,14 @@ try {
     #include <string.h>
     #include <sys/socket.h>
     #include <unistd.h>
+    static volatile sig_atomic_t slow_stop;
+    static void request_slow_stop(int signal) { (void)signal; slow_stop = 1; }
     int main(int argc, char **argv) {
       int port = 0;
       for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--ignore-term")) signal(SIGTERM, SIG_IGN);
+        if (!strcmp(argv[i], "--slow-term")) signal(SIGTERM, request_slow_stop);
+        if (!strncmp(argv[i], "--exit-after=", 13)) alarm((unsigned)atoi(argv[i] + 13));
         if (!strncmp(argv[i], "--remote-debugging-port=", 24)) port = atoi(argv[i] + 24);
       }
       if (getenv("DIA_CUSTOM_PREFLIGHT")) {
@@ -85,6 +89,7 @@ try {
       }
       puts("ready"); fflush(stdout);
       while (1) {
+        if (slow_stop) { sleep(6); return 0; }
         if (server < 0) { pause(); continue; }
         int client = accept(server, NULL, NULL);
         if (client < 0) continue;
@@ -125,6 +130,22 @@ try {
   running(foreign);
   await stopFixture(foreign);
 
+  // A populated native profile can flush slowly after TERM while unsignaled
+  // helper processes also release that exact profile. The old five-second
+  // production default failed this case; wait without killing the helper.
+  const delayed = await startFixture(executable, ['--slow-term', '--user-data-dir', userData]);
+  const releasingHelper = await startFixture(decoyExecutable, ['--exit-after=7', '--user-data-dir', userData]);
+  const delayedExit = once(delayed, 'exit'), helperExit = once(releasingHelper, 'exit');
+  const shutdownStarted = Date.now();
+  await stopProfileBrowser(probe, app, profile);
+  await Promise.all([delayedExit, helperExit]);
+  assert.ok(Date.now() - shutdownStarted >= 6000, 'must wait beyond the old five-second cutoff');
+  assert.equal(delayed.exitCode, 0, 'the browser completed its own delayed shutdown');
+  assert.equal(releasingHelper.signalCode, 'SIGALRM', 'the guard must not signal a foreign helper');
+  assert.ok(!matchingBrowserProcesses(probe.list(), app, profile).some(p => p.pid === delayed.pid || p.pid === releasingHelper.pid));
+  for (const decoy of [commandText, literal]) running(decoy);
+  process.stdout.write('ok    delayed browser/helper profile release waits beyond five seconds without force or foreign signals\n');
+
   const stubborn = await startFixture(executable, ['--ignore-term', '--user-data-dir', userData]);
   await assert.rejects(stopProfileBrowser(probe, app, profile, { timeoutMs: 150, intervalMs: 25 }), /preserving/);
   running(stubborn);
@@ -147,7 +168,7 @@ try {
 
   const pidFile = join(directory, 'preflight.pid');
   const preflight = spawnSync('/bin/zsh', [join(scripts, 'preflight-profile.sh'), app, profile], {
-    encoding: 'utf8', timeout: 25000, env: { ...process.env, DIA_CUSTOM_WORK_DIR: directory,
+    encoding: 'utf8', timeout: 75000, env: { ...process.env, DIA_CUSTOM_WORK_DIR: directory,
       DIA_CUSTOM_PREFLIGHT_SETTLE_SECONDS: '0', DIA_TEST_PREFLIGHT_PID_FILE: pidFile, DIA_TEST_PREFLIGHT_IGNORE_TERM: '1' },
   });
   preflightPID = Number(await readFile(pidFile, 'utf8'));

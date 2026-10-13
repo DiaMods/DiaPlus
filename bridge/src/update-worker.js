@@ -52,9 +52,9 @@ export async function installTransaction(t, overrides = {}) {
     snapshotted = true;
     await state({ phase: 'preflight' });
     if (await io.stat(join(snapshot, 'User Data/Local State')).then(() => true).catch(() => false)) {
-      await io.run('/bin/zsh', [script('preflight-profile.sh'), staged, snapshot], { env, timeout: 180000 });
+      await io.run('/bin/zsh', [script('preflight-profile.sh'), staged, snapshot], { env, timeout: 240000 });
     } else {
-      await io.run('/bin/zsh', [script('preflight-profile.sh'), staged], { env, timeout: 180000 });
+      await io.run('/bin/zsh', [script('preflight-profile.sh'), staged], { env, timeout: 240000 });
     }
     await assertModConfiguration();
     await io.run(t.node, [script('browser-process-guard.js'), 'assert-stopped', t.app, t.profile], { env });
