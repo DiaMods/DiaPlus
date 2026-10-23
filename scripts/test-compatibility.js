@@ -91,11 +91,13 @@ try {
     join(scriptDirectory, "../src/patches/patch-endpoint.js"), "--check", fixtureApp,
   ], { encoding: "utf8" });
   assert.equal(digest(await readFile(patchedPath)), digest(patched), "checking must not modify the executable");
-  if (["87864", "88564", "88592"].includes(sourceBuild)) {
-    const resolver = { "87864": 0xf68794, "88564": 0xfb09bc, "88592": 0xfb160c }[sourceBuild];
+  if (["87864", "88564", "88592", "88879"].includes(sourceBuild)) {
+    const resolver = { "87864": 0xf68794, "88564": 0xfb09bc, "88592": 0xfb160c, "88879": 0xfbf39c }[sourceBuild];
     const destructor = resolver + 28;
     const guards = sourceBuild === "87864"
       ? [0x8cac8, 0xf6734c, 0x2ce6674, 0x5b4243c, 0x60cee90]
+      : sourceBuild === "88879"
+        ? [0x8bfd4, 0xfbdf54, 0x2f66614, 0x5ceb8d0, 0x61e1cf0]
       : sourceBuild === "88592"
         ? [0x8c040, 0xfb01c4, 0x2ef0cd4, 0x5c0d3e8, 0x60f7e80]
         : [0x8c040, 0xfaf574, 0x2ef0144, 0x5c0cabc, 0x60f7520];
@@ -129,7 +131,7 @@ try {
       "reject an unexpected native continuation caller without writing");
     await writeFile(patchedPath, patched);
   }
-  if (["88564", "88592"].includes(sourceBuild)) {
+  if (["88564", "88592", "88879"].includes(sourceBuild)) {
     // Removed URLs are an audited absence, not optional patch sites. Neither
     // their hosted form nor a stale local replacement may silently reappear.
     for (const endpoint of [
@@ -146,7 +148,7 @@ try {
     }
     await writeFile(patchedPath, patched);
   }
-  const endpoint = Buffer.from(["87561", "87864", "88564", "88592"].includes(sourceBuild)
+  const endpoint = Buffer.from(["87561", "87864", "88564", "88592", "88879"].includes(sourceBuild)
     ? "http://localhost:8765/aiproxy/dia-claude-stream-local-testxx"
     : "http://localhost:8765/tools-cache-local-xx");
   const endpointOffset = patched.indexOf(endpoint);
@@ -188,6 +190,30 @@ try {
     /native Morning Brief synchronous method ABI changed/);
   }
   process.stdout.write("ok    audited build metadata cannot bypass a changed native Morning Brief ABI\n");
+
+  if (sourceBuild === "88879") {
+    await writeFile(patchedPath, patched);
+    const reports = (...args) => execFileSync(process.execPath, [
+      join(scriptDirectory, "../src/patches/patch-report-controller.js"), ...args, fixtureApp,
+    ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    reports("--check");
+    assert.deepEqual(await readFile(patchedPath), patched, "Reports inspection must stay read-only");
+    reports();
+    const reportsPatched = await readFile(patchedPath);
+    assert.equal(reportsPatched.readUInt32LE(0x8dbb2c), 0xd503201f);
+    assert.deepEqual(reportsPatched.subarray(0x891428, 0x891460), patched.subarray(0x891428, 0x891460),
+      "retain the native idempotency branch and controller setup contract");
+    reports();
+    assert.deepEqual(await readFile(patchedPath), reportsPatched);
+    for (const offset of [0x8dbb2c, 0x891428, 0x891448, 0x89144c]) {
+      const invalid = Buffer.from(reportsPatched); invalid[offset] ^= 1;
+      await writeFile(patchedPath, invalid);
+      assert.throws(() => reports(), /expected one audited native Reports capability gate/);
+      assert.deepEqual(await readFile(patchedPath), invalid, "changed Reports setup must fail without writing");
+    }
+    await writeFile(patchedPath, patched);
+    process.stdout.write("ok    Reports retains native idempotency and rejects changed setup or capability instructions\n");
+  }
 
   // Memory's legacy ID/settings survive removal of an optional native pane.
   // Its bridge engine must stay selectable even when no pane strings exist.

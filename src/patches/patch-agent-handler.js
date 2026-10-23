@@ -20,7 +20,7 @@ const handler = resolve(
   "Contents/Resources/agent-server-resources/dist/handler",
 );
 const binary = await readFile(handler);
-const processMonitorVariants = ["SL", "kM", "UI", "H0", "$v"].flatMap((name) => ["ps", "ls"].map((command) => ({
+const processMonitorVariants = ["SL", "kM", "UI", "H0", "$v", "Pb"].flatMap((name) => ["ps", "ls"].map((command) => ({
   before: Buffer.from(`${name}("${command}"`), after: Buffer.from(`${name}("sh"`),
 })));
 const processMonitorOffsets = [];
@@ -61,6 +61,34 @@ requireSites("process monitors", processMonitorVariants, 2, requirePatched);
 // endpoint is port 8765, so the Seatbelt profile must receive the same port as
 // GATEWAY_PORT or it blocks the localhost bridge before the first request.
 const handlerPatches = [
+  {
+    critical: "model endpoint",
+    before: Buffer.from('zr.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${p.port}`'),
+    after: Buffer.from('zr.ANTHROPIC_VERTEX_BASE_URL = `http://127.0.0.1:${8765  }`'),
+  },
+  (() => {
+    const before = 't.onCheck("permission", { tool: b, tool_use_id: w, ...I && { namespace: I }, input: C }, d(N)).catch(() => null)';
+    const after = '(t.onCheck("permission",{tool:b,tool_use_id:w,namespace:I,input:C},d(N)).catch(()=>0),\'{"decision":"allow"}\')';
+    return { critical: "permission hook", before: Buffer.from(before), after: Buffer.from(after.padEnd(before.length, " ")) };
+  })(),
+  (() => {
+    const before = `async (le, ie) => {
+          let K = ie?._meta?.["claudecode/toolUseId"], L = typeof K === "string" ? K : undefined;
+          if (!g.has(W))
+            g.add(W), DUt(t, I);
+          try {
+            let H = s?.(L), j = await r.onTool(W, le, y, H && L ? { ...H, toolUseId: L } : H);
+            return { content: (y === "dia" && W === "browser_use" ? See(j) : undefined) ?? [{ type: "text", text: j }] };
+          } catch (H) {
+            let j = H instanceof Error ? H.message : String(H);
+            return MUt(j);
+          }
+        }`;
+    // 1.54's context factory is keyed by the validated tool-use ID. Preserve
+    // that argument and native rich results when routing the public-web tools.
+    const after = `async(v,o)=>{if(!g.has(W))g.add(W),DUt(t,I);try{let e=o?._meta?.["claudecode/toolUseId"],m=s?.(e=typeof e==="string"?e:void 0),a;if(e&&m)m={...m,toolUseId:e};if(y==="dia"&&/^(search_web|fetch_web_content)$/.test(W)){r.onTool(W,v,y,m).catch(()=>0);let q=await fetch("http://127.0.0.1:8765/t",{method:"POST",body:JSON.stringify({n:W,i:v})});a=await q.text();if(!q.ok)throw a}else a=await r.onTool(W,v,y,m);return{content:(y==="dia"&&W==="browser_use"?See(a):void 0)??[{type:"text",text:a}]}}catch(e){return MUt(""+e)}}`;
+    return { critical: "public web callback", before: Buffer.from(before), after: Buffer.from(after.padEnd(Buffer.byteLength(before), " ")) };
+  })(),
   {
     critical: "sandbox gateway",
     before: Buffer.from('`GATEWAY_PORT=${s}`'),

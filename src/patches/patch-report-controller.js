@@ -57,7 +57,18 @@ const reportSetupPrefixes = [
   ],
 ];
 
+// 1.54 retains the same setup contract but returns early when the native
+// controller already exists. Guard this full prefix exactly, including its
+// field offset and branch, so the new idempotency check stays intact.
+const idempotentSetupPrefix = [
+  0xd10483ff, 0xa90c6ffc, 0xa90d67fa, 0xa90e5ff8,
+  0xa90f57f6, 0xa9104ff4, 0xa9117bfd, 0x910443fd,
+  0xf9466a88, 0xb5001528, 0xaa1403f3, 0xf9400296,
+  0xa90103f4, 0xd2800000,
+];
 function hasReportSetupPrefix(offset) {
+  if (offset >= 0 && offset + idempotentSetupPrefix.length * 4 <= binary.length &&
+      idempotentSetupPrefix.every((word, i) => binary.readUInt32LE(offset + i * 4) === word)) return true;
   return reportSetupPrefixes.some((prefix) => offset >= 0 &&
     offset + prefix.length * 4 <= binary.length && prefix.every((expected, index) => {
     const actual = binary.readUInt32LE(offset + index * 4);

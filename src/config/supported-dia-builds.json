@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-12",
+  "updatedAt": "2026-10-23",
   "builds": {
     "85660": {
       "status": "audited",
@@ -196,6 +196,18 @@
         "local-knowledge", "local-workflows"
       ],
       "mainExecutableSHA256": "7686865a6a688912df875b738c729f49b246869e3f775f71e93c09af931493f9"
+    },
+    "88879": {
+      "status": "audited",
+      "version": "1.54.0",
+      "notes": "Signed official publisher archive and app identity verified. Independently relocated account/capability, native request and AIService URL sites while preserving AuthClientImpl ownership and the 0x1d0 error frame. Agent-handler guards preserve the new tool-use-ID context lookup, native browser-use results and safety boundaries. Reports retains its new controller idempotency guard. Morning Brief retains the audited synchronous ABI. All 19 supported mods pass structural checks; native runtime validation is recorded separately. Developer and research surfaces remain unavailable. Every candidate is validated from its actual contents.",
+      "mods": [
+        "identity-isolation", "network-isolation", "update-blocker", "custom-updater",
+        "local-ai-routing", "account-bypass", "dia-import", "model-picker",
+        "mod-manager", "native-memory", "reports", "local-web", "connectors", "native-apps",
+        "live-connectors", "morning-brief", "apple-models", "local-knowledge", "local-workflows"
+      ],
+      "mainExecutableSHA256": "4df745c2a48d7523679783d31702f3fa7c4b558ec7b4f56c1fd52dce2db70b1b"
     },
     "88592": {
       "status": "audited",

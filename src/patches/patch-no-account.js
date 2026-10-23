@@ -312,6 +312,34 @@ layouts["88592"] = {
   ],
 };
 
+// Independently audited 1.54 layout; preserve the native AuthClientImpl and
+// local request/async error conventions rather than replacing dependencies.
+layouts["88879"] = {
+  ...layouts["88564"],
+  accountStateGuard: 0x76f288,
+  capabilityGateOne: 0x806624,
+  capabilityGateTwo: 0x81a020,
+  accountState: 0x300b54c,
+  authenticationMethod: 0x770be8,
+  modelTokenFailure: {
+    ...layouts["88564"].modelTokenFailure,
+    offset: 0x5207970, codeCave: 0x5207b54, returnOffset: 0x520797c,
+    releaseStub: 0x5cf8530,
+  },
+  keyVerification: 0x2f64650,
+  localRequestAuthentication: [
+    { offset: 0xf8250c, expected: "bd0344b2f70f1df8f5cf00a9fd7b02a9f60f00f9fd830091", replacement: "bd0344b2f70f1df8f5cf00a9fd7b02a9f60f00f9fd830091" },
+    { offset: 0xf82524, expected: "e1020036", replacement: "17000014" },
+    { offset: 0xf82580, expected: "c00640f9140080d2fd7b42a9f5cf40a9f70743f8bdfb439200001fd6", replacement: "c00640f9140080d2fd7b42a9f5cf40a9f70743f8bdfb439200001fd6" },
+  ],
+  authClientConstructor: { offset: 0x2ff1014, expected: "b1feff97", replacement: "b1feff97" },
+  cliaClosures: [
+    { offset: 0xfd0260, expected: "c882ffd008213291", replacement: "a882ffb008d11591" },
+    { offset: 0xfd0278, expected: "c882ffd008213291", replacement: "a882ffb008d11591" },
+    { offset: 0xfd0290, expected: "c882ffd008213291", replacement: "a882ffb008d11591" },
+  ],
+};
+
 const layout = layouts[build];
 if (!layout) {
   throw new Error(
@@ -457,13 +485,23 @@ const selectedPatches = patches.filter((patch) =>
   anonymousOnly && patch.scope === "anonymous");
 const data = fs.readFileSync(executable);
 
-if (["87864", "88564", "88592"].includes(build)) {
+if (["87864", "88564", "88592", "88879"].includes(build)) {
   const guards = build === "87864" ? [
     [0x45b360c, "f45a00f917705694940000b4", "token error selector"],
     [0x45b361c, "00f01f9104000014f3d60ba90000009000301991", "token continuations"],
     [0x45b366c, "fd430191d3824ba9d55240f9", "success continuation frame"],
     [0x252fc, "20008052c0035fd6", "constant-true Clia closure"],
     [0x5b4f24c, "708900f010f244f900021fd6", "Swift error release stub"],
+  ] : build === "88879" ? [
+    [0x5207964, "f4ea00f9f4c32b94940000b4", "token error selector"],
+    [0x5207974, "00502d9104000014f3d61da90000009000902691", "token continuations"],
+    [0x52079c4, "fd430191d3825da9d5e240f9", "success continuation frame"],
+    [0x25574, "20008052c0035fd6", "constant-true Clia closure"],
+    [0x5cf8530, "f08a00d0108643f900021fd6", "Swift error release stub"],
+    [0xfd01f0, "f44fbea9fd7b01a9fd430091ff8317d1f30308aa", "Clia dependency initializer"],
+    [0xfd0268, "e87f08a9280000b0", "first Clia closure storage"],
+    [0xfd0280, "e87f0aa9280000b0", "second Clia closure storage"],
+    [0xfd0298, "e87f0ca9280000b0", "third Clia closure storage"],
   ] : build === "88592" ? [
     [0x51513ec, "f4ea00f9b2232b94940000b4", "token error selector"],
     [0x51513fc, "0070179104000014f3d61da90000009000b01091", "token continuations"],
@@ -492,7 +530,7 @@ if (["87864", "88564", "88592"].includes(build)) {
   }
   const token = layout.modelTokenFailure;
   const sign = (value, bits) => value & (1 << (bits - 1)) ? value - 2 ** bits : value;
-  const textEnd = { "87864": 0x5b41638, "88564": 0x5c0bcd0, "88592": 0x5c0c5fc }[build];
+  const textEnd = { "87864": 0x5b41638, "88564": 0x5c0bcd0, "88592": 0x5c0c5fc, "88879": 0x5ceaac0 }[build];
   for (let offset = 0x3200; offset < textEnd; offset += 4) {
     const word = data.readUInt32LE(offset);
     let target = null;

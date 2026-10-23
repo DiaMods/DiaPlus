@@ -10,7 +10,7 @@ const scripts = dirname(fileURLToPath(import.meta.url));
 const source = resolve(process.argv[2]);
 const info = join(source, 'Contents/Info.plist');
 const build = execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleVersion', info], { encoding: 'utf8' }).trim();
-const constructor = { '87561': 0x2dbbd08, '87864': 0x2dfa1c8, '88564': 0x2f7ac70, '88592': 0x2f7b800 }[build];
+const constructor = { '87561': 0x2dbbd08, '87864': 0x2dfa1c8, '88564': 0x2f7ac70, '88592': 0x2f7b800, '88879': 0x2ff1014 }[build];
 if (!constructor) throw new Error('This regression covers the 1.50+ concurrent-stream constructor change.');
 const root = await mkdtemp(join(tmpdir(), 'dia-account-regression-'));
 const app = join(root, 'Dia Custom Account Fixture.app');
@@ -62,23 +62,27 @@ try {
     await writeFile(executable, referenced);
     assert.throws(() => run('--check', '--capabilities-only'), /token error continuation gained a reference/);
   }
-  if (['88564', '88592'].includes(build)) {
+  if (['88564', '88592', '88879'].includes(build)) {
     const current = build === '88592';
-    const request = current ? 0xf74804 : 0xf73bb4;
-    const cave = current ? 0x51515dc : 0x5150b2c;
+    const dia154 = build === '88879';
+    const request = dia154 ? 0xf82524 : current ? 0xf74804 : 0xf73bb4;
+    const cave = dia154 ? 0x5207b54 : current ? 0x51515dc : 0x5150b2c;
     assert.equal(patched.readUInt32LE(request), 0x14000017,
       'local authentication must use the independently audited no-auth continuation');
     assert.equal(patched.readUInt32LE(cave + 8), 0xf900eaff,
       'clear the new 0x1d0 error slot, not the obsolete 0xb0 slot');
     // Decode each patched Clia closure and require the known constant-true
     // function, so a wrong page relocation cannot pass as valid patch bytes.
-    for (const offset of current ? [0xfc24d0, 0xfc24e8, 0xfc2500] : [0xfc1880, 0xfc1898, 0xfc18b0]) {
+    for (const offset of dia154 ? [0xfd0260, 0xfd0278, 0xfd0290] : current ? [0xfc24d0, 0xfc24e8, 0xfc2500] : [0xfc1880, 0xfc1898, 0xfc18b0]) {
       const adrp = patched.readUInt32LE(offset), add = patched.readUInt32LE(offset + 4);
       const immediate = ((adrp >>> 5 & 0x7ffff) << 2) | (adrp >>> 29 & 3);
       const signed = immediate & 0x100000 ? immediate - 0x200000 : immediate;
-      assert.equal((offset & ~4095) + signed * 4096 + (add >>> 10 & 4095), 0x255e0);
+      assert.equal((offset & ~4095) + signed * 4096 + (add >>> 10 & 4095), dia154 ? 0x25574 : 0x255e0);
     }
-    const guards = current
+    const guards = dia154
+      ? [0xf8250c, 0xf82524, 0xf82580, 0x5207964, 0x5207974, 0x52079c4,
+        0x25574, 0x5cf8530, 0xfd01f0, 0xfd0268, 0xfd0280, 0xfd0298]
+      : current
       ? [0xf747ec, 0xf74804, 0xf74860, 0x51513ec, 0x51513fc, 0x515144c,
         0x255e0, 0x5c19eb0, 0xfc2460, 0xfc24d8, 0xfc24f0, 0xfc2508]
       : [0xf73b9c, 0xf73bb4, 0xf73c10, 0x515093c, 0x515094c,
