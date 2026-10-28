@@ -17,8 +17,8 @@ const executable = resolve(app, "Contents/MacOS/Dia");
 const build = execFileSync("/usr/libexec/PlistBuddy", [
   "-c", "Print :CFBundleVersion", resolve(app, "Contents/Info.plist"),
 ], { encoding: "utf8" }).trim();
-const dynamicAIService = ["87864", "88564", "88592", "88879"].includes(build);
-const isDia153 = ["88564", "88592", "88879"].includes(build);
+const dynamicAIService = ["87864", "88564", "88592", "88879", "89443"].includes(build);
+const isDia153 = ["88564", "88592", "88879", "89443"].includes(build);
 const mappings = [
   {
     source: Buffer.from("https://tools-cache.diabrowser.engineering"),
@@ -70,7 +70,7 @@ const data = await readFile(executable);
 let patchedCount = 0;
 // Dia 1.50 removed the legacy tools-cache endpoint. Keep the other eight
 // endpoints guarded, and reject a reappearance or a partially patched copy.
-const isDia150 = ["87561", "87864", "88564", "88592", "88879"].includes(build);
+const isDia150 = ["87561", "87864", "88564", "88592", "88879", "89443"].includes(build);
 
 function countOccurrences(haystack, needle) {
   let count = 0;
@@ -143,6 +143,17 @@ if (dynamicAIService) {
       [0x5b4243c, "90890090103647f900021fd6"],
       [0xf6734c, "fc0f1af8fb6b01a9f96302a9f75b03a9f44f04a9fd7b05a9"],
       [0x2ce6674, "74820691e80318aa20008052e10316aaf50317aabb018a97f70315aa60d640f9"],
+    ],
+  } : build === "89443" ? {
+    resolver: 0xfd0a10, destructor: 0xfd0a2c, sharedDestructor: 0x8ca7c,
+    literal: 0x6568ff0, textEnd: 0x6047cf8,
+    destructorBody: "fd030091800a40f976134295e00314aa01038052e2008052fd7bc1a89e134215",
+    localContinuation: "200680d20000faf2c1ac029021403f91210041b23de041151f2003d51f2003d5",
+    guards: [
+      [0x8ca7c, "fd7bbfa9fd030091800a40f962237f95e00314aa01038052e2008052fd7bc1a88a237f15"],
+      [0x6048b38, "d08f00f010ca41f900021fd6"],
+      [0xfcf5c8, "fc0f1af8fb6b01a9f96302a9f75b03a9f44f04a9fd7b05a9"],
+      [0x2a6d3cc, "74820691e80318aa20008052e10316aaf50317aa04879597f70315aa60d640f9"],
     ],
   } : build === "88879" ? {
     resolver: 0xfbf39c, destructor: 0xfbf3b8, sharedDestructor: 0x8bfd4,

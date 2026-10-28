@@ -68,7 +68,8 @@ const idempotentSetupPrefix = [
 ];
 function hasReportSetupPrefix(offset) {
   if (offset >= 0 && offset + idempotentSetupPrefix.length * 4 <= binary.length &&
-      idempotentSetupPrefix.every((word, i) => binary.readUInt32LE(offset + i * 4) === word)) return true;
+      [idempotentSetupPrefix, idempotentSetupPrefix.map((word, i) => i === 8 ? 0xf9468688 : word)]
+        .some(prefix => prefix.every((word, i) => binary.readUInt32LE(offset + i * 4) === word))) return true;
   return reportSetupPrefixes.some((prefix) => offset >= 0 &&
     offset + prefix.length * 4 <= binary.length && prefix.every((expected, index) => {
     const actual = binary.readUInt32LE(offset + index * 4);

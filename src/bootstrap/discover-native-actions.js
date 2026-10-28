@@ -88,7 +88,7 @@ const offset = candidates[0];
 const signature = [0xa9ba6ffc, 0xa90167fa, 0xa9025ff8, 0xa90357f6, 0xa9044ff4,
   // 1.53 retains the synchronous self-in-x20 ABI, with a larger local frame.
   // Scope this exact prologue to the audited build, not all future releases.
-  0xa9057bfd, 0x910143fd, ["88564", "88592", "88879"].includes(build) ? 0xd10783ff : 0xd105c3ff, 0x910003f3, 0xd2800000];
+  0xa9057bfd, 0x910143fd, ["88564", "88592", "88879", "89443"].includes(build) ? 0xd10783ff : 0xd105c3ff, 0x910003f3, 0xd2800000];
 if (!signature.every((word, index) => bytes.readUInt32LE(offset + index * 4) === word)) {
   throw new Error("native Morning Brief synchronous method ABI changed");
 }

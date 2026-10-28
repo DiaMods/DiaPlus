@@ -40,8 +40,11 @@ try {
   const dia151 = original.includes('t.onCheck("permission", { tool: b, tool_use_id: v, ...y && { namespace: y }, input: A }, l(R)).catch(() => null)');
   const dia153 = original.includes('t.onCheck("permission", { tool: b, tool_use_id: A, ...I && { namespace: I }, input: g }, u(P)).catch(() => null)');
   const dia154 = original.includes('t.onCheck("permission", { tool: b, tool_use_id: w, ...I && { namespace: I }, input: C }, d(N)).catch(() => null)');
-  const richResults = dia153 || dia154;
-  const permissionBefore = dia154
+  const dia155 = original.includes('t.onCheck("permission", { tool: I, tool_use_id: O, ...N && { namespace: N }, input: P }, p(w)).catch(() => null)');
+  const richResults = dia153 || dia154 || dia155;
+  const permissionBefore = dia155
+    ? 't.onCheck("permission", { tool: I, tool_use_id: O, ...N && { namespace: N }, input: P }, p(w)).catch(() => null)'
+    : dia154
     ? 't.onCheck("permission", { tool: b, tool_use_id: w, ...I && { namespace: I }, input: C }, d(N)).catch(() => null)'
     : dia153
     ? 't.onCheck("permission", { tool: b, tool_use_id: A, ...I && { namespace: I }, input: g }, u(P)).catch(() => null)'
@@ -54,7 +57,7 @@ try {
   assert.ok(permissionOffset >= 0, "native permission fixture must be recognized");
   const permissionExpression = patched.subarray(permissionOffset, permissionOffset + permissionBefore.length).toString().trim();
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-  const permission = new AsyncFunction(...(dia154 ? ["t", "b", "w", "I", "C", "d", "N"]
+  const permission = new AsyncFunction(...(dia155 ? ["t", "I", "O", "N", "P", "p", "w"] : dia154 ? ["t", "b", "w", "I", "C", "d", "N"]
     : dia153 ? ["t", "b", "A", "I", "g", "u", "P"]
     : dia151 ? ["t", "b", "v", "y", "A", "l", "R"]
     : ["X", "N", "I", "M", "P", dia150 ? "H" : "K", "R"]), `return await ${permissionExpression};`);
@@ -69,8 +72,8 @@ try {
     tool: "ToolSearch", tool_use_id: "tool-1", namespace: "dia", input: { query: "open_tabs" },
   }, { turn: "turn-1" }]]);
 
-  const callbackOffset = original.indexOf(dia154 ? "async (le, ie) => {" : dia153 ? "async (ye, oe) => {" : dia151 ? "async (ae, H) => {" : dia150 ? "async (J$, h) => {" : "async (l, C$) => {");
-  const callbackEnd = original.indexOf(dia154 ? "}, LUt(I," : dia153 ? "}, hwt(P," : dia151 ? "}, g2t(w," : dia150 ? "}, cd4(T," : "}, Wx6(b,", callbackOffset) + 1;
+  const callbackOffset = original.indexOf(dia155 ? "async (ae, ve) => {" : dia154 ? "async (le, ie) => {" : dia153 ? "async (ye, oe) => {" : dia151 ? "async (ae, H) => {" : dia150 ? "async (J$, h) => {" : "async (l, C$) => {");
+  const callbackEnd = original.indexOf(dia155 ? "}, BUt(I," : dia154 ? "}, LUt(I," : dia153 ? "}, hwt(P," : dia151 ? "}, g2t(w," : dia150 ? "}, cd4(T," : "}, Wx6(b,", callbackOffset) + 1;
   assert.ok(callbackOffset >= 0 && callbackEnd > callbackOffset);
   const callbackExpression = patched.subarray(callbackOffset, callbackEnd).toString().trim();
   for (const [namespace, tool, local] of [
@@ -83,8 +86,8 @@ try {
     const onTool = { onTool: async (...args) => { nativeCalls.push(args); return "native-result"; } };
     const fetch = async (...args) => { fetchCalls.push(args); return { ok: true, text: async () => "local-result" }; };
     const richContent = [{ type: "image", data: "fixture", mimeType: "image/png" }];
-    const callback = dia154
-      ? new Function("g", "W", "DUt", "t", "I", "s", "y", "r", "See", "MUt", "fetch", `return (${callbackExpression});`)(
+    const callback = (dia154 || dia155)
+      ? new Function("g", dia155 ? "V" : "W", dia155 ? "GUt" : "DUt", "t", "I", "s", "y", "r", dia155 ? "yee" : "See", dia155 ? "$Ut" : "MUt", "fetch", `return (${callbackExpression});`)(
         new Set(), tool, (...args) => registrations.push(args), "emitter", "definition",
         id => { contextIDs.push(id); return { nativeContext: "context-1" }; }, namespace, onTool, () => richContent,
         error => ({ content: [{ type: "text", text: JSON.stringify({ error }) }] }), fetch)
@@ -117,7 +120,7 @@ try {
       assert.equal(fetchCalls[0][0], "http://127.0.0.1:8765/t");
       assert.deepEqual(JSON.parse(fetchCalls[0][1].body), { n: tool, i: input });
     }
-    if (dia154) {
+    if (dia154 || dia155) {
       assert.deepEqual(contextIDs, ["tool-2"], "the native context factory must receive the validated tool-use ID");
       await callback(input, { _meta: { "claudecode/toolUseId": 42 } });
       assert.deepEqual(contextIDs, ["tool-2", undefined], "invalid tool-use IDs must not reach native context lookup");
@@ -139,7 +142,7 @@ try {
     assert.ok(original.includes(boundary), "native boundary exists in the official fixture");
     assert.ok(patched.includes(boundary), "native boundary must remain intact");
   }
-  for (const name of dia154 ? ["AIr", "Nee", "Mee", "kee"] : dia153 ? ["nyr", "V5", "Y5"] : dia151 ? ["XDr", "Ace", "_ce"] : dia150 ? [] : ["bC4", "bJ$", "CJ$"]) {
+  for (const name of dia155 ? ["IIr", "Dee", "Uee", "Fee"] : dia154 ? ["AIr", "Nee", "Mee", "kee"] : dia153 ? ["nyr", "V5", "Y5"] : dia151 ? ["XDr", "Ace", "_ce"] : dia150 ? [] : ["bC4", "bJ$", "CJ$"]) {
     const start = original.indexOf(`function ${name}(`);
     const end = Math.min(...[original.indexOf("\nfunction ", start + 1), original.indexOf("\nasync function ", start + 1)].filter(offset => offset >= 0));
     assert.ok(start >= 0 && end > start);

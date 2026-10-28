@@ -23,19 +23,19 @@ final class NewTabPageViewModel {
         var greeting: String? = "greeting-sentinel"
         var bookmarkBarMode = 37
         var konamiCodeOnboardingIntroTriggerEnabled = false
-        #if !DAYLIGHT_LAYOUT
+        #if !DAYLIGHT_LAYOUT && !GALLERY_LAYOUT
         var diaProBackgroundButtonState: Int? = 89
         #endif
         var lightConfiguration = "light-sentinel"
-        #if DAYLIGHT_LAYOUT
+        #if DAYLIGHT_LAYOUT || GALLERY_LAYOUT
         var daylightEffectInputs = "daylight-sentinel"
         #endif
         var areAnimationsEnabled = false
-        #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
+        #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT || GALLERY_LAYOUT
         var isRebrandEnabled = false
         #endif
         var isPersonalizeButtonEnabled = true
-        #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
+        #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT || GALLERY_LAYOUT
         #if INVALID_TYPE
         var showDiaIcon = "wrong-type-sentinel"
         #else
@@ -45,6 +45,9 @@ final class NewTabPageViewModel {
         var showParticlesLogo = false
         #endif
         var isPresentingCliaOnboardingView = true
+        #if GALLERY_LAYOUT
+        var creationGallery: [String]? = ["gallery-sentinel"]
+        #endif
         #if UNKNOWN_LAYOUT
         var unexpectedField = false
         #endif
@@ -60,7 +63,7 @@ struct AdvancedChatFixture {
     static func main() {
         for rebrand in [false, true] {
             var initial = NewTabPageViewModel.State()
-            #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
+            #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT || GALLERY_LAYOUT
             initial.isRebrandEnabled = rebrand
             #endif
             let model = NewTabPageViewModel(initial)
@@ -76,7 +79,7 @@ struct AdvancedChatFixture {
             assert(applied)
             var expected = initial
             expected.isPersonalizeButtonEnabled = false
-            #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT
+            #if REBRAND_LAYOUT || DAYLIGHT_LAYOUT || GALLERY_LAYOUT
             expected.showDiaIcon = true
             #else
             expected.showParticlesLogo = true
@@ -93,6 +96,8 @@ struct AdvancedChatFixture {
         print("ok    Advanced Chat rejects a non-Boolean native appearance field without mutation")
         #elseif UNKNOWN_LAYOUT
         print("ok    Advanced Chat rejects an unknown native state layout without mutation")
+        #elseif GALLERY_LAYOUT
+        print("ok    Advanced Chat preserves the 1.55 creation gallery and all nonappearance state")
         #elseif DAYLIGHT_LAYOUT
         print("ok    Advanced Chat applies the 22-field daylight layout and preserves native state")
         #elseif REBRAND_LAYOUT

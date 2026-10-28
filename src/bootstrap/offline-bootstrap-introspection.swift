@@ -432,7 +432,8 @@ private func sendAdvancedNewTabStateCopy<T>(
     // Dia 1.48 inserted a rebrand flag; 1.50 inserted postcard/daylight
     // fields. Guard each audited shape and calculate only the two appearance
     // offsets from Swift reflection.
-    let isDaylightLayout = fields.count == 22
+    let isGalleryLayout = fields.count == 22 && fields.last?.label == "creationGallery"
+    let isDaylightLayout = fields.count == 22 && !isGalleryLayout
     let isRebrandLayout = fields.count == 21
     let daylightLabels = [
         "windowID", "displayDefaultBrowserUpsell", "displayReleaseNotesPostcard",
@@ -445,7 +446,8 @@ private func sendAdvancedNewTabStateCopy<T>(
         "isRebrandEnabled", "isPersonalizeButtonEnabled", "showDiaIcon",
         "isPresentingCliaOnboardingView",
     ]
-    let expectedLabels = isDaylightLayout ? daylightLabels : sharedLabels + (isRebrandLayout ? [
+    let galleryLabels = daylightLabels.filter { $0 != "hidePostcardsOnlyWhenCommandBarIntersects" } + ["creationGallery"]
+    let expectedLabels = isGalleryLayout ? galleryLabels : isDaylightLayout ? daylightLabels : sharedLabels + (isRebrandLayout ? [
         "isRebrandEnabled",
         "isPersonalizeButtonEnabled",
         "showDiaIcon",
@@ -455,13 +457,14 @@ private func sendAdvancedNewTabStateCopy<T>(
         "showParticlesLogo",
         "isPresentingCliaOnboardingView",
     ])
-    let personalizeIndex = isDaylightLayout ? 19 : isRebrandLayout ? 18 : 17
-    let logoIndex = isDaylightLayout ? 20 : isRebrandLayout ? 19 : 18
+    let personalizeIndex = isGalleryLayout ? 18 : isDaylightLayout ? 19 : isRebrandLayout ? 18 : 17
+    let logoIndex = isGalleryLayout ? 19 : isDaylightLayout ? 20 : isRebrandLayout ? 19 : 18
     guard String(reflecting: T.self) == "NewTabPage.NewTabPageViewModel.State",
           fields.count == expectedLabels.count,
           fields.count == recursiveFieldCount(T.self),
           zip(fields, expectedLabels).allSatisfy({ $0.label == $1 }),
-          ((isDaylightLayout ? 17 : 16)..<expectedLabels.count).allSatisfy({ fields[$0].value is Bool }),
+          ((isDaylightLayout ? 17 : 16)..<(isGalleryLayout ? 21 : expectedLabels.count)).allSatisfy({ fields[$0].value is Bool }),
+          (!isGalleryLayout || (!(fields[15].value is Bool) && !(fields[21].value is Bool))),
           (!isDaylightLayout || (fields[4].value is Bool && !(fields[16].value is Bool))) else {
         if !didLogUnexpectedAdvancedNewTabState {
             didLogUnexpectedAdvancedNewTabState = true

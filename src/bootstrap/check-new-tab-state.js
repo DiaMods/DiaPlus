@@ -22,6 +22,11 @@ const shared = [
   "lightConfiguration", "areAnimationsEnabled",
 ];
 const layouts = [
+  [
+    ...shared.filter(label => label !== "diaProBackgroundButtonState" && label !== "areAnimationsEnabled"),
+    "daylightEffectInputs", "areAnimationsEnabled", "isRebrandEnabled",
+    "isPersonalizeButtonEnabled", "showDiaIcon", "isPresentingCliaOnboardingView", "creationGallery",
+  ],
   [...shared, "isPersonalizeButtonEnabled", "showParticlesLogo", "isPresentingCliaOnboardingView"],
   [...shared, "isRebrandEnabled", "isPersonalizeButtonEnabled", "showDiaIcon", "isPresentingCliaOnboardingView"],
   [
@@ -38,7 +43,8 @@ const layouts = [
 if (rows.length !== 1 || !layouts.some((labels) =>
   rows[0].fields.length === labels.length && labels.every((label, index) =>
     rows[0].fields[index].name === label &&
-    (index < (labels.length === 22 ? 17 : 16) || rows[0].fields[index].type === "Sb") &&
+    (label === "creationGallery" ? rows[0].fields[index].type !== "Sb" :
+      index < (labels.at(-1) === "creationGallery" ? 16 : labels.length === 22 ? 17 : 16) || rows[0].fields[index].type === "Sb") &&
     (label !== "hidePostcardsOnlyWhenCommandBarIntersects" || rows[0].fields[index].type === "Sb") &&
     (label !== "daylightEffectInputs" || rows[0].fields[index].type !== "Sb")))) {
   throw new Error("native Advanced Chat state layout changed; expected one guarded 20/21/22-field state with Boolean appearance flags");
@@ -46,5 +52,5 @@ if (rows.length !== 1 || !layouts.some((labels) =>
 process.stdout.write(`${JSON.stringify({
   offset: rows[0].offset,
   fieldCount: rows[0].fields.length,
-  logoField: rows[0].fields.at(-2).name,
+  logoField: rows[0].fields.find(field => ["showDiaIcon", "showParticlesLogo"].includes(field.name)).name,
 })}\n`);

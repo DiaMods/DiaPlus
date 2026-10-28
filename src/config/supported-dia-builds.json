@@ -1,7 +1,34 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-23",
+  "updatedAt": "2026-10-28",
   "builds": {
+    "89443": {
+      "status": "audited",
+      "version": "1.55.0",
+      "notes": "Publisher signature verified. Native account, token, Clia, AI routing, Reports controller and creation-gallery Advanced Chat layouts audited. Runtime validation is recorded separately. Every candidate is revalidated.",
+      "mods": [
+        "identity-isolation",
+        "network-isolation",
+        "update-blocker",
+        "custom-updater",
+        "local-ai-routing",
+        "account-bypass",
+        "dia-import",
+        "model-picker",
+        "mod-manager",
+        "native-memory",
+        "reports",
+        "local-web",
+        "connectors",
+        "native-apps",
+        "live-connectors",
+        "morning-brief",
+        "apple-models",
+        "local-knowledge",
+        "local-workflows"
+      ],
+      "mainExecutableSHA256": "515d88099f08240f36a014b5459e2c0baac2226c891b582276bec410782c0f38"
+    },
     "85660": {
       "status": "audited",
       "notes": "Legacy guarded ARM64 layout retained for reproducible rebuilds.",

@@ -7,11 +7,14 @@ fixture_dir="$(/usr/bin/mktemp -d -t dia-custom-advanced-chat)"
 trap '/bin/rm -rf "$fixture_dir"' EXIT
 xcrun clang -c -Os "$project_dir/src/bootstrap/offline-bootstrap-arm64.S" \
   -o "$fixture_dir/arm64.o"
-for fixture in legacy rebrand daylight badtype unknown; do
+for fixture in legacy rebrand daylight gallery gallerybad galleryunknown badtype unknown; do
   fixture_flags=()
   case "$fixture" in
     rebrand) fixture_flags=(-D REBRAND_LAYOUT) ;;
     daylight) fixture_flags=(-D DAYLIGHT_LAYOUT) ;;
+    gallery) fixture_flags=(-D GALLERY_LAYOUT) ;;
+    gallerybad) fixture_flags=(-D GALLERY_LAYOUT -D INVALID_TYPE) ;;
+    galleryunknown) fixture_flags=(-D GALLERY_LAYOUT -D UNKNOWN_LAYOUT) ;;
     badtype) fixture_flags=(-D REBRAND_LAYOUT -D INVALID_TYPE) ;;
     unknown) fixture_flags=(-D REBRAND_LAYOUT -D UNKNOWN_LAYOUT) ;;
   esac
