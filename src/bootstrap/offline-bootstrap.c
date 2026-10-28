@@ -132,7 +132,8 @@ static void dia_custom_install_process_arguments(NSString *profile) {
     NSArray<NSString *> *singleArguments = @[
         [@"--user-data-dir=" stringByAppendingString:
             [profile stringByAppendingPathComponent:@"User Data"]],
-        @"--disable-component-update",
+        // Keep Chromium's signed components (Widevine, certificate data, etc.)
+        // available. Dia application updates are blocked independently.
         @"--remote-debugging-port=9223",
         @"--no-first-run",
         @"--disable-sync",

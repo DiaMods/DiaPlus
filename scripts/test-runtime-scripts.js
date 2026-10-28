@@ -28,6 +28,17 @@ async function startFixture(node, script) {
 }
 
 try {
+  // Component updates register already-installed Widevine as well as fetching
+  // signed component updates. Do not confuse these with stock Dia app updates.
+  for (const file of [join(scriptDirectory, "launch.sh"),
+    join(scriptDirectory, "../src/bootstrap/offline-bootstrap.c")]) {
+    assert.doesNotMatch(await readFile(file, "utf8"), /--disable-component-update\b/,
+      "ordinary launches must allow signed Chromium components to register");
+  }
+  assert.match(await readFile(join(scriptDirectory, "preflight-profile.sh"), "utf8"), /--disable-component-update\b/,
+    "offline profile preflight must still suppress component downloads");
+  assert.match(await readFile(join(scriptDirectory, "configure-profile.sh"), "utf8"), /SUEnableAutomaticChecks -bool false/);
+  process.stdout.write("ok    signed Chromium components stay enabled while stock Dia updates and offline preflight stay restricted\n");
   for (const script of ["launch.sh", "preflight-profile.sh"]) {
     assert.doesNotMatch(await readFile(join(scriptDirectory, script), "utf8"),
       /--use-mock-keychain\b/, `${script} must retain existing macOS Keychain encryption`);

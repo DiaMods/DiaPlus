@@ -153,7 +153,6 @@ fi
 launch_args=(
   -customApplicationDataBaseURLPath "$profile"
   --user-data-dir="$profile/User Data"
-  --disable-component-update
   --remote-debugging-port="$debug_port"
   --no-first-run
   --disable-sync
