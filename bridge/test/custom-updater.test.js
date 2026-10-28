@@ -8,6 +8,22 @@ import { allowedDownload, parseAppcast, requireAllMods, validateArchivePaths, ve
 import { CustomUpdater, handleUpdaterAPI } from '../src/custom-updater.js';
 import { installTransaction } from '../src/update-worker.js';
 const source = { distributionPrefix: 'https://releases.diabrowser.com/releases/', feedURL: 'https://releases.diabrowser.com/releases/feed.xml' };
+test('candidate jobs discard live profile paths, credentials and runtime injection', t => {
+  const keys = ['DIA_CUSTOM_MEMORY_PATH', 'DIA_CUSTOM_STATE_DIR', 'DIA_CUSTOM_CONFIG_PATH',
+    'DIA_CUSTOM_CREDENTIALS_PATH', 'DIA_CUSTOM_HISTORY_PATH', 'DIA_CUSTOM_CAPTURE_DIR',
+    'OPENAI_API_KEY', 'GH_TOKEN', 'NODE_OPTIONS', 'DYLD_INSERT_LIBRARIES'];
+  const before = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  t.after(() => { for (const key of keys) {
+    if (before[key] === undefined) delete process.env[key]; else process.env[key] = before[key];
+  } });
+  for (const key of keys) process.env[key] = '/synthetic-live-profile-or-credential';
+  const updater = new CustomUpdater({ bridgeDirectory: '/development/bridge', profileDirectory: '/synthetic-live-profile', stateDirectory: '/unused' });
+  const { env } = updater.jobContext('/synthetic-job');
+  for (const key of keys) assert.equal(env[key], undefined, key);
+  assert.equal(env.DIA_CUSTOM_STAGING, '1');
+  assert.equal(env.DIA_CUSTOM_WORK_DIR, '/synthetic-job/work');
+  assert.equal(env.HOME, process.env.HOME);
+});
 const enclosure = (extra = '') => `<enclosure url="${source.distributionPrefix}Dia.zip" sparkle:version="86584" sparkle:shortVersionString="1.48.0 (86584)" length="4" sparkle:edSignature="${Buffer.alloc(64).toString('base64')}" ${extra}>`;
 test('official feed selects full archives, bounds metadata and refuses foreign destinations', () => {
   assert.equal(parseAppcast(enclosure('sparkle:deltaFrom="86500"') + enclosure(), source).build, '86584');

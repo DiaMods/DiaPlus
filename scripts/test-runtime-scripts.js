@@ -45,6 +45,12 @@ try {
   }
   process.stdout.write("ok    launch and migration preflight retain the existing macOS Keychain key\n");
   const stagedVerifier = await readFile(join(scriptDirectory, "verify-staged.sh"), "utf8");
+  assert.match(stagedVerifier, /\/usr\/bin\/env -i HOME=/,
+    "downloaded staged health checks must discard inherited live-profile paths and credentials, including for older clients");
+  assert.match(stagedVerifier, /DIA_CUSTOM_STAGING=1/);
+  const stagedBuilder = await readFile(join(scriptDirectory, "build.sh"), "utf8");
+  assert.match(stagedBuilder, /unset DIA_CUSTOM_CONFIG_PATH/);
+  assert.match(stagedBuilder, /export DIA_CUSTOM_STATE_DIR="\$profile\/Bridge\/\.state"/);
   assert.match(stagedVerifier, /check-dia-build\.js" "\$app"\s*\\\n\s*--mods "\$enabled_mods" --allow-structural/);
   assert.ok(stagedVerifier.indexOf('check-dia-build.js') < stagedVerifier.indexOf('temporary_profile='),
     "patched candidate compatibility must pass before any staged runtime starts");

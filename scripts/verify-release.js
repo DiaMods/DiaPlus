@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createPublicKey, verify } from 'node:crypto';
@@ -50,8 +50,21 @@ try {
         DIA_CUSTOM_SIGN_IDENTITY: '-', npm_config_offline: 'true' };
       for (const key of Object.keys(env)) if (/^(?:GH_|GITHUB_|DIA_PLUS_)/.test(key)) delete env[key];
       delete env.DIA_CUSTOM_MODS; delete env.DIA_CUSTOM_EFFECTIVE_MODS;
+      const canaryDirectory = join(temporary, 'outside-profile-canaries');
+      await mkdir(canaryDirectory);
+      const canaryKeys = ['DIA_CUSTOM_CONFIG_PATH', 'DIA_CUSTOM_MODEL_CATALOG_PATH',
+        'DIA_CUSTOM_CREDENTIALS_PATH', 'DIA_CUSTOM_MEMORY_PATH', 'DIA_CUSTOM_APPS_STATE_PATH',
+        'DIA_CUSTOM_HISTORY_PATH', 'DIA_CUSTOM_TOOL_COVERAGE_PATH'];
+      const canaryText = 'not a valid external configuration or database';
+      for (const key of canaryKeys) {
+        env[key] = join(canaryDirectory, key);
+        await writeFile(env[key], canaryText);
+      }
       const child = spawn('/bin/zsh', [join(stage, 'Install Dia+.command'), '--no-launch', '--yes', '--allow-disable-incompatible'], { env, stdio: 'inherit' });
       await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', code => code === 0 ? resolve() : reject(new Error(`Packaged installer failed: ${code}`))); });
+      assert.deepEqual((await readdir(canaryDirectory)).sort(), [...canaryKeys].sort(), 'No external database sidecars or stores may be created');
+      for (const key of canaryKeys) assert.equal(await readFile(env[key], 'utf8'), canaryText, `${key}: external store changed`);
+      console.log('Inherited external configuration/database canaries remained untouched.');
       const plist = join(temporary, 'Dia+.app/Contents/Info.plist');
       assert.equal(execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :DiaCustomModVersion', plist], { encoding: 'utf8' }).trim(), manifest.version);
       assert.equal(execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleVersion', plist], { encoding: 'utf8' }).trim(), manifest.dia.build);

@@ -7,6 +7,19 @@ work_dir="${DIA_CUSTOM_WORK_DIR:-${project_dir:h}}"
 source_app="${DIA_CUSTOM_SOURCE_APP:-/Applications/Dia.app}"
 clone_app="${DIA_CUSTOM_APP:-/Applications/Dia+.app}"
 profile="${DIA_CUSTOM_PROFILE:-${HOME}/Library/Application Support/Dia Custom RTTM}"
+# A downloaded toolkit can be invoked by an older client whose environment
+# points at the running browser's stores. Rebase every mutable bridge path
+# before any helper imports paths.js or resolves configuration.
+if [[ "${DIA_CUSTOM_STAGING:-0}" == "1" ]]; then
+  unset DIA_CUSTOM_CONFIG_PATH DIA_CUSTOM_MODEL_CATALOG_PATH \
+    DIA_CUSTOM_CREDENTIALS_PATH DIA_CUSTOM_APPS_STATE_PATH DIA_CUSTOM_MEMORY_PATH \
+    DIA_CUSTOM_MODS_STATE_PATH DIA_CUSTOM_COMPATIBILITY_PATH \
+    DIA_CUSTOM_TOOL_CACHE_DIR DIA_CUSTOM_CONNECTOR_MANIFESTS \
+    DIA_CUSTOM_DECISION_WORKSPACE DIA_CUSTOM_TOOL_COVERAGE_PATH \
+    DIA_CUSTOM_CAPTURE_DIR DIA_CUSTOM_HISTORY_PATH DIA_CUSTOM_RUNTIME_LOG \
+    DIA_CUSTOM_NETWORK_LOG DIA_CUSTOM_MODS_MANIFEST_PATH
+  export DIA_CUSTOM_STATE_DIR="$profile/Bridge/.state"
+fi
 bundle_id="local.rttm.dia"
 replace=false
 install_stamp="$(/bin/date +%Y%m%d-%H%M%S).$$"

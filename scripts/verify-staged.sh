@@ -46,10 +46,15 @@ temporary_profile="$(/usr/bin/mktemp -d -t dia-custom-staged-health)"
 port="$(node -e 'const n=require("node:net").createServer();n.listen(0,"127.0.0.1",()=>{process.stdout.write(String(n.address().port));n.close()})')"
 bridge_log="$temporary_profile/bridge.log"
 runtime_id="$(/usr/libexec/PlistBuddy -c 'Print :DiaCustomBridgeRuntimeID' "$info")"
+# Older installed clients can still pass their live bridge environment into
+# this downloaded script. Start from a clean environment even for those clients.
+/usr/bin/env -i HOME="$HOME" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" \
+DIA_CUSTOM_STAGING=1 \
 DIA_CUSTOM_BRIDGE_PORT="$port" \
 DIA_CUSTOM_RUNTIME_ID="$runtime_id" \
 DIA_CUSTOM_PROFILE="$temporary_profile" \
 DIA_CUSTOM_STATE_DIR="$temporary_profile/state" \
+DIA_CUSTOM_MODS_MANIFEST_PATH="$app/Contents/Resources/DiaCustomBridge/config/dia-mods.json" \
 DIA_CUSTOM_MODS="$enabled_mods" \
 DIA_CUSTOM_APPLE_MODEL_HELPER="$app/Contents/Helpers/DiaCustomAppleModel" \
   "$app/Contents/Helpers/DiaCustomNode" \
@@ -58,6 +63,7 @@ DIA_CUSTOM_APPLE_MODEL_HELPER="$app/Contents/Helpers/DiaCustomAppleModel" \
 bridge_pid=$!
 cleanup() {
   /bin/kill "$bridge_pid" >/dev/null 2>&1 || true
+  wait "$bridge_pid" >/dev/null 2>&1 || true
   /bin/rm -rf "$temporary_profile"
 }
 trap cleanup EXIT

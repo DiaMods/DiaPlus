@@ -186,7 +186,9 @@ export class CustomUpdater {
   jobContext(job) {
     const toolkit = join(job, 'toolkit');
     const bin = join(toolkit, '.build/runtime/node-v24.20.0-darwin-arm64/bin');
-    return { toolkit, node: join(bin, 'node'), env: { ...process.env, PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin`, DIA_CUSTOM_STAGING: '1', DIA_CUSTOM_WORK_DIR: join(job, 'work') } };
+    // Never inherit live bridge paths, provider credentials or runtime hooks
+    // into code that validates a downloaded candidate.
+    return { toolkit, node: join(bin, 'node'), env: { HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin`, DIA_CUSTOM_STAGING: '1', DIA_CUSTOM_WORK_DIR: join(job, 'work') } };
   }
   async materialize(job, bundle = null) {
     const { toolkit } = this.jobContext(job);
